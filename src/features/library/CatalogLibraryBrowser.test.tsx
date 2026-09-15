@@ -209,11 +209,11 @@ describe("CatalogLibraryBrowser", () => {
       "root-opaque",
       "asset:v1:pool",
     );
-    expect(audioClient.queryWaveform).toHaveBeenCalledWith(
+    await waitFor(() => expect(audioClient.queryWaveform).toHaveBeenCalledWith(
       "root-opaque",
       "asset:v1:pool",
       { range: null, targetPoints: 640 },
-    );
+    ));
     expect(screen.getByLabelText(tJa("library.assetInspectorAria"))).not.toHaveTextContent("sha256:");
   });
 
@@ -401,14 +401,17 @@ describe("CatalogLibraryBrowser", () => {
   it("keeps querying the selected asset when pagination hides the row", async () => {
     const audioClient: AudioApi = {
       getWaveform: vi.fn(),
-      queryWaveform: vi.fn().mockResolvedValue({
-        analyzerVersion: "waveform:v2",
-        sampleRate: 44100,
-        channels: 1,
-        frameCount: "44100",
-        range: { startFrame: "0", endFrameExclusive: "44100" },
-        framesPerPeak: "256",
-        channelPeaks: [[{ min: -0.5, max: 0.5 }]],
+      queryWaveform: vi.fn().mockImplementation((_rootId, _assetId, query) => {
+        const range = query.range ?? { startFrame: "0", endFrameExclusive: "44100" };
+        return Promise.resolve({
+          analyzerVersion: "waveform:v2" as const,
+          sampleRate: 44100,
+          channels: 1,
+          frameCount: "44100",
+          range,
+          framesPerPeak: "256",
+          channelPeaks: [[{ min: -0.5, max: 0.5 }]],
+        });
       }),
       createPreviewToken: vi.fn(),
       createRangePreviewToken: vi.fn().mockResolvedValue({
@@ -447,6 +450,8 @@ describe("CatalogLibraryBrowser", () => {
     fireEvent.click(screen.getByRole("button", { name: /sample-0\.wav/ }));
     await screen.findByRole("img", { name: tJa("waveform.plotAria") });
     await waitFor(() => expect(screen.getByLabelText(tJa("waveform.endFrame"))).toHaveValue("44100"));
+    await waitFor(() => expect(audioClient.queryWaveform).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 200));
     vi.mocked(audioClient.queryWaveform).mockClear();
 
     fireEvent.click(screen.getByRole("button", { name: tJa("waveform.playRange") }));

@@ -38,6 +38,13 @@
   background: #11151b;
 }
 
+.waveform-preview-plot svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 7rem;
+}
+
 .waveform-preview-plot line {
   stroke: #343b46;
   stroke-width: 1;
@@ -47,6 +54,22 @@
   fill: none;
   stroke: #f2a33c;
   stroke-width: 1.4;
+}
+
+.waveform-preview-plot-svg {
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.waveform-preview-selection {
+  fill: rgba(242, 163, 60, 0.18);
+  pointer-events: none;
+  stroke: rgba(242, 163, 60, 0.55);
+  stroke-width: 1;
+}
+
+.waveform-preview-nav-actions {
+  margin-top: 0.15rem;
 }
 
 .waveform-preview-actions {

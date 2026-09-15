@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import {
   audioApi,
   type AudioApi,
@@ -20,9 +28,25 @@ import {
   defaultLibraryPreviewEndFrame,
   validateFrameRange,
 } from "./frameMath";
+import {
+  readPlotContainerWidthCss,
+  targetPointsFromPlotWidthCss,
+  WAVEFORM_QUERY_DEBOUNCE_MS,
+} from "./waveformTargetPoints";
+import {
+  frameRangesEqual,
+  framesFromDragPixels,
+  fullFileViewport,
+  panViewport,
+  selectionRectInViewBox,
+  viewportAroundRange,
+  viewportLength,
+  waveformQueryKey,
+  zoomViewport,
+  type ViewportRange,
+} from "./viewportRange";
 import "./WaveformPreview.css";
 
-const TARGET_POINTS = 640;
 const VIEWBOX_WIDTH = 640;
 const VIEWBOX_HEIGHT = 140;
 
@@ -31,6 +55,8 @@ interface WaveformPreviewProps {
   assetId: string;
   displayName: string;
   api?: AudioApi;
+  /** Override debounce for tests; production uses WAVEFORM_QUERY_DEBOUNCE_MS. */
+  queryDebounceMs?: number;
 }
 
 function errorMessage(error: unknown): string {
@@ -82,6 +108,7 @@ export function WaveformPreview({
   assetId,
   displayName,
   api = audioApi,
+  queryDebounceMs = WAVEFORM_QUERY_DEBOUNCE_MS,
 }: WaveformPreviewProps) {
   const t = useTranslate();
   const [waveform, setWaveform] = useState<AudioWaveformWindow | null>(null);
@@ -99,6 +126,31 @@ export function WaveformPreview({
   const previewRequest = useRef(0);
   const rangeRequest = useRef(0);
   const waveformRequest = useRef(0);
+  const plotContainerRef = useRef<HTMLDivElement | null>(null);
+  const lastQueryKeyRef = useRef<string | null>(null);
+  const applyRangeOnNextWaveformRef = useRef(true);
+  const debouncedTargetPointsRef = useRef<number | null>(null);
+  const debouncedViewportRef = useRef<ViewportRange | null>(null);
+  const dragSessionRef = useRef<{
+    generation: number;
+    viewport: ViewportRange;
+    widthPx: number;
+    startX: number;
+    currentX: number;
+  } | null>(null);
+  const dragGenerationRef = useRef(0);
+  const [plotWidthCss, setPlotWidthCss] = useState(0);
+  const [debouncedTargetPoints, setDebouncedTargetPoints] = useState<number | null>(null);
+  const [viewportRange, setViewportRange] = useState<ViewportRange | null>(null);
+  const [debouncedViewport, setDebouncedViewport] = useState<ViewportRange | null>(null);
+  const [dragDraftRange, setDragDraftRange] = useState<ViewportRange | null>(null);
+  const [fileMetadata, setFileMetadata] = useState<{
+    frameCount: string;
+    sampleRate: number;
+    channels: number;
+  } | null>(null);
+  debouncedTargetPointsRef.current = debouncedTargetPoints;
+  debouncedViewportRef.current = debouncedViewport;
   const rangeAudioRef = useRef<HTMLAudioElement | null>(null);
   const headAudioRef = useRef<HTMLAudioElement | null>(null);
   const rangeObjectUrl = useRef<string | null>(null);
@@ -148,17 +200,136 @@ export function WaveformPreview({
     headAudioRef.current?.pause();
   }, []);
 
+  useLayoutEffect(() => {
+    const element = plotContainerRef.current;
+    if (element === null) {
+      return;
+    }
+
+    const publishWidth = (widthCss: number) => {
+      setPlotWidthCss(widthCss);
+    };
+
+    if (typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver((entries) => {
+        const entry = entries[0];
+        publishWidth(entry?.contentRect.width ?? 0);
+      });
+      observer.observe(element);
+      publishWidth(readPlotContainerWidthCss(element));
+      return () => observer.disconnect();
+    }
+
+    const measure = () => publishWidth(readPlotContainerWidthCss(element));
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, []);
+
   useEffect(() => {
-    const request = waveformRequest.current + 1;
-    waveformRequest.current = request;
+    const immediate = targetPointsFromPlotWidthCss(plotWidthCss);
+    if (immediate === null) {
+      setDebouncedTargetPoints(null);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      setDebouncedTargetPoints(immediate);
+    }, queryDebounceMs);
+    return () => window.clearTimeout(timer);
+  }, [plotWidthCss, queryDebounceMs]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedViewport(viewportRange);
+    }, queryDebounceMs);
+    return () => window.clearTimeout(timer);
+  }, [viewportRange, queryDebounceMs]);
+
+  useEffect(() => {
+    dragGenerationRef.current += 1;
+    dragSessionRef.current = null;
+    setDragDraftRange(null);
+  }, [viewportRange, assetId, rootId]);
+
+  useEffect(() => {
+    if (debouncedTargetPoints === null) {
+      lastQueryKeyRef.current = null;
+    }
+  }, [debouncedTargetPoints]);
+
+  useEffect(() => {
+    lastQueryKeyRef.current = null;
     setWaveform(null);
     setWaveformError(null);
+    setViewportRange(null);
+    setDebouncedViewport(null);
+    setFileMetadata(null);
+    applyRangeOnNextWaveformRef.current = true;
+  }, [api, assetId, rootId]);
+
+  useEffect(() => {
+    if (debouncedTargetPoints === null) {
+      return;
+    }
+    const requestedRange = debouncedViewport;
+    const queryKey = requestedRange === null
+      ? `${rootId}\0${assetId}\0bootstrap\0${debouncedTargetPoints}`
+      : waveformQueryKey(rootId, assetId, requestedRange, debouncedTargetPoints);
+    if (lastQueryKeyRef.current === queryKey) {
+      return;
+    }
+    lastQueryKeyRef.current = queryKey;
+
+    const requestId = waveformRequest.current + 1;
+    waveformRequest.current = requestId;
+    const requestedTargetPoints = debouncedTargetPoints;
+    const requestedRootId = rootId;
+    const requestedAssetId = assetId;
+    const requestedViewport = requestedRange;
+
     api
-      .queryWaveform(rootId, assetId, { range: null, targetPoints: TARGET_POINTS })
+      .queryWaveform(requestedRootId, requestedAssetId, {
+        range: requestedViewport,
+        targetPoints: requestedTargetPoints,
+      })
       .then(
         (nextWaveform) => {
-          if (waveformRequest.current === request) {
-            setWaveform(nextWaveform);
+          if (waveformRequest.current !== requestId) {
+            return;
+          }
+          if (selectionRef.current.rootId !== requestedRootId) {
+            return;
+          }
+          if (selectionRef.current.assetId !== requestedAssetId) {
+            return;
+          }
+          if (debouncedTargetPointsRef.current !== requestedTargetPoints) {
+            return;
+          }
+          const currentViewport = debouncedViewportRef.current;
+          if (requestedViewport === null) {
+            if (currentViewport !== null) {
+              return;
+            }
+            if (!frameRangesEqual(nextWaveform.range, fullFileViewport(nextWaveform.frameCount))) {
+              return;
+            }
+          } else if (
+            currentViewport === null
+            || !frameRangesEqual(nextWaveform.range, currentViewport)
+          ) {
+            return;
+          }
+          setWaveform(nextWaveform);
+          setWaveformError(null);
+          setFileMetadata({
+            frameCount: nextWaveform.frameCount,
+            sampleRate: nextWaveform.sampleRate,
+            channels: nextWaveform.channels,
+          });
+          setViewportRange((prev) => prev ?? fullFileViewport(nextWaveform.frameCount));
+          if (applyRangeOnNextWaveformRef.current) {
+            applyRangeOnNextWaveformRef.current = false;
             setRangeStartFrame("0");
             setRangeEndFrameExclusive(defaultLibraryPreviewEndFrame(
               nextWaveform.frameCount,
@@ -169,13 +340,27 @@ export function WaveformPreview({
           }
         },
         (error) => {
-          if (waveformRequest.current === request) setWaveformError(errorMessage(error));
+          if (waveformRequest.current !== requestId) {
+            return;
+          }
+          if (selectionRef.current.rootId !== requestedRootId) {
+            return;
+          }
+          if (selectionRef.current.assetId !== requestedAssetId) {
+            return;
+          }
+          if (debouncedTargetPointsRef.current !== requestedTargetPoints) {
+            return;
+          }
+          lastQueryKeyRef.current = null;
+          setWaveformError(errorMessage(error));
         },
       );
+
     return () => {
       waveformRequest.current += 1;
     };
-  }, [api, assetId, rootId]);
+  }, [api, assetId, debouncedTargetPoints, debouncedViewport, rootId]);
 
   useEffect(() => () => {
     if (previewUrl !== null) URL.revokeObjectURL(previewUrl);
@@ -199,46 +384,88 @@ export function WaveformPreview({
     setRangeError(null);
     setRangeLoading(false);
     setPreviewing(false);
+    setViewportRange(null);
+    setDebouncedViewport(null);
+    setFileMetadata(null);
     stopRangePlayback();
   }, [assetId, rootId, stopRangePlayback]);
 
   useEffect(() => {
-    if (waveform === null) return;
+    if (fileMetadata === null) return;
     try {
       validateFrameRange(
         rangeStartFrame,
         rangeEndFrameExclusive,
-        waveform.frameCount,
-        waveform.sampleRate,
-        waveform.channels,
+        fileMetadata.frameCount,
+        fileMetadata.sampleRate,
+        fileMetadata.channels,
       );
       setRangeInvalid(null);
     } catch (error) {
       setRangeInvalid(errorMessage(error));
     }
-  }, [rangeEndFrameExclusive, rangeStartFrame, waveform]);
+  }, [fileMetadata, rangeEndFrameExclusive, rangeStartFrame]);
 
-  const channelPaths = useMemo(() => {
-    if (waveform === null) return [];
-    return waveform.channelPeaks.map((channel) =>
-      waveformChannelPath(channel, channel.length),
-    );
-  }, [waveform]);
+  const axisViewport = debouncedViewport ?? viewportRange;
 
-  const durationLabel = useMemo(() => {
-    if (waveform === null) return null;
-    return formatFileDurationLabel(waveform.frameCount, waveform.sampleRate, t);
-  }, [waveform, t]);
+  const peaksReady = useMemo(() => {
+    if (waveform === null || axisViewport === null || debouncedTargetPoints === null) {
+      return false;
+    }
+    return frameRangesEqual(waveform.range, axisViewport);
+  }, [axisViewport, debouncedTargetPoints, waveform]);
 
-  const rangeDurationHint = useMemo(() => {
-    if (waveform === null || rangeInvalid !== null) return null;
+  const committedSelection = useMemo((): ViewportRange | null => {
+    if (fileMetadata === null || rangeInvalid !== null || rangeEndFrameExclusive === "") {
+      return null;
+    }
     try {
       validateFrameRange(
         rangeStartFrame,
         rangeEndFrameExclusive,
-        waveform.frameCount,
-        waveform.sampleRate,
-        waveform.channels,
+        fileMetadata.frameCount,
+        fileMetadata.sampleRate,
+        fileMetadata.channels,
+      );
+      return {
+        startFrame: rangeStartFrame,
+        endFrameExclusive: rangeEndFrameExclusive,
+      };
+    } catch {
+      return null;
+    }
+  }, [fileMetadata, rangeEndFrameExclusive, rangeInvalid, rangeStartFrame]);
+
+  const highlightSelection = dragDraftRange ?? committedSelection;
+
+  const selectionHighlight = useMemo(() => {
+    if (!peaksReady || highlightSelection === null || axisViewport === null) {
+      return null;
+    }
+    return selectionRectInViewBox(highlightSelection, axisViewport, VIEWBOX_WIDTH);
+  }, [axisViewport, highlightSelection, peaksReady]);
+
+  const channelPaths = useMemo(() => {
+    if (!peaksReady || waveform === null) return [];
+    return waveform.channelPeaks.map((channel) =>
+      waveformChannelPath(channel, channel.length),
+    );
+  }, [peaksReady, waveform]);
+
+  const durationLabel = useMemo(() => {
+    if (fileMetadata === null) return null;
+    return formatFileDurationLabel(fileMetadata.frameCount, fileMetadata.sampleRate, t);
+  }, [fileMetadata, t]);
+
+  const rangeDurationHint = useMemo(() => {
+    if (fileMetadata === null || rangeInvalid !== null) return null;
+    try {
+      validateFrameRange(
+        rangeStartFrame,
+        rangeEndFrameExclusive,
+        fileMetadata.frameCount,
+        fileMetadata.sampleRate,
+        fileMetadata.channels,
       );
     } catch {
       return null;
@@ -246,10 +473,107 @@ export function WaveformPreview({
     return formatFrameSpanDurationLabel(
       rangeStartFrame,
       rangeEndFrameExclusive,
-      waveform.sampleRate,
+      fileMetadata.sampleRate,
       t,
     );
-  }, [rangeEndFrameExclusive, rangeInvalid, rangeStartFrame, waveform, t]);
+  }, [fileMetadata, rangeEndFrameExclusive, rangeInvalid, rangeStartFrame, t]);
+
+  const navigationDisabled = fileMetadata === null
+    || viewportLength(axisViewport ?? { startFrame: "0", endFrameExclusive: "0" }) <= 0n;
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      dragSessionRef.current = null;
+      setDragDraftRange(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  function beginRangeEdit() {
+    stopSelectedRange();
+  }
+
+  function commitDragSelection(session: NonNullable<typeof dragSessionRef.current>) {
+    const range = framesFromDragPixels(
+      session.viewport,
+      session.widthPx,
+      session.startX,
+      session.currentX,
+    );
+    if (range === null) {
+      return;
+    }
+    setRangeStartFrame(range.startFrame);
+    setRangeEndFrameExclusive(range.endFrameExclusive);
+  }
+
+  function onPlotPointerDown(event: ReactPointerEvent<SVGSVGElement>) {
+    if (navigationDisabled || axisViewport === null) {
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    if (rect.width <= 0) {
+      return;
+    }
+    beginRangeEdit();
+    const generation = dragGenerationRef.current;
+    const localX = event.clientX - rect.left;
+    dragSessionRef.current = {
+      generation,
+      viewport: { ...axisViewport },
+      widthPx: rect.width,
+      startX: localX,
+      currentX: localX,
+    };
+    setDragDraftRange(null);
+    if (typeof event.currentTarget.setPointerCapture === "function") {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+  }
+
+  function onPlotPointerMove(event: ReactPointerEvent<SVGSVGElement>) {
+    const session = dragSessionRef.current;
+    if (session === null || session.generation !== dragGenerationRef.current) {
+      return;
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    session.currentX = event.clientX - rect.left;
+    setDragDraftRange(framesFromDragPixels(
+      session.viewport,
+      session.widthPx,
+      session.startX,
+      session.currentX,
+    ));
+  }
+
+  function endPlotPointer(event: ReactPointerEvent<SVGSVGElement>) {
+    const session = dragSessionRef.current;
+    if (session === null || session.generation !== dragGenerationRef.current) {
+      return;
+    }
+    if (
+      typeof event.currentTarget.hasPointerCapture === "function"
+      && event.currentTarget.hasPointerCapture(event.pointerId)
+    ) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    commitDragSelection(session);
+    dragSessionRef.current = null;
+    setDragDraftRange(null);
+  }
+
+  function cancelPlotPointer(event: ReactPointerEvent<SVGSVGElement>) {
+    if (
+      typeof event.currentTarget.hasPointerCapture === "function"
+      && event.currentTarget.hasPointerCapture(event.pointerId)
+    ) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    dragSessionRef.current = null;
+    setDragDraftRange(null);
+  }
 
   const displayedWaveformError =
     waveformError !== null ? formatUserFacingError(new Error(waveformError), t) : null;
@@ -289,14 +613,14 @@ export function WaveformPreview({
   }
 
   async function playSelectedRange() {
-    if (waveform === null) return;
+    if (fileMetadata === null) return;
     try {
       validateFrameRange(
         rangeStartFrame,
         rangeEndFrameExclusive,
-        waveform.frameCount,
-        waveform.sampleRate,
-        waveform.channels,
+        fileMetadata.frameCount,
+        fileMetadata.sampleRate,
+        fileMetadata.channels,
       );
     } catch (error) {
       setRangeInvalid(errorMessage(error));
@@ -391,31 +715,131 @@ export function WaveformPreview({
     setRangeError(null);
   }
 
-  const rangeControlsDisabled = waveform === null || rangeLoading;
+  const rangeControlsDisabled = fileMetadata === null || rangeLoading;
 
   return (
-    <section className="waveform-preview" aria-label={t("waveform.ariaFor", { displayName })}>
+    <section className="waveform-preview" role="region" aria-label={t("waveform.ariaFor", { displayName })}>
       <div className="waveform-preview-heading">
         <p>{t("waveform.heading")}</p>
         {durationLabel !== null && <span>{durationLabel}</span>}
       </div>
 
-      {waveform === null && waveformError === null && (
+      <p className="waveform-preview-notice">{t("waveform.interactionHint")}</p>
+
+      <div className="waveform-preview-actions waveform-preview-nav-actions">
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={navigationDisabled}
+          aria-label={t("waveform.zoomIn")}
+          onClick={() => {
+            if (fileMetadata === null || viewportRange === null) return;
+            setViewportRange(zoomViewport(viewportRange, fileMetadata.frameCount, true));
+          }}
+        >
+          {t("waveform.zoomIn")}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={navigationDisabled}
+          aria-label={t("waveform.zoomOut")}
+          onClick={() => {
+            if (fileMetadata === null || viewportRange === null) return;
+            setViewportRange(zoomViewport(viewportRange, fileMetadata.frameCount, false));
+          }}
+        >
+          {t("waveform.zoomOut")}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={navigationDisabled}
+          aria-label={t("waveform.showAll")}
+          onClick={() => {
+            if (fileMetadata === null) return;
+            setViewportRange(fullFileViewport(fileMetadata.frameCount));
+          }}
+        >
+          {t("waveform.showAll")}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={navigationDisabled}
+          aria-label={t("waveform.panEarlier")}
+          onClick={() => {
+            if (fileMetadata === null || viewportRange === null) return;
+            setViewportRange(panViewport(viewportRange, fileMetadata.frameCount, -1));
+          }}
+        >
+          {t("waveform.panEarlier")}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={navigationDisabled}
+          aria-label={t("waveform.panLater")}
+          onClick={() => {
+            if (fileMetadata === null || viewportRange === null) return;
+            setViewportRange(panViewport(viewportRange, fileMetadata.frameCount, 1));
+          }}
+        >
+          {t("waveform.panLater")}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={navigationDisabled || committedSelection === null}
+          aria-label={t("waveform.fitSelection")}
+          onClick={() => {
+            if (fileMetadata === null || committedSelection === null) return;
+            setViewportRange(viewportAroundRange(committedSelection, fileMetadata.frameCount));
+          }}
+        >
+          {t("waveform.fitSelection")}
+        </Button>
+      </div>
+      {axisViewport !== null && fileMetadata !== null && (
+        <p className="waveform-preview-notice" role="status">
+          {t("waveform.viewportFrames", {
+            start: axisViewport.startFrame,
+            end: axisViewport.endFrameExclusive,
+          })}
+        </p>
+      )}
+
+      {!peaksReady && waveformError === null && (
         <p className="waveform-preview-status" role="status">{t("waveform.generating")}</p>
       )}
-      {waveform !== null && (
-        <svg
-          aria-label={t("waveform.plotAria")}
-          className="waveform-preview-plot"
-          role="img"
-          viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
-        >
-          <line x1="0" x2={VIEWBOX_WIDTH} y1={VIEWBOX_HEIGHT / 2} y2={VIEWBOX_HEIGHT / 2} />
-          {channelPaths.map((path, index) => (
-            <path d={path} key={`channel-${index}`} />
-          ))}
-        </svg>
-      )}
+      <div ref={plotContainerRef} className="waveform-preview-plot">
+        {peaksReady && (
+          <svg
+            aria-label={t("waveform.plotAria")}
+            className="waveform-preview-plot-svg"
+            role="img"
+            viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
+            onPointerCancel={cancelPlotPointer}
+            onPointerDown={onPlotPointerDown}
+            onPointerMove={onPlotPointerMove}
+            onPointerUp={endPlotPointer}
+          >
+            <line x1="0" x2={VIEWBOX_WIDTH} y1={VIEWBOX_HEIGHT / 2} y2={VIEWBOX_HEIGHT / 2} />
+            {selectionHighlight !== null && (
+              <rect
+                className="waveform-preview-selection"
+                height={VIEWBOX_HEIGHT}
+                width={selectionHighlight.width}
+                x={selectionHighlight.x}
+                y="0"
+              />
+            )}
+            {channelPaths.map((path, index) => (
+              <path d={path} key={`channel-${index}`} />
+            ))}
+          </svg>
+        )}
+      </div>
       {displayedWaveformError !== null && (
         <p className="waveform-preview-error" role="alert">{displayedWaveformError}</p>
       )}
@@ -430,7 +854,10 @@ export function WaveformPreview({
               aria-invalid={rangeInvalid !== null}
               disabled={rangeControlsDisabled}
               inputMode="numeric"
-              onChange={(event) => setRangeStartFrame(event.target.value)}
+              onChange={(event) => {
+                beginRangeEdit();
+                setRangeStartFrame(event.target.value);
+              }}
               value={rangeStartFrame}
             />
           </label>
@@ -441,7 +868,10 @@ export function WaveformPreview({
               aria-invalid={rangeInvalid !== null}
               disabled={rangeControlsDisabled}
               inputMode="numeric"
-              onChange={(event) => setRangeEndFrameExclusive(event.target.value)}
+              onChange={(event) => {
+                beginRangeEdit();
+                setRangeEndFrameExclusive(event.target.value);
+              }}
               value={rangeEndFrameExclusive}
             />
             <span className="waveform-preview-range-hint">{t("waveform.endFrameHint")}</span>

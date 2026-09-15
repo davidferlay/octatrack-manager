@@ -1,8 +1,16 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AudioApi, AudioWaveformWindow } from "../../api";
 import { tJa } from "../../i18n/testStrings";
+import {
+  installWaveformPlotResizeObserverMock,
+  setWaveformPlotWidthForTests,
+} from "./resizeObserverTestHarness";
+import { WAVEFORM_QUERY_DEBOUNCE_MS } from "./waveformTargetPoints";
+import { frameRangesEqual } from "./viewportRange";
 import { WaveformPreview, waveformChannelPath, waveformPath } from "./WaveformPreview";
+
+const fullFileRange = { startFrame: "0", endFrameExclusive: "44100" };
 
 const waveformWindow: AudioWaveformWindow = {
   analyzerVersion: "waveform:v2",
@@ -23,10 +31,29 @@ const waveformWindow: AudioWaveformWindow = {
   ],
 };
 
+function resolveWaveformQuery(
+  query: { range: { startFrame: string; endFrameExclusive: string } | null; targetPoints: number },
+  overrides: Partial<AudioWaveformWindow> = {},
+): AudioWaveformWindow {
+  const frameCount = overrides.frameCount ?? waveformWindow.frameCount;
+  const range = query.range ?? {
+    startFrame: "0",
+    endFrameExclusive: frameCount,
+  };
+  return {
+    ...waveformWindow,
+    ...overrides,
+    frameCount,
+    range: overrides.range ?? range,
+  };
+}
+
 function api(overrides: Partial<AudioApi> = {}): AudioApi {
   return {
     getWaveform: vi.fn(),
-    queryWaveform: vi.fn().mockResolvedValue(waveformWindow),
+    queryWaveform: vi.fn().mockImplementation((_rootId, _assetId, query) =>
+      Promise.resolve(resolveWaveformQuery(query)),
+    ),
     createPreviewToken: vi.fn().mockResolvedValue({
       previewToken: "preview:v1:opaque",
       expiresInSeconds: 120,
@@ -60,13 +87,15 @@ describe("WaveformPreview", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
+    installWaveformPlotResizeObserverMock();
   });
 
   it("loads v2 waveform peaks with opaque IDs", async () => {
     const client = api();
     render(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:opaque"
@@ -86,7 +115,7 @@ describe("WaveformPreview", () => {
   it("redeems a short-lived token before exposing preview bytes to audio", async () => {
     const client = api();
     render(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:opaque"
@@ -115,7 +144,7 @@ describe("WaveformPreview", () => {
       queryWaveform: vi.fn().mockRejectedValue(new Error("source changed")),
     });
     render(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:opaque"
@@ -136,13 +165,19 @@ describe("WaveformPreview", () => {
           resolveFirst = resolve;
         }),
       )
-      .mockResolvedValueOnce({
-        ...waveformWindow,
-        frameCount: "88200",
+      .mockImplementation((_rootId, _assetId, query) => {
+        if (query.range === null && _assetId === "asset:v1:first") {
+          return new Promise((resolve) => {
+            resolveFirst = resolve;
+          });
+        }
+        return Promise.resolve(resolveWaveformQuery(query, {
+          frameCount: _assetId === "asset:v1:second" ? "88200" : "44100",
+        }));
       });
 
     const view = render(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:first"
@@ -150,8 +185,10 @@ describe("WaveformPreview", () => {
       />,
     );
 
+    await waitFor(() => expect(client.queryWaveform).toHaveBeenCalledTimes(1));
+
     view.rerender(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:second"
@@ -160,7 +197,9 @@ describe("WaveformPreview", () => {
     );
 
     expect(await screen.findByText(tJa("duration.seconds", { seconds: 2 }))).toBeInTheDocument();
-    resolveFirst?.(waveformWindow);
+    resolveFirst?.(resolveWaveformQuery({ range: null, targetPoints: 640 }, {
+      frameCount: "44100",
+    }));
     await Promise.resolve();
     expect(screen.getByText(tJa("duration.seconds", { seconds: 2 }))).toBeInTheDocument();
     expect(screen.queryByText("0:01")).not.toBeInTheDocument();
@@ -177,7 +216,7 @@ describe("WaveformPreview", () => {
       truncated: false,
     });
     render(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:opaque"
@@ -200,7 +239,7 @@ describe("WaveformPreview", () => {
       resolvePreview = resolve;
     }));
     const view = render(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:opaque"
@@ -235,7 +274,7 @@ describe("WaveformPreview", () => {
   it("plays a validated frame range through the range preview API", async () => {
     const client = api();
     render(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:opaque"
@@ -261,7 +300,7 @@ describe("WaveformPreview", () => {
   it("shows invalid range feedback without calling the range preview API", async () => {
     const client = api();
     render(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:opaque"
@@ -297,7 +336,7 @@ describe("WaveformPreview", () => {
     );
 
     const view = render(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:first"
@@ -308,7 +347,7 @@ describe("WaveformPreview", () => {
     fireEvent.click(screen.getByRole("button", { name: tJa("waveform.playRange") }));
 
     view.rerender(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:second"
@@ -342,7 +381,7 @@ describe("WaveformPreview", () => {
     const createObjectUrl = vi.mocked(URL.createObjectURL);
 
     render(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:opaque"
@@ -395,7 +434,7 @@ describe("WaveformPreview", () => {
     const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play");
 
     render(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:opaque"
@@ -457,7 +496,7 @@ describe("WaveformPreview", () => {
     );
 
     render(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:opaque"
@@ -490,7 +529,7 @@ describe("WaveformPreview", () => {
     const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play");
 
     const view = render(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:first"
@@ -502,7 +541,7 @@ describe("WaveformPreview", () => {
     await waitFor(() => expect(client.createRangePreviewToken).toHaveBeenCalled());
 
     view.rerender(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:second"
@@ -521,7 +560,7 @@ describe("WaveformPreview", () => {
     const pauseSpy = vi.spyOn(HTMLMediaElement.prototype, "pause");
 
     render(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:opaque"
@@ -539,13 +578,12 @@ describe("WaveformPreview", () => {
 
   it("initializes the range end within the Library preview limit", async () => {
     const client = api({
-      queryWaveform: vi.fn().mockResolvedValue({
-        ...waveformWindow,
-        frameCount: "3969000",
-      }),
+      queryWaveform: vi.fn().mockImplementation((_rootId, _assetId, query) =>
+        Promise.resolve(resolveWaveformQuery(query, { frameCount: "3969000" })),
+      ),
     });
     render(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:opaque"
@@ -559,13 +597,12 @@ describe("WaveformPreview", () => {
 
   it("shows preview-limit feedback without calling the range preview API", async () => {
     const client = api({
-      queryWaveform: vi.fn().mockResolvedValue({
-        ...waveformWindow,
-        frameCount: "3969000",
-      }),
+      queryWaveform: vi.fn().mockImplementation((_rootId, _assetId, query) =>
+        Promise.resolve(resolveWaveformQuery(query, { frameCount: "3969000" })),
+      ),
     });
     render(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:opaque"
@@ -584,7 +621,7 @@ describe("WaveformPreview", () => {
   it("stops range playback when the head preview player starts", async () => {
     const client = api();
     render(
-      <WaveformPreview
+      <WaveformPreview queryDebounceMs={0}
         api={client}
         rootId="root-opaque"
         assetId="asset:v1:opaque"
@@ -599,5 +636,266 @@ describe("WaveformPreview", () => {
 
     fireEvent.play(head);
     await waitFor(() => expect(screen.getByRole("button", { name: tJa("waveform.stop") })).toBeDisabled());
+  });
+
+  it("requests targetPoints matching the quantized plot width", async () => {
+    const client = api();
+    render(
+      <WaveformPreview queryDebounceMs={0}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+      />,
+    );
+    await waitFor(() => expect(client.queryWaveform).toHaveBeenCalledWith(
+      "root-opaque",
+      "asset:v1:opaque",
+      { range: null, targetPoints: 640 },
+    ));
+    vi.mocked(client.queryWaveform).mockClear();
+    setWaveformPlotWidthForTests(900);
+    await waitFor(() => expect(client.queryWaveform).toHaveBeenCalledWith(
+      "root-opaque",
+      "asset:v1:opaque",
+      { range: fullFileRange, targetPoints: 896 },
+    ));
+  });
+
+  it("does not refetch when width stays in the same targetPoints step", async () => {
+    const client = api();
+    render(
+      <WaveformPreview queryDebounceMs={0}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+      />,
+    );
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    vi.mocked(client.queryWaveform).mockClear();
+    setWaveformPlotWidthForTests(660);
+    await waitFor(() => expect(client.queryWaveform).not.toHaveBeenCalled(), { timeout: 300 });
+  });
+
+  it("debounces rapid width changes into one query", async () => {
+    vi.useFakeTimers();
+    const client = api();
+    render(
+      <WaveformPreview
+        queryDebounceMs={WAVEFORM_QUERY_DEBOUNCE_MS}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+      />,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(WAVEFORM_QUERY_DEBOUNCE_MS);
+    });
+    vi.mocked(client.queryWaveform).mockClear();
+    setWaveformPlotWidthForTests(800);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(40);
+    });
+    setWaveformPlotWidthForTests(820);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(40);
+    });
+    setWaveformPlotWidthForTests(840);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(WAVEFORM_QUERY_DEBOUNCE_MS);
+    });
+    expect(client.queryWaveform).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it("keeps the latest resolution when an older query resolves later", async () => {
+    const client = api({
+      queryWaveform: vi.fn().mockImplementation((_rootId, _assetId, query) =>
+        Promise.resolve(resolveWaveformQuery(query, { frameCount: "88200" })),
+      ),
+    });
+    render(
+      <WaveformPreview queryDebounceMs={0}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+      />,
+    );
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    let resolveSlow: ((value: AudioWaveformWindow) => void) | undefined;
+    vi.mocked(client.queryWaveform).mockImplementation((_rootId, _assetId, query) => {
+      if (query.targetPoints === 640) {
+        return new Promise((resolve) => {
+          resolveSlow = resolve;
+        });
+      }
+      return Promise.resolve(resolveWaveformQuery(query, { frameCount: "88200" }));
+    });
+    setWaveformPlotWidthForTests(900);
+    await waitFor(() => expect(screen.getByText(tJa("duration.seconds", { seconds: 2 }))).toBeInTheDocument());
+    resolveSlow?.(resolveWaveformQuery({ range: fullFileRange, targetPoints: 640 }, {
+      frameCount: "44100",
+    }));
+    await Promise.resolve();
+    expect(screen.getByText(tJa("duration.seconds", { seconds: 2 }))).toBeInTheDocument();
+  });
+
+  it("preserves range frame inputs when only targetPoints changes", async () => {
+    const client = api();
+    render(
+      <WaveformPreview queryDebounceMs={0}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+      />,
+    );
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    fireEvent.change(screen.getByLabelText(tJa("waveform.startFrame")), { target: { value: "1000" } });
+    fireEvent.change(screen.getByLabelText(tJa("waveform.endFrame")), { target: { value: "2000" } });
+    setWaveformPlotWidthForTests(900);
+    await waitFor(() => expect(client.queryWaveform).toHaveBeenCalledWith(
+      "root-opaque",
+      "asset:v1:opaque",
+      expect.objectContaining({ targetPoints: 896, range: fullFileRange }),
+    ));
+    expect(screen.getByLabelText(tJa("waveform.startFrame"))).toHaveValue("1000");
+    expect(screen.getByLabelText(tJa("waveform.endFrame"))).toHaveValue("2000");
+  });
+
+  it("loads waveform when ResizeObserver is unavailable", async () => {
+    const previous = globalThis.ResizeObserver;
+    // @ts-expect-error test override
+    delete globalThis.ResizeObserver;
+    const client = api();
+    try {
+      render(
+        <WaveformPreview queryDebounceMs={0}
+          api={client}
+          rootId="root-opaque"
+          assetId="asset:v1:opaque"
+          displayName="kick.wav"
+        />,
+      );
+      await waitFor(() => expect(client.queryWaveform).toHaveBeenCalledWith(
+        "root-opaque",
+        "asset:v1:opaque",
+        { range: null, targetPoints: 640 },
+      ));
+    } finally {
+      globalThis.ResizeObserver = previous;
+      installWaveformPlotResizeObserverMock();
+    }
+  });
+
+  it("skips queries at zero width and refetches when width returns", async () => {
+    const client = api();
+    render(
+      <WaveformPreview queryDebounceMs={0}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+      />,
+    );
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    vi.mocked(client.queryWaveform).mockClear();
+    setWaveformPlotWidthForTests(0);
+    await waitFor(() => expect(client.queryWaveform).not.toHaveBeenCalled(), { timeout: 300 });
+    setWaveformPlotWidthForTests(640);
+    await waitFor(() => expect(client.queryWaveform).toHaveBeenCalledTimes(1));
+  });
+
+  it("queries the visible viewport after zooming in", async () => {
+    const client = api();
+    render(
+      <WaveformPreview queryDebounceMs={0}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+      />,
+    );
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    vi.mocked(client.queryWaveform).mockClear();
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.zoomIn") }));
+    await waitFor(() => expect(client.queryWaveform).toHaveBeenCalledWith(
+      "root-opaque",
+      "asset:v1:opaque",
+      {
+        range: { startFrame: "11025", endFrameExclusive: "33075" },
+        targetPoints: 640,
+      },
+    ));
+  });
+
+  it("maps a drag on the plot to frame inputs", async () => {
+    const client = api();
+    render(
+      <WaveformPreview queryDebounceMs={0}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+      />,
+    );
+    const plot = await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    vi.spyOn(plot, "getBoundingClientRect").mockReturnValue({
+      x: 0,
+      y: 0,
+      width: 640,
+      height: 140,
+      top: 0,
+      left: 0,
+      bottom: 140,
+      right: 640,
+      toJSON: () => ({}),
+    });
+    const dispatchPointer = (type: string, clientX: number) => {
+      plot.dispatchEvent(new PointerEvent(type, {
+        bubbles: true,
+        clientX,
+        pointerId: 1,
+        buttons: type === "pointerup" ? 0 : 1,
+      }));
+    };
+    await act(async () => {
+      dispatchPointer("pointerdown", 100);
+      dispatchPointer("pointermove", 300);
+      dispatchPointer("pointerup", 300);
+    });
+    await waitFor(() => expect(screen.getByLabelText(tJa("waveform.startFrame"))).toHaveValue("6890"));
+    expect(screen.getByLabelText(tJa("waveform.endFrame"))).toHaveValue("20672");
+  });
+
+  it("does not stretch stale peaks after the viewport changes", async () => {
+    const client = api();
+    let resolveOld: ((value: AudioWaveformWindow) => void) | undefined;
+    vi.mocked(client.queryWaveform).mockImplementation((_rootId, _assetId, query) => {
+      if (query.range === null || frameRangesEqual(query.range, fullFileRange)) {
+        return Promise.resolve(resolveWaveformQuery(query));
+      }
+      return new Promise((resolve) => {
+        resolveOld = resolve;
+      });
+    });
+    render(
+      <WaveformPreview queryDebounceMs={0}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+      />,
+    );
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    vi.mocked(client.queryWaveform).mockClear();
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.zoomIn") }));
+    expect(screen.queryByRole("img", { name: tJa("waveform.plotAria") })).not.toBeInTheDocument();
+    resolveOld?.(resolveWaveformQuery({ range: fullFileRange, targetPoints: 640 }));
+    await Promise.resolve();
+    expect(screen.queryByRole("img", { name: tJa("waveform.plotAria") })).not.toBeInTheDocument();
   });
 });
