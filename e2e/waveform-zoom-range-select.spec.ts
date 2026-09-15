@@ -87,7 +87,7 @@ test("zoom, pan, and keyboard range preview in ja", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
   await page.getByRole("button", { name: uiText("ja", "sources.chooseRoot") }).click();
-  await clickCatalogFileRow(page, "en", "ZOOM.wav");
+  await clickCatalogFileRow(page, "ja", "ZOOM.wav");
   const waveform = page.getByRole("region", {
     name: uiText("ja", "waveform.ariaFor", { displayName: "ZOOM.wav" }),
   });

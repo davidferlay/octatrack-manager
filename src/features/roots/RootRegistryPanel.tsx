@@ -29,6 +29,7 @@ import {
 } from "../changes";
 import {
   operationsDrawerKindForStatus,
+  preparedRenameCount,
 } from "../workspace/operationsStatus";
 import { InspectorPane, InspectorTabbedAssetPanel } from "../inspector";
 import { CatalogBrowseProvider } from "../library/CatalogBrowseContext";
@@ -496,6 +497,8 @@ export function RootRegistryPanel({
       if (next === null) {
         if (kind === "copy" && recovery?.recoveryRequired === true) {
           // Recovery rollback UI does not require a pinned sample.
+        } else if (kind === "rename" && preparedRenameCount(renameRecovery) > 0) {
+          // Prepared rename continuation is plan-scoped; pin is optional.
         } else {
           return;
         }
