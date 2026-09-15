@@ -316,15 +316,15 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ### 6.0 現在の次作業（2026-09-15）
 
-**作業ID:** `MO-M7-WAVEFORM-PANE-RESOLUTION-1`（製品 PR。Draft 提出。merge しない）
+**作業ID:** `MO-M7-WAVEFORM-ZOOM-RANGE-SELECT-1`（製品 PR。Draft 提出。merge しない）
 
-ベース: #128 マージ後の GitHub `main`（未マージ時は `feat/ui-i18n-library-1` 上で実装可）。
+ベース: GitHub `main` `cbf8f26`（#128）+ ローカル合成 **#129** `170e410`（`main` 未取り込み分）。ブランチ `feat/m7-waveform-zoom-range-select-1`。
 
-Inspector 波形の **`targetPoints` をペイン CSS 幅連動**（64 点量子化、32–4096、150ms debounce）。区間試聴・ja/en i18n を維持。正本: `docs/planning/WAVEFORM_V2_INTEGRATION.md` §13.4。
+Library Inspector: ボタン **zoom / pan / 全体表示**、波形 **ドラッグ区間選択**、既存フレーム入力・Play/Stop 接続。`v2_audio_waveform_query` に viewport `range` + #129 `targetPoints`。正本: `docs/planning/WAVEFORM_V2_INTEGRATION.md` §13.5。
 
-**Library i18n foundation:** Draft **#128**（`MO-UI-I18N-LIBRARY-1`）。**Library range preview:** **MERGED**（#127）。
+**#128 i18n:** **MERGED**（`cbf8f26`）。**#129 pane resolution:** MERGED（スタック `170e410`、`main` 待ち）。**Library range preview:** **MERGED**（#127）。
 
-**次作業（製品 PR）:** WFM2 / Canvas / zoom / 波形上ドラッグ選択、`OperationsDialog`、残 UI 翻訳、#105 Auto Slice 残機能。#103 / #104 / #105 は reopen しない。
+**次作業（製品 PR）:** WFM2 / Canvas、`OperationsDialog`、残 UI 翻訳、#105 Auto Slice 残機能。#103 / #104 / #105 は reopen しない。
 
 **履歴 — RC8 closeout docs:** `MO-RC8-GATE-C-M5-CLOSEOUT-DOCS-1`（docs 記録。試験は追加しない）
 

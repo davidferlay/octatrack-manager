@@ -29,6 +29,7 @@ export type MessageParams = {
   'legacy.toastWithFallback': { fallback: string; detail: string }
   'common.errorWithDetail': { summary: string; detail: string }
   'waveform.error.detail': { detail: string }
+  'waveform.viewportFrames': { start: string; end: string }
 }
 
 export type MessageKeyWithParams = keyof MessageParams

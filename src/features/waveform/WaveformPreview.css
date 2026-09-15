@@ -56,6 +56,22 @@
   stroke-width: 1.4;
 }
 
+.waveform-preview-plot-svg {
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.waveform-preview-selection {
+  fill: rgba(242, 163, 60, 0.18);
+  pointer-events: none;
+  stroke: rgba(242, 163, 60, 0.55);
+  stroke-width: 1;
+}
+
+.waveform-preview-nav-actions {
+  margin-top: 0.15rem;
+}
+
 .waveform-preview-actions {
   display: flex;
   flex-wrap: wrap;

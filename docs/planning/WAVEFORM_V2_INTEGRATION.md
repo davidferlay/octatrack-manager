@@ -245,7 +245,7 @@ SliceWorkbench の job 状態 UI と **混在させない**。
 | 1 | **本設計の次 PR** | Library `v2_audio_waveform_query` + Inspector v2 表示 + 契約テスト |
 | 2 | ranged preview token | `v2_audio_preview_range_create` — **MO-M7-LIBRARY-RANGE-PREVIEW-1（Draft PR）** |
 | 3 | cache 最適化 | WFM2 / multi-res pyramid（#104 エンジン、u64 string） |
-| 4 | zoom / scroll UI | Canvas / width-driven `targetPoints` |
+| 4 | zoom / pan / drag selection | **MO-M7-WAVEFORM-ZOOM-RANGE-SELECT-1**（ボタン zoom/pan、波形ドラッグ選択） |
 | 5+ | #105 AS-N* | WF2 安定後 |
 
 ## 12. 最初の実装 PR（推奨 1 件）
@@ -328,6 +328,20 @@ Legacy write containment（#125/#126）は引き続き有効。公開配布は *
 | stale | 既存 `waveformRequest` + 応答時 `targetPoints` 照合。解像度再取得中も peaks を空にしない |
 | 状態 | リサイズ・locale 切替で区間フレーム入力・Play/Stop・Library 選択をリセットしない |
 | 未実装 | zoom / pan / Canvas、WFM2、波形 range 再クエリ |
+
+### 13.5 MO-M7-WAVEFORM-ZOOM-RANGE-SELECT-1
+
+| 項目 | 決定 |
+| --- | --- |
+| viewport | 半開 `[startFrame, endFrameExclusive)`。asset 初回ロード後は `[0, frameCount)` |
+| zoom | 表示中央基準、倍率 **2**（in: 幅 `/ 2`、out: `* 2`）。最小幅 **1 フレーム**、最大はファイル全体。端では幅を維持して clamp |
+| pan | 現在表示幅の **1/4**（0 なら 1 フレーム） |
+| 全体表示 | viewport のみ `[0, frameCount)`。selection は維持 |
+| ドラッグ選択 | plot CSS 座標 → 固定 viewport 内の絶対フレーム。`floor`/`ceil` 整数除算（bigint）。ゼロ幅は確定しない |
+| query | `v2_audio_waveform_query` に **非 null `range`**（viewport）+ #129 の `targetPoints`。150ms debounce、query-key 抑制 |
+| stale | frontend request id + 応答 `range` / `targetPoints` / selection 照合。不一致 peaks は描画しない（引き伸ばさない） |
+| 試聴 | 既存フレーム入力 + Play/Stop。選択変更開始で Stop。zoom/pan/resize では Stop しない |
+| 未実装 | Canvas、WFM2、スライスマーカー、backend キャンセル API |
 
 ### 13.2 後続でよい
 
