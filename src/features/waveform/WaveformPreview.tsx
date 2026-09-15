@@ -718,7 +718,7 @@ export function WaveformPreview({
   const rangeControlsDisabled = fileMetadata === null || rangeLoading;
 
   return (
-    <section className="waveform-preview" aria-label={t("waveform.ariaFor", { displayName })}>
+    <section className="waveform-preview" role="region" aria-label={t("waveform.ariaFor", { displayName })}>
       <div className="waveform-preview-heading">
         <p>{t("waveform.heading")}</p>
         {durationLabel !== null && <span>{durationLabel}</span>}
