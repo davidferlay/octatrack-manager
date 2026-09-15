@@ -56,7 +56,31 @@
   font-size: 0.85rem;
 }
 
+.mo-app-shell__status {
+  border-top: 1px solid var(--mo-border);
+  background: color-mix(in srgb, var(--mo-surface-1) 85%, var(--mo-canvas));
+}
+
 .mo-app-shell__change-drawer {
   border-top: 1px solid var(--mo-border);
   background: color-mix(in srgb, var(--mo-surface-1) 70%, var(--mo-canvas));
+}
+
+.mo-app-shell__inner-split {
+  min-width: 0;
+}
+
+.mo-app-shell--narrow .mo-app-shell__body {
+  min-width: min(100%, 20rem);
+}
+
+.mo-app-shell__pane--stack-hidden {
+  display: none !important;
+}
+
+.mo-app-shell__narrow-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mo-space-2);
+  margin-top: var(--mo-space-2);
 }

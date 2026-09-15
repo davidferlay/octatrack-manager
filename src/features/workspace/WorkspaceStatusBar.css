@@ -1,0 +1,32 @@
+.workspace-status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--mo-space-3);
+  padding: var(--mo-space-2) var(--mo-space-3);
+  font-size: var(--mo-font-size-xs);
+  color: var(--mo-text-muted);
+}
+
+.workspace-status-bar__item--busy {
+  color: var(--mo-accent);
+}
+
+.workspace-status-bar__item--attention {
+  color: var(--mo-warning, #c90);
+  font-weight: var(--mo-font-weight-bold);
+}
+
+.workspace-status-bar__error {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-status-bar__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mo-space-2);
+  margin-left: auto;
+}

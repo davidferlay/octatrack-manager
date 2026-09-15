@@ -173,6 +173,26 @@ export const enMessages = {
   'legacy.toastWithFallback': '{fallback}: {detail}',
 
   'common.errorWithDetail': '{summary}: {detail}',
+
+  'workspace.disconnected': 'Not connected',
+  'workspace.topActionsAria': 'Workspace actions',
+  'workspace.refreshCatalog': 'Refresh catalog',
+  'workspace.navAria': 'Catalog locations',
+  'workspace.navHeading': 'Catalog',
+  'workspace.navLoading': 'Loading catalog…',
+  'workspace.selectSourceHint': 'Select a source to browse locations.',
+  'workspace.statusAria': 'Workspace status',
+  'workspace.statusConnected': 'Connected',
+  'workspace.statusDisconnected': 'Disconnected',
+  'workspace.statusProcessing': 'Processing…',
+  'workspace.statusAttention': 'Attention required',
+  'workspace.statusErrorSummary': 'Error (see details below)',
+  'workspace.openChangeDrawer': 'Open change drawer',
+  'workspace.showInspector': 'Show inspector',
+  'workspace.showList': 'Show sample list',
+  'workspace.toggleNav': 'Toggle catalog navigation',
+  'workspace.splitResizeAria': 'Resize panes',
+  'workspace.trailSeparator': '›',
 } as const
 
 export type MessageKey = keyof typeof enMessages

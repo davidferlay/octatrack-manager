@@ -1,1 +1,5 @@
-export { AppShell, type AppShellProps } from './AppShell'
+export {
+  AppShell,
+  type AppShellCenterView,
+  type AppShellProps,
+} from './AppShell'

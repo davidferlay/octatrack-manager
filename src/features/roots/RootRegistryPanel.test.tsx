@@ -1,10 +1,17 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within, type RenderOptions } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { AudioApi, ChangeApi, CloneApi, MetadataApi, RenameApi, RootApi, RootSession } from "../../api";
+import { ThemeProvider } from "../../design-system/themes/ThemeProvider";
+import { withLocaleProvider } from "../../i18n/testUtils";
 import { tJa } from "../../i18n/testStrings";
 import { RootRegistryPanel } from "./RootRegistryPanel";
 import { renameOperatorApiStubs } from "../../test/renameApiStubs";
+
+function renderPanel(ui: ReactElement, options?: RenderOptions) {
+  return render(withLocaleProvider(<ThemeProvider>{ui}</ThemeProvider>), options);
+}
 
 const session: RootSession = {
   rootId: "root-opaque",
@@ -117,7 +124,7 @@ describe("RootRegistryPanel", () => {
   it("does nothing when the native picker is cancelled", async () => {
     const api = fakeApi();
     const selectDirectory = vi.fn().mockResolvedValue(null);
-    render(<RootRegistryPanel api={api} changeClient={fakeChangeApi()} cloneClient={fakeCloneApi()} renameClient={fakeRenameApi()} selectDirectory={selectDirectory} />);
+    renderPanel(<RootRegistryPanel api={api} changeClient={fakeChangeApi()} cloneClient={fakeCloneApi()} renameClient={fakeRenameApi()} selectDirectory={selectDirectory} />);
 
     fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
 
@@ -129,7 +136,7 @@ describe("RootRegistryPanel", () => {
   it("reports a native picker failure without registering a root", async () => {
     const api = fakeApi();
     const selectDirectory = vi.fn().mockRejectedValue(new Error("picker unavailable"));
-    render(<RootRegistryPanel api={api} changeClient={fakeChangeApi()} cloneClient={fakeCloneApi()} renameClient={fakeRenameApi()} selectDirectory={selectDirectory} />);
+    renderPanel(<RootRegistryPanel api={api} changeClient={fakeChangeApi()} cloneClient={fakeCloneApi()} renameClient={fakeRenameApi()} selectDirectory={selectDirectory} />);
 
     fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
 
@@ -140,7 +147,7 @@ describe("RootRegistryPanel", () => {
   it("renders only backend-approved display names and relative paths", async () => {
     const api = fakeApi();
     const rawPath = "/private/tmp/secret-fixture-root";
-    render(
+    renderPanel(
       <RootRegistryPanel
         api={api}
         changeClient={fakeChangeApi()} cloneClient={fakeCloneApi()} renameClient={fakeRenameApi()}
@@ -148,18 +155,20 @@ describe("RootRegistryPanel", () => {
       />,
     );
 
-    expect(screen.getByText(tJa("sources.readOnlyBadge"))).toBeInTheDocument();
+    const contextBar = screen.getByLabelText(tJa("context.libraryAria"));
+    expect(within(contextBar).getByText(tJa("workspace.disconnected"))).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
 
     expect(await screen.findByText("PROJECT_A")).toBeInTheDocument();
     expect(screen.getByText("KICK.wav")).toBeInTheDocument();
     expect(screen.getByText("LIVE_SET/AUDIO/KICK.wav")).toBeInTheDocument();
-    const contextBar = screen.getByLabelText(tJa("context.libraryAria"));
-    expect(contextBar).toHaveTextContent("Fixture Root");
-    expect(contextBar).toHaveTextContent(tJa("context.readOnly"));
     await waitFor(() => {
-      expect(contextBar).toHaveTextContent(tJa("context.samplesInLocation", { count: 1 }));
+      expect(screen.getByLabelText(tJa("context.libraryAria"))).toHaveTextContent("Fixture Root");
+      expect(screen.getByLabelText(tJa("context.libraryAria"))).toHaveTextContent(tJa("context.readOnly"));
+      expect(screen.getByLabelText(tJa("context.libraryAria"))).toHaveTextContent(
+        tJa("context.samplesInLocation", { count: 1 }),
+      );
     });
     expect(screen.getByLabelText(tJa("inspector.aria"))).toBeInTheDocument();
     expect(screen.getByText(tJa("inspector.title"))).toBeInTheDocument();
@@ -194,7 +203,7 @@ describe("RootRegistryPanel", () => {
       replaceManualAssetMetadata: vi.fn(),
     };
 
-    render(
+    renderPanel(
       <RootRegistryPanel
         api={api}
         changeClient={fakeChangeApi()} cloneClient={fakeCloneApi()} renameClient={fakeRenameApi()}
@@ -235,7 +244,7 @@ describe("RootRegistryPanel", () => {
   it("enables only the session write grant after recovery status is clear", async () => {
     const api = fakeApi();
     const changeClient = fakeChangeApi();
-    render(
+    renderPanel(
       <RootRegistryPanel
         api={api}
         changeClient={changeClient}
@@ -249,7 +258,7 @@ describe("RootRegistryPanel", () => {
     expect(await screen.findByText("PROJECT_A")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: tJa("sources.editMode") }));
 
-    expect(await screen.findAllByText(tJa("sources.editEnabledBadge"))).toHaveLength(2);
+    expect(await screen.findByText(tJa("context.editEnabled"))).toBeInTheDocument();
     expect(changeClient.recoveryStatus).toHaveBeenCalledTimes(2);
     expect(api.enableWrite).toHaveBeenCalledWith("root-opaque");
 
@@ -260,7 +269,7 @@ describe("RootRegistryPanel", () => {
         tJa("context.readOnly"),
       );
     });
-    expect(screen.getAllByText(tJa("sources.readOnlyBadge")).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(tJa("context.readOnly")).length).toBeGreaterThanOrEqual(1);
   });
 
   it("refreshes the catalog and recovery gate after an approved rollback", async () => {
@@ -298,7 +307,7 @@ describe("RootRegistryPanel", () => {
       failureCode: "RECOVERED_INCOMPLETE_OPERATION",
       backupSnapshotId: `snapshot:v1:${"a".repeat(64)}`,
     });
-    render(
+    renderPanel(
       <RootRegistryPanel
         api={api}
         changeClient={changeClient}
@@ -355,7 +364,7 @@ describe("RootRegistryPanel", () => {
     vi.mocked(changeClient.planAdditiveCopy).mockImplementation(
       () => new Promise(() => undefined),
     );
-    render(
+    renderPanel(
       <RootRegistryPanel
         api={api}
         changeClient={changeClient}
@@ -417,7 +426,7 @@ describe("RootRegistryPanel", () => {
         recoveryEligible: false,
       }],
     });
-    render(
+    renderPanel(
       <RootRegistryPanel
         api={api}
         changeClient={fakeChangeApi()}

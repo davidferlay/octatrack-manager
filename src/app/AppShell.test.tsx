@@ -40,6 +40,19 @@ describe('AppShell', () => {
     expect(screen.getByTestId('app-shell-context')).toHaveTextContent('Context summary')
   })
 
+  it('renders an optional status bar above the change drawer', () => {
+    render(
+      <AppShell
+        sources={<div>Sources content</div>}
+        main={<div>Main content</div>}
+        statusBar={<div>Connection OK</div>}
+        changeDrawer={<div>Review additive copy</div>}
+      />,
+    )
+
+    expect(screen.getByTestId('app-shell-status')).toHaveTextContent('Connection OK')
+  })
+
   it('renders the Change Drawer below the workspace regions', () => {
     render(
       <AppShell
