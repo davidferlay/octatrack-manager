@@ -318,6 +318,11 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 **作業ID:** `MO-M7-RANGE-TO-SLICE-ANALYSIS-1`（製品 PR。Draft 提出。merge しない）
 
+**Native acceptance (`MO-M7-RANGE-TO-SLICE-NATIVE-ACCEPTANCE-1`):** 記録
+`docs/testing/M7_RANGE_TO_SLICE_NATIVE_ACCEPTANCE.md`（head `31ef6ca`）。
+合成 fixture 生成脚本・隔離 `HOME` 手順・dev 起動 smoke は済。**A–D（picker /
+聴感・draft SQLite）はオペレーター未実施 → 製品受入 NOT_COMPLETE。**
+
 ベース: GitHub `main` `4da00644493b79195be7082221a1753082652ec5`（#130 merge）。ブランチ `feat/m7-range-to-slice-analysis-1`。
 
 Library の **確定幾何範囲**（試聴上限と分離）を Attack slicing の **明示「この範囲を解析」** へ渡す。既存 `v2_audio_onsets_start` / draft CAS / 候補反映のみ。異なる解析範囲の既存 draft は `ANALYSIS_REGION_MISMATCH` で拒否（分岐 draft 未実装）。
