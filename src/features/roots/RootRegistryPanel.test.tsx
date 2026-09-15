@@ -221,11 +221,11 @@ describe("RootRegistryPanel", () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText(tJa("usage.aria"))).toBeInTheDocument();
     expect(screen.getByLabelText(tJa("usage.summaryAria"))).toHaveTextContent(tJa("usage.usedCount", { count: 1 }));
-    expect(audioClient.queryWaveform).toHaveBeenCalledWith(
+    await waitFor(() => expect(audioClient.queryWaveform).toHaveBeenCalledWith(
       "root-opaque",
       "asset:v1:opaque",
       { range: null, targetPoints: 640 },
-    );
+    ));
     expect(metadataClient.loadManualAssetMetadata).toHaveBeenCalledWith(
       "root-opaque",
       "asset:v1:opaque",

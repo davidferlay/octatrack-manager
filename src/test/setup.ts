@@ -1,5 +1,8 @@
 import '@testing-library/jest-dom'
+import { installWaveformPlotResizeObserverMock } from '../features/waveform/resizeObserverTestHarness'
 import { vi } from 'vitest'
+
+installWaveformPlotResizeObserverMock()
 import React from 'react'
 import { type RenderOptions } from '@testing-library/react'
 import { LocaleProvider } from '../i18n/LocaleProvider'
