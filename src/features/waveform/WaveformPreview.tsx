@@ -69,11 +69,11 @@ interface WaveformPreviewProps {
     range: LibraryCommittedGeometryRange | null,
     notification?: LibraryGeometryNotification,
   ) => void;
-  /** Increment to stop range preview playback from a sibling control (e.g. slice analysis). */
+  /** Increment to stop range and head preview playback from a sibling control. */
   stopPlaybackToken?: number;
   /** When false, plot width is frozen so hidden tabs do not re-query waveform IPC. */
   layoutVisible?: boolean;
-  /** True while head preview or range playback is active. */
+  /** True while head preview loading/playback or range playback is active. */
   onPlaybackActivityChange?: (active: boolean) => void;
 }
 
@@ -139,6 +139,7 @@ export function WaveformPreview({
   const [waveformError, setWaveformError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const [headPlaying, setHeadPlaying] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [truncated, setTruncated] = useState(false);
   const [rangeStartFrame, setRangeStartFrame] = useState("0");
@@ -223,6 +224,7 @@ export function WaveformPreview({
 
   const pauseHeadPreview = useCallback(() => {
     headAudioRef.current?.pause();
+    setHeadPlaying(false);
   }, []);
 
   const stopSelectedRange = useCallback(() => {
@@ -231,6 +233,11 @@ export function WaveformPreview({
     setRangeLoading(false);
     setRangeError(null);
   }, [stopRangePlayback]);
+
+  const stopAllPlayback = useCallback(() => {
+    stopSelectedRange();
+    pauseHeadPreview();
+  }, [pauseHeadPreview, stopSelectedRange]);
 
   useLayoutEffect(() => {
     const element = plotContainerRef.current;
@@ -276,8 +283,8 @@ export function WaveformPreview({
   }, [layoutVisible]);
 
   useEffect(() => {
-    onPlaybackActivityChange?.(previewing || rangePlaying || rangeLoading);
-  }, [onPlaybackActivityChange, previewing, rangePlaying, rangeLoading]);
+    onPlaybackActivityChange?.(previewing || headPlaying || rangePlaying || rangeLoading);
+  }, [headPlaying, onPlaybackActivityChange, previewing, rangePlaying, rangeLoading]);
 
   useEffect(() => {
     const immediate = targetPointsFromPlotWidthCss(plotWidthCss);
@@ -437,6 +444,7 @@ export function WaveformPreview({
     setRangeError(null);
     setRangeLoading(false);
     setPreviewing(false);
+    setHeadPlaying(false);
     setViewportRange(null);
     setDebouncedViewport(null);
     setFileMetadata(null);
@@ -510,8 +518,8 @@ export function WaveformPreview({
   ]);
 
   useEffect(() => {
-    stopSelectedRange();
-  }, [stopPlaybackToken, stopSelectedRange]);
+    stopAllPlayback();
+  }, [stopPlaybackToken, stopAllPlayback]);
 
   const committedSelection = committedGeometryRange;
 
@@ -994,7 +1002,12 @@ export function WaveformPreview({
           ref={headAudioRef}
           aria-label={t("waveform.previewAria", { displayName })}
           controls
-          onPlay={stopSelectedRange}
+          onPlay={() => {
+            stopSelectedRange();
+            setHeadPlaying(true);
+          }}
+          onPause={() => setHeadPlaying(false)}
+          onEnded={() => setHeadPlaying(false)}
           preload="metadata"
           src={previewUrl}
         />

@@ -446,4 +446,47 @@ describe("RootRegistryPanel", () => {
     expect(screen.getByText(/A prepared rename operation exists/i)).toBeInTheDocument();
     expect(renameClient.recoveryStatus).toHaveBeenCalled();
   });
+
+  it("does not treat write-mode busy as a catalog refresh", async () => {
+    const api = fakeApi();
+    vi.mocked(api.enableWrite).mockImplementation(() => new Promise(() => undefined));
+    renderPanel(
+      <RootRegistryPanel
+        api={api}
+        changeClient={fakeChangeApi()}
+        cloneClient={fakeCloneApi()}
+        renameClient={fakeRenameApi()}
+        selectDirectory={vi.fn().mockResolvedValue("/tmp/fixture-root")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
+    expect(await screen.findByText("KICK.wav")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: tJa("sources.editMode") }));
+
+    expect(screen.queryByText(tJa("library.fileListRefreshing"))).not.toBeInTheDocument();
+    expect(screen.queryByText(tJa("library.fileListLoadFailed"))).not.toBeInTheDocument();
+    expect(screen.getByText("KICK.wav")).toBeInTheDocument();
+  });
+
+  it("shows catalog refresh status only while the catalog request is in flight", async () => {
+    const api = fakeApi();
+    renderPanel(
+      <RootRegistryPanel
+        api={api}
+        changeClient={fakeChangeApi()}
+        cloneClient={fakeCloneApi()}
+        renameClient={fakeRenameApi()}
+        selectDirectory={vi.fn().mockResolvedValue("/tmp/fixture-root")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
+    expect(await screen.findByText("KICK.wav")).toBeInTheDocument();
+    vi.mocked(api.listLibrary).mockImplementation(() => new Promise(() => undefined));
+    fireEvent.click(screen.getByRole("button", { name: tJa("workspace.refreshCatalog") }));
+
+    expect(await screen.findByText(tJa("library.fileListRefreshing"))).toBeInTheDocument();
+    expect(screen.getByText("KICK.wav")).toBeInTheDocument();
+  });
 });

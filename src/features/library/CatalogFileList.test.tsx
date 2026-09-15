@@ -42,6 +42,7 @@ describe("CatalogFileList", () => {
       />,
     );
     expect(screen.getByRole("columnheader", { name: tJa("library.columnName") })).toBeInTheDocument();
+    expect(screen.getByRole("grid")).toHaveAttribute("aria-rowcount", "2");
     expect(screen.getByText("KICK.wav")).toBeInTheDocument();
     expect(screen.getByText("2.0 KB")).toBeInTheDocument();
     expect(screen.getByText("WAV")).toBeInTheDocument();
@@ -118,6 +119,7 @@ describe("CatalogFileList", () => {
       />,
     );
     expect(screen.getByText(tJa("library.noFilesHere"))).toBeInTheDocument();
+    expect(screen.getByRole("grid")).toHaveAttribute("aria-rowcount", "1");
 
     rerender(
       <CatalogFileList

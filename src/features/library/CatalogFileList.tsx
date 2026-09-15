@@ -108,10 +108,10 @@ export function CatalogFileList({
       <div
         className="catalog-file-table"
         role="grid"
-        aria-rowcount={fileQuery.visible.length}
+        aria-rowcount={fileQuery.visible.length + 1}
         aria-colcount={3}
       >
-        <div className="catalog-file-table__header" role="row">
+        <div className="catalog-file-table__header" role="row" aria-rowindex={1}>
           <span className="catalog-file-table__cell catalog-file-table__cell--name" role="columnheader">
             {t("library.columnName")}
           </span>
@@ -123,12 +123,13 @@ export function CatalogFileList({
           </span>
         </div>
         <div className="catalog-file-table__body" role="rowgroup">
-          {fileQuery.visible.map((file) => {
+          {fileQuery.visible.map((file, index) => {
             const selected = file.fileInstanceId === selectedFileInstanceId;
             return (
               <div
                 className="catalog-file-table__row"
                 role="row"
+                aria-rowindex={index + 2}
                 tabIndex={0}
                 aria-selected={selected}
                 key={file.fileInstanceId}

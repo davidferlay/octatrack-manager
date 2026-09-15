@@ -29,7 +29,7 @@
 | Tab switch (same asset) | Waveform zoom/range, notes draft, slice job/draft | — | No extra waveform/draft/metadata/onsets |
 | Tab switch (Preview hidden) | Waveform state | — | Plot width frozen (`layoutVisible=false`) |
 | Asset change | — | All panels via `key={rootId:fileInstanceId}` | Normal selection fetch |
-| Playback / analysis while hidden | Continues | — | Stop via header (`stopPlaybackToken`, slice cancel callback) |
+| Playback / analysis while hidden | Continues | — | Header stop: `stopPlaybackToken` pauses head preview and stops range playback; slice cancel via registered callback |
 
 ## Screenshots
 

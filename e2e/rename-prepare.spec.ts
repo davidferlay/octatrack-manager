@@ -203,7 +203,7 @@ test.describe("Rename prepare workflow", () => {
     await page.getByRole("button", { name: uiText("ja", "sources.editMode") }).click();
     await expectEditEnabledInContextBar(page, "ja");
     await clickCatalogFileRow(page, "ja", "KICK.wav");
-    await page.getByRole("button", { name: "Rename" }).click();
+    await page.getByRole("button", { name: uiText("ja", "inspector.renameAction") }).click();
     await page.getByLabel("New file name").fill("KICK_DEEP.wav");
     await page.getByRole("button", { name: "Review Rename" }).click();
     await expect(page.getByText("1 reference will be updated")).toBeVisible();
@@ -326,7 +326,7 @@ test.describe("Rename prepare workflow", () => {
     await page.getByRole("button", { name: uiText("ja", "sources.editMode") }).click();
     await expectEditEnabledInContextBar(page, "ja");
     await clickCatalogFileRow(page, "ja", "KICK.wav");
-    await page.getByRole("button", { name: "Rename" }).click();
+    await page.getByRole("button", { name: uiText("ja", "inspector.renameAction") }).click();
     await page.getByLabel("New file name").fill("KICK_DEEP.wav");
     await page.getByRole("button", { name: "Review Rename" }).click();
     await expect(page.getByText("Rename blocked")).toBeVisible();

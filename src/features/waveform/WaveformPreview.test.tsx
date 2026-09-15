@@ -722,6 +722,46 @@ describe("WaveformPreview", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: tJa("waveform.stop") })).toBeDisabled());
   });
 
+  it("tracks head preview playback and pauses it when stopPlaybackToken changes", async () => {
+    const client = api();
+    const onPlaybackActivityChange = vi.fn();
+    const view = render(
+      <WaveformPreview queryDebounceMs={0}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+        stopPlaybackToken={0}
+        onPlaybackActivityChange={onPlaybackActivityChange}
+      />,
+    );
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.loadPreview") }));
+    const head = await screen.findByLabelText(
+      tJa("waveform.previewAria", { displayName: "kick.wav" }),
+    ) as HTMLAudioElement;
+    const pauseSpy = vi.spyOn(head, "pause");
+    onPlaybackActivityChange.mockClear();
+
+    fireEvent.play(head);
+    await waitFor(() => expect(onPlaybackActivityChange).toHaveBeenCalledWith(true));
+
+    view.rerender(
+      <WaveformPreview queryDebounceMs={0}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+        stopPlaybackToken={1}
+        onPlaybackActivityChange={onPlaybackActivityChange}
+      />,
+    );
+    await waitFor(() => {
+      expect(pauseSpy).toHaveBeenCalled();
+      expect(onPlaybackActivityChange).toHaveBeenCalledWith(false);
+    });
+  });
+
   it("requests targetPoints matching the quantized plot width", async () => {
     const client = api();
     render(

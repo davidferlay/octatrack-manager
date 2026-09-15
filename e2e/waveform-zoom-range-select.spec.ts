@@ -125,7 +125,7 @@ test("zoom controls fit 840px inspector width in en", async ({ page }) => {
   await page.setViewportSize({ width: 840, height: 900 });
   await page.goto("/");
   await page.getByRole("button", { name: uiText("en", "sources.chooseRoot") }).click();
-  await clickCatalogFileRow(page, "ja", "ZOOM.wav");
+  await clickCatalogFileRow(page, "en", "ZOOM.wav");
   await showInspectorFromContextBar(page, "en");
   await expect(page.getByRole("button", { name: uiText("en", "waveform.zoomIn") })).toBeVisible();
   await expect(page.getByRole("button", { name: uiText("en", "waveform.fitSelection") })).toBeVisible();

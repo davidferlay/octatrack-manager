@@ -94,6 +94,8 @@ export function RootRegistryPanel({
   const [busy, setBusy] = useState(false);
   const [changeBusy, setChangeBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [catalogRefreshing, setCatalogRefreshing] = useState(false);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<CatalogAssetSelection | null>(null);
   const [stopLibraryPlaybackToken, setStopLibraryPlaybackToken] = useState(0);
   const geometryTarget = useMemo(
@@ -192,6 +194,8 @@ export function RootRegistryPanel({
       setSelectedAsset(null);
       setBrowseContext(null);
       setChangeBusy(false);
+      setCatalogError(null);
+      setCatalogRefreshing(false);
       try {
         setRecovery(await changeClient.recoveryStatus(registered.rootId));
         await refreshRenameRecovery(registered.rootId);
@@ -214,6 +218,8 @@ export function RootRegistryPanel({
       setCloneVerification(null);
       setSourceEvidenceId(null);
       setChangeBusy(false);
+      setCatalogError(null);
+      setCatalogRefreshing(false);
       setError(errorMessage(reason));
     } finally {
       setBusy(false);
@@ -237,6 +243,8 @@ export function RootRegistryPanel({
       setRenameModalAsset(null);
       setCloneVerification(null);
       setChangeBusy(false);
+      setCatalogError(null);
+      setCatalogRefreshing(false);
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -299,6 +307,8 @@ export function RootRegistryPanel({
     if (session === null) return;
     const loadEpoch = catalogEpochRef.current;
     setBusy(true);
+    setCatalogRefreshing(true);
+    setCatalogError(null);
     setError(null);
     try {
       const snapshot = await api.listLibrary(session.rootId);
@@ -306,10 +316,13 @@ export function RootRegistryPanel({
       setLibrary(snapshot);
     } catch (reason) {
       if (loadEpoch === catalogEpochRef.current) {
-        setError(errorMessage(reason));
+        const message = errorMessage(reason);
+        setError(message);
+        setCatalogError(message);
       }
     } finally {
       setBusy(false);
+      setCatalogRefreshing(false);
     }
   }
 
@@ -604,8 +617,8 @@ export function RootRegistryPanel({
         catalogReady ? (
           <CatalogWorkspaceMain
             totalFiles={library.audioFiles.length}
-            catalogRefreshing={busy}
-            catalogError={error}
+            catalogRefreshing={catalogRefreshing}
+            catalogError={catalogError}
           />
         ) : (
           <p className="root-registry-main-empty">{t("roots.mainEmpty")}</p>
