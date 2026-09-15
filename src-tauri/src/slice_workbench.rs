@@ -932,7 +932,11 @@ mod tests {
     #[test]
     fn region_mismatch_uses_structured_error_code() {
         let err = region_mismatch();
-        assert_eq!(err.code(), "ANALYSIS_REGION_MISMATCH");
+        let payload = serde_json::to_value(&err).expect("serialize ApiError for IPC contract");
+        assert_eq!(
+            payload.get("code").and_then(|value| value.as_str()),
+            Some("ANALYSIS_REGION_MISMATCH"),
+        );
     }
 
     #[test]

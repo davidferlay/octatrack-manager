@@ -148,7 +148,7 @@ test("library range selection flows into explicit slice analysis", async ({ page
   const slice = page.getByRole("region", { name: uiText("ja", "slicing.ariaFor", { displayName: "RANGE.wav" }) });
   await slice.getByRole("button", { name: uiText("ja", "slicing.analyzeSelectedRange") }).click();
 
-  await expect(slice.getByText(/11025/)).toBeVisible();
+  await expect(slice.getByLabel(uiText("ja", "slicing.analysisRegionHeading"))).toContainText("11025");
   await expect(slice.getByRole("button", { name: uiText("ja", "slicing.applyCandidates") })).toBeEnabled();
 
   const starts = await page.evaluate(() =>
@@ -158,5 +158,5 @@ test("library range selection flows into explicit slice analysis", async ({ page
   expect(starts[0].args.region).toEqual({ startFrame: "11025", endExclusive: "22050" });
 
   await slice.getByRole("button", { name: uiText("ja", "slicing.applyCandidates") }).click();
-  await expect(slice.getByDisplayValue("11025")).toBeVisible();
+  await expect(slice.getByLabel("Start frame candidate-11025")).toHaveValue("11025");
 });
