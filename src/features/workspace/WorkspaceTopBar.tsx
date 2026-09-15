@@ -19,6 +19,7 @@ export interface WorkspaceTopBarProps {
   onEnableWrite: () => void;
   onDisableWrite: () => void;
   catalogReady: boolean;
+  onOpenClone?: () => void;
 }
 
 export function WorkspaceTopBar({
@@ -36,6 +37,7 @@ export function WorkspaceTopBar({
   onDisableWrite,
   catalogReady,
   browseContext = null,
+  onOpenClone,
 }: WorkspaceTopBarProps) {
   const t = useTranslate();
   const editDisabled =
@@ -107,6 +109,16 @@ export function WorkspaceTopBar({
                 {t("sources.editMode")}
               </button>
             </div>
+            {onOpenClone !== undefined && (
+              <Button
+                variant="secondary"
+                disabled={busy}
+                aria-label={t("operations.openCloneAria")}
+                onClick={onOpenClone}
+              >
+                {t("operations.openClone")}
+              </Button>
+            )}
             <Button variant="secondary" disabled={busy || !catalogReady} onClick={onRefreshCatalog}>
               {t("workspace.refreshCatalog")}
             </Button>

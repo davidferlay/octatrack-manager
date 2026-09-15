@@ -55,9 +55,11 @@ describe("InspectorTabbedAssetPanel", () => {
         stopPlaybackToken={0}
         renameRecovery={null}
         renameBlocked
+        copyBlocked
         renameBusy={false}
         writeEnabled={false}
         onRename={vi.fn()}
+        onCopy={vi.fn()}
         onCommittedGeometryRangeChange={vi.fn()}
         onRequestStopLibraryPlayback={vi.fn()}
       />,
@@ -88,9 +90,11 @@ describe("InspectorTabbedAssetPanel", () => {
         stopPlaybackToken={0}
         renameRecovery={null}
         renameBlocked
+        copyBlocked
         renameBusy={false}
         writeEnabled={false}
         onRename={vi.fn()}
+        onCopy={vi.fn()}
         onCommittedGeometryRangeChange={vi.fn()}
         onRequestStopLibraryPlayback={vi.fn()}
       />,

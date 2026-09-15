@@ -38,6 +38,12 @@
   font-size: var(--mo-font-size-xs);
 }
 
+.mo-inspector-tabbed__prepared-hint {
+  margin: 0;
+  color: var(--mo-text-muted);
+  font-size: var(--mo-font-size-xs);
+}
+
 .mo-inspector-tabbed__activity {
   display: flex;
   flex-wrap: wrap;

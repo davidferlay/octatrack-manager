@@ -1,6 +1,10 @@
 import type { ChangeRecoveryStatus, RenameRecoveryStatus } from "../../api";
 import { Button } from "../../design-system";
 import { useTranslate } from "../../i18n";
+import {
+  deriveOperationsStatus,
+  type OperationsStatusKind,
+} from "./operationsStatus";
 import "./WorkspaceStatusBar.css";
 
 export interface WorkspaceStatusBarProps {
@@ -10,9 +14,24 @@ export interface WorkspaceStatusBarProps {
   error: string | null;
   recovery: ChangeRecoveryStatus | null;
   renameRecovery: RenameRecoveryStatus | null;
-  onFocusChangeDrawer?: () => void;
+  onOpenOperations?: () => void;
   onShowInspector?: () => void;
   inspectorHidden?: boolean;
+}
+
+function statusLabel(kind: OperationsStatusKind, t: ReturnType<typeof useTranslate>): string | null {
+  switch (kind) {
+    case "processing":
+      return t("workspace.statusProcessing");
+    case "continuation":
+      return t("workspace.statusContinuation");
+    case "recovery":
+      return t("workspace.statusRecovery");
+    case "status_unavailable":
+      return t("workspace.statusSafetyUnavailable");
+    default:
+      return null;
+  }
 }
 
 export function WorkspaceStatusBar({
@@ -22,28 +41,40 @@ export function WorkspaceStatusBar({
   error,
   recovery,
   renameRecovery,
-  onFocusChangeDrawer,
+  onOpenOperations,
   onShowInspector,
   inspectorHidden = false,
 }: WorkspaceStatusBarProps) {
   const t = useTranslate();
-  const attention = recovery?.recoveryRequired === true
-    || renameRecovery?.recoveryRequired === true;
-  const processing = busy || changeBusy;
+  const operationsStatus = deriveOperationsStatus({
+    connected,
+    busy,
+    changeBusy,
+    recovery,
+    renameRecovery,
+  });
+  const statusDetail = statusLabel(operationsStatus, t);
+  const showOperationsButton = connected
+    && onOpenOperations !== undefined
+    && operationsStatus !== "idle";
 
   return (
     <div className="workspace-status-bar" role="status" aria-label={t("workspace.statusAria")}>
       <span className="workspace-status-bar__item">
         {connected ? t("workspace.statusConnected") : t("workspace.statusDisconnected")}
       </span>
-      {processing && (
-        <span className="workspace-status-bar__item workspace-status-bar__item--busy">
-          {t("workspace.statusProcessing")}
-        </span>
-      )}
-      {attention && (
-        <span className="workspace-status-bar__item workspace-status-bar__item--attention">
-          {t("workspace.statusAttention")}
+      {statusDetail !== null && (
+        <span
+          className={[
+            "workspace-status-bar__item",
+            operationsStatus === "recovery" || operationsStatus === "status_unavailable"
+              ? "workspace-status-bar__item--attention"
+              : operationsStatus === "processing"
+                ? "workspace-status-bar__item--busy"
+                : "",
+          ].filter(Boolean).join(" ")}
+        >
+          {statusDetail}
         </span>
       )}
       {error !== null && (
@@ -52,9 +83,13 @@ export function WorkspaceStatusBar({
         </span>
       )}
       <div className="workspace-status-bar__actions">
-        {attention && onFocusChangeDrawer !== undefined && (
-          <Button variant="secondary" onClick={onFocusChangeDrawer}>
-            {t("workspace.openChangeDrawer")}
+        {showOperationsButton && (
+          <Button
+            variant="secondary"
+            aria-label={t("workspace.openOperationsAria")}
+            onClick={onOpenOperations}
+          >
+            {t("workspace.openOperations")}
           </Button>
         )}
         {inspectorHidden && onShowInspector !== undefined && (

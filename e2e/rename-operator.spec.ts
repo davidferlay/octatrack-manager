@@ -188,10 +188,10 @@ test.describe("Rename operator workflow", () => {
     await expect(page.getByText("PROJECT_A")).toBeVisible({ timeout: 10000 });
     await page.getByRole("button", { name: uiText("ja", "sources.editMode") }).click();
     await expectEditEnabledInContextBar(page, "ja");
+    await page.getByRole("button", { name: uiText("ja", "operations.openClone") }).click();
     await page.getByRole("button", { name: "Create managed disposable clone" }).click({ timeout: 15000 });
-    await expect(
-      page.getByTestId("app-shell-sources").getByText("VERIFIED CLONE", { exact: true }),
-    ).toBeVisible();
+    await expect(page.getByText("VERIFIED CLONE", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: uiText("ja", "workspace.openOperationsAria") }).click();
     await page.getByRole("checkbox", {
       name: /approve continuing this exact operation/i,
     }).check();
@@ -311,6 +311,7 @@ test.describe("Rename operator workflow", () => {
     await page.reload();
     await chooseRoot(page);
     await expect(page.getByText("LIVE_SET/AUDIO/KICK_DEEP.wav")).toBeVisible({ timeout: 10000 });
+    await page.getByRole("button", { name: uiText("ja", "workspace.openOperationsAria") }).click();
     await expect(page.getByRole("button", { name: "Continue prepared rename" })).toBeVisible();
   });
 });

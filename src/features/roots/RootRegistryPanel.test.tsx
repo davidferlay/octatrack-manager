@@ -319,6 +319,7 @@ describe("RootRegistryPanel", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
+    fireEvent.click(await screen.findByRole("button", { name: tJa("workspace.openOperationsAria") }));
     expect(await screen.findByText("Rollback required")).toBeInTheDocument();
     const approvalLabel = "I approve rollback of this exact incomplete additive-copy operation.";
     await waitFor(() => {
@@ -380,6 +381,7 @@ describe("RootRegistryPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
     expect(await screen.findByText("PROJECT_A")).toBeInTheDocument();
     fireEvent.click(screen.getByText("KICK.wav"));
+    fireEvent.click(screen.getAllByRole("button", { name: tJa("operations.copyAction") })[0]);
     const closeRoot = screen.getByRole("button", { name: tJa("sources.closeRoot") });
     fireEvent.change(screen.getByLabelText("Destination relative path"), {
       target: { value: "LIVE_SET/PROJECT_A/KICK_COPY.wav" },
@@ -442,8 +444,8 @@ describe("RootRegistryPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
     expect(await screen.findByText("PROJECT_A")).toBeInTheDocument();
     fireEvent.click(screen.getByText("KICK.wav"));
-    expect(screen.getByRole("button", { name: tJa("inspector.renameAction") })).toBeInTheDocument();
-    expect(screen.getByText(/A prepared rename operation exists/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: tJa("inspector.renameAction") }).length).toBeGreaterThan(0);
+    expect(screen.getByText(tJa("operations.preparedHint"))).toBeInTheDocument();
     expect(renameClient.recoveryStatus).toHaveBeenCalled();
   });
 

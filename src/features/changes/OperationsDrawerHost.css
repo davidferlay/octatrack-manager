@@ -1,0 +1,37 @@
+.mo-operations-drawer-host {
+  /* Host keeps drawer panels mounted for session-scoped operator state. */
+}
+
+.mo-operations-drawer__target {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 1rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--mo-border);
+  border-radius: var(--mo-radius-md);
+  background: color-mix(in srgb, var(--mo-surface-1) 90%, var(--mo-canvas));
+}
+
+.mo-operations-drawer__target-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mo-text-muted);
+}
+
+.mo-operations-drawer__target code {
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+
+.mo-operations-drawer-panel .mo-clone-operator,
+.mo-operations-drawer-panel .mo-rename-operator,
+.mo-operations-drawer-panel .mo-change-drawer {
+  padding: 0;
+}
+
+.mo-operations-drawer__section--inactive {
+  display: none;
+}
