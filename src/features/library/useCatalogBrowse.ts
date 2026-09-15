@@ -62,6 +62,10 @@ export function useCatalogBrowse(
   const setSearch = options?.onSearchChange ?? setInternalSearch;
   const [sort, setSort] = useState<CatalogFileSort>("name");
   const [requestedPage, setRequestedPage] = useState(0);
+  useEffect(() => {
+    if (options?.externalSearch === undefined) return;
+    setRequestedPage(0);
+  }, [options?.externalSearch, search]);
   const fileQuery = useMemo(
     () => queryCatalogFiles({ files: locationFiles, search, sort, page: requestedPage }),
     [locationFiles, search, sort, requestedPage],

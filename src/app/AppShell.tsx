@@ -72,6 +72,14 @@ export function AppShell({
   const showInspector = inspector != null
   const mainHidden = narrow && showInspector && activeCenterView === 'inspector'
   const inspectorHidden = narrow && showInspector && activeCenterView === 'list'
+  const innerStackMode = narrow && showInspector
+    ? mainHidden
+      ? 'inspector-only'
+      : inspectorHidden
+        ? 'list-only'
+        : 'both'
+    : 'both'
+  const innerDividerHidden = innerStackMode !== 'both'
   useEffect(() => {
     if (!narrow && activeCenterView !== 'list') {
       onCenterViewChange?.('list')
@@ -87,7 +95,7 @@ export function AppShell({
       {contextBar != null && (
         <div className="mo-app-shell__context" data-testid="app-shell-context">
           {contextBar}
-          {narrow && narrowControls}
+          {narrowControls}
         </div>
       )}
       <SplitPane
@@ -112,7 +120,14 @@ export function AppShell({
         <SplitPane.Secondary>
           {showInspector ? (
             <SplitPane
-              className="mo-app-shell__body mo-app-shell__inner-split"
+              className={[
+                'mo-app-shell__body',
+                'mo-app-shell__inner-split',
+                innerStackMode === 'list-only' ? 'mo-app-shell__inner-split--list-only' : '',
+                innerStackMode === 'inspector-only'
+                  ? 'mo-app-shell__inner-split--inspector-only'
+                  : '',
+              ].filter(Boolean).join(' ')}
               primarySize={mainSize}
               defaultPrimarySize={defaultMainSize}
               onPrimarySizeChange={onMainSizeChange}
@@ -126,10 +141,16 @@ export function AppShell({
                 ].filter(Boolean).join(' ')}
                 hidden={mainHidden}
                 aria-hidden={mainHidden}
+                inert={mainHidden ? true : undefined}
               >
                 {main}
               </SplitPane.Primary>
-              <SplitPane.Divider resizeAriaLabel={t('workspace.splitResizeAria')} />
+              <SplitPane.Divider
+                className={innerDividerHidden ? 'mo-split-pane__divider--stack-hidden' : undefined}
+                resizeAriaLabel={t('workspace.splitResizeAria')}
+                aria-hidden={innerDividerHidden}
+                tabIndex={innerDividerHidden ? -1 : undefined}
+              />
               <SplitPane.Secondary
                 className={[
                   'mo-app-shell__inspector',
@@ -137,6 +158,7 @@ export function AppShell({
                 ].filter(Boolean).join(' ')}
                 hidden={inspectorHidden}
                 aria-hidden={inspectorHidden}
+                inert={inspectorHidden ? true : undefined}
               >
                 {inspector}
               </SplitPane.Secondary>

@@ -55,12 +55,11 @@ export function defaultLibraryPreviewEndFrame(
   return (total < limit ? total : limit).toString();
 }
 
-export function validateFrameRange(
+/** Half-open PCM range within the file. Does not apply Library preview limits. */
+export function validateGeometryFrameRange(
   startFrame: string,
   endFrameExclusive: string,
   fileFrameCount: string,
-  sampleRate: number,
-  channels: number,
 ): void {
   const start = frame(startFrame);
   const end = frame(endFrameExclusive);
@@ -71,6 +70,18 @@ export function validateFrameRange(
   if (end > total) {
     throw new Error("Range extends beyond the file length.");
   }
+}
+
+export function validateFrameRange(
+  startFrame: string,
+  endFrameExclusive: string,
+  fileFrameCount: string,
+  sampleRate: number,
+  channels: number,
+): void {
+  validateGeometryFrameRange(startFrame, endFrameExclusive, fileFrameCount);
+  const start = frame(startFrame);
+  const end = frame(endFrameExclusive);
   if (end - start > maxLibraryPreviewFrames(sampleRate, channels)) {
     throw new Error("Range exceeds the 60 second or 32 MiB preview limit.");
   }

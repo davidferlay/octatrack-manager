@@ -721,7 +721,7 @@ fn build_job(
         .or_else(|| saved.as_ref().map(|d| d.region))
         .unwrap_or(full);
     if saved.as_ref().is_some_and(|d| d.region != region) {
-        return Err(invalid("existing draft uses a different analysis region"));
+        return Err(region_mismatch());
     }
     let pcm = snapshot
         .analysis_region(region, &job.cancelled)
@@ -790,6 +790,13 @@ fn parse_frame(value: &str) -> Result<PcmFrame, ApiError> {
 }
 fn invalid(message: &str) -> ApiError {
     ApiError::new("INVALID_SLICE_REQUEST", message, true)
+}
+fn region_mismatch() -> ApiError {
+    ApiError::new(
+        "ANALYSIS_REGION_MISMATCH",
+        "existing draft uses a different analysis region",
+        true,
+    )
 }
 fn internal() -> ApiError {
     ApiError::new("INTERNAL_ERROR", "slice operation could not complete", true)
@@ -920,6 +927,16 @@ mod tests {
             silence_floor_db: -72,
             snap_radius_us: 0,
         }
+    }
+
+    #[test]
+    fn region_mismatch_uses_structured_error_code() {
+        let err = region_mismatch();
+        let payload = serde_json::to_value(&err).expect("serialize ApiError for IPC contract");
+        assert_eq!(
+            payload.get("code").and_then(|value| value.as_str()),
+            Some("ANALYSIS_REGION_MISMATCH"),
+        );
     }
 
     #[test]

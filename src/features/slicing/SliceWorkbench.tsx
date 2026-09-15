@@ -4,26 +4,41 @@ import {
   type SliceDraft, type SliceEdit, type SliceJob, type SliceMarker,
   type SliceProposal, type SliceRange, type SliceWaveform,
 } from "../../api/slices";
+import { useTranslate } from "../../i18n";
+import type { LibraryCommittedGeometryRange } from "../waveform/WaveformPreview";
 import { frame, frameAt, inRange, position, previewChannels } from "./frames";
+import { SliceErrorAlert } from "./SliceErrorAlert";
+import { normalizeSliceError, type SliceErrorState } from "./sliceErrors";
 import "./SliceWorkbench.css";
 
-interface Props { rootId: string; fileInstanceId: string; displayName: string; api?: SliceApi }
+interface Props {
+  rootId: string;
+  fileInstanceId: string;
+  displayName: string;
+  api?: SliceApi;
+  librarySelectionRange?: LibraryCommittedGeometryRange | null;
+  onRequestStopLibraryPlayback?: () => void;
+}
 const WIDTH = 640;
 const PAGE = 50;
-function message(error: unknown): string {
-  return typeof error === "object" && error !== null && "message" in error
-    ? String(error.message) : "Slice operation could not complete. Try analyzing again.";
-}
 
 // A new file/root unmounts the session, cancelling every pending response and sound.
 export function SliceWorkbench(props: Props) {
   return <SliceSession key={`${props.rootId}:${props.fileInstanceId}`} {...props} />;
 }
 
-function SliceSession({ rootId, fileInstanceId, displayName, api = sliceApi }: Props) {
+function SliceSession({
+  rootId,
+  fileInstanceId,
+  displayName,
+  api = sliceApi,
+  librarySelectionRange = null,
+  onRequestStopLibraryPlayback,
+}: Props) {
+  const t = useTranslate();
   const [job, setJob] = useState<SliceJob | null>(null);
   const [starting, setStarting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<SliceErrorState | null>(null);
   const [parameters, setParameters] = useState(defaultOnsetParameters);
   const [draft, setDraft] = useState<SliceDraft | null>(null);
   const [proposal, setProposal] = useState<SliceProposal | null>(null);
@@ -66,18 +81,12 @@ function SliceSession({ rootId, fileInstanceId, displayName, api = sliceApi }: P
     };
   }, [api, rootId]);
 
-  async function analyze() {
+  async function startAnalysis(region?: SliceRange) {
     if (starting) return;
     setError(null);
-    let region: SliceRange | undefined;
-    try {
-      if (regionStart || regionEnd) {
-        if (frame(regionStart) >= frame(regionEnd)) throw new Error("Region end must follow its start.");
-        region = { startFrame: regionStart, endExclusive: regionEnd };
-      }
-    } catch (e) { setError(message(e)); return; }
     const epoch = ++generation.current;
     stop();
+    onRequestStopLibraryPlayback?.();
     setStarting(true);
     setJob(null); setDraft(null); setProposal(null); setView(null); setWaveform(null); setSelected(null); setPage(0);
     try {
@@ -88,8 +97,45 @@ function SliceSession({ rootId, fileInstanceId, displayName, api = sliceApi }: P
       }
       jobId.current = next.jobId;
       setJob(next);
-    } catch (e) { if (alive.current && epoch === generation.current) setError(message(e)); }
-    finally { if (alive.current && epoch === generation.current) setStarting(false); }
+    } catch (e) {
+      if (alive.current && epoch === generation.current) setError(normalizeSliceError(e));
+    } finally {
+      if (alive.current && epoch === generation.current) setStarting(false);
+    }
+  }
+
+  async function analyze() {
+    if (starting) return;
+    setError(null);
+    let region: SliceRange | undefined;
+    try {
+      if (regionStart || regionEnd) {
+        if (frame(regionStart) >= frame(regionEnd)) throw new Error("Region end must follow its start.");
+        region = { startFrame: regionStart, endExclusive: regionEnd };
+      }
+    } catch (e) {
+      setError(normalizeSliceError(e));
+      return;
+    }
+    await startAnalysis(region);
+  }
+
+  async function analyzeSelectedLibraryRange() {
+    if (starting || librarySelectionRange === null) return;
+    setError(null);
+    let region: SliceRange;
+    try {
+      frame(librarySelectionRange.startFrame);
+      frame(librarySelectionRange.endFrameExclusive);
+      region = {
+        startFrame: librarySelectionRange.startFrame,
+        endExclusive: librarySelectionRange.endFrameExclusive,
+      };
+    } catch (e) {
+      setError(normalizeSliceError(e));
+      return;
+    }
+    await startAnalysis(region);
   }
   async function cancel() {
     generation.current++;
@@ -99,7 +145,7 @@ function SliceSession({ rootId, fileInstanceId, displayName, api = sliceApi }: P
     setJob(null); setDraft(null); setProposal(null); setView(null); setStarting(false);
     if (id) {
       try { await api.cancel(rootId, id); }
-      catch (e) { if (alive.current) setError(message(e)); }
+      catch (e) { if (alive.current) setError(normalizeSliceError(e)); }
     }
   }
 
@@ -109,7 +155,11 @@ function SliceSession({ rootId, fileInstanceId, displayName, api = sliceApi }: P
     const timer = window.setTimeout(() => {
       api.status(rootId, job.jobId).then(
         next => { if (active) setJob(next); },
-        e => { if (active) { setError(message(e)); setJob({ ...job, phase: "failed" }); } },
+        e => {
+          if (!active) return;
+          setError(normalizeSliceError(e));
+          setJob({ ...job, phase: "failed" });
+        },
       );
     }, 300);
     return () => { active = false; window.clearTimeout(timer); };
@@ -120,7 +170,7 @@ function SliceSession({ rootId, fileInstanceId, displayName, api = sliceApi }: P
     let active = true;
     api.draft(rootId, readyId).then(next => {
       if (active) { setDraft(next); setView(next.region); setInsertFrame(next.region.startFrame); }
-    }, e => { if (active) setError(message(e)); });
+    }, e => { if (active) setError(normalizeSliceError(e)); });
     return () => { active = false; };
   }, [api, readyId, rootId]);
 
@@ -131,7 +181,7 @@ function SliceSession({ rootId, fileInstanceId, displayName, api = sliceApi }: P
     const timer = window.setTimeout(() => {
       api.propose(rootId, readyId, draft.revision, parameters).then(
         next => { if (active) { setProposal(next); setProposing(false); } },
-        e => { if (active) { setError(message(e)); setProposing(false); } },
+        e => { if (active) { setError(normalizeSliceError(e)); setProposing(false); } },
       );
     }, 180);
     return () => { active = false; window.clearTimeout(timer); };
@@ -143,7 +193,7 @@ function SliceSession({ rootId, fileInstanceId, displayName, api = sliceApi }: P
     setWaveform(null);
     api.waveform(rootId, readyId, view, WIDTH).then(
       next => { if (active) setWaveform(next); },
-      e => { if (active) setError(message(e)); },
+      e => { if (active) setError(normalizeSliceError(e)); },
     );
     return () => { active = false; };
   }, [api, readyId, rootId, view]);
@@ -160,7 +210,7 @@ function SliceSession({ rootId, fileInstanceId, displayName, api = sliceApi }: P
       }
     } catch (e) {
       if (alive.current && epoch === generation.current) {
-        setError(message(e));
+        setError(normalizeSliceError(e));
         // A conflict always reloads authoritative data; never retry the mutation.
         if (typeof e === "object" && e !== null && "code" in e && e.code === "DRAFT_CONFLICT") {
           try {
@@ -193,7 +243,9 @@ function SliceSession({ rootId, fileInstanceId, displayName, api = sliceApi }: P
       sound.current = source;
       source.start(context.current.currentTime, 0, buffer.duration);
       setPlaying(true);
-    } catch (e) { if (alive.current && epoch === playGeneration.current) setError(message(e)); }
+    } catch (e) {
+      if (alive.current && epoch === playGeneration.current) setError(normalizeSliceError(e));
+    }
     finally { if (alive.current && epoch === playGeneration.current) setPreviewing(false); }
   }
   function changeParameter(key: keyof OnsetParameters, value: number) {
@@ -231,31 +283,61 @@ function SliceSession({ rootId, fileInstanceId, displayName, api = sliceApi }: P
   const busy = starting || job?.phase === "reading" || job?.phase === "analyzing";
   const selectedMarker = draft?.markers.find(m => m.markerId === selected);
   const warnings = proposal?.candidates.filter(c => c.warnings.length > 0) ?? [];
+  const analysisRegion = job?.region ?? draft?.region ?? null;
+  const displayedError =
+    error
+    ?? (job?.error ? normalizeSliceError(job.error) : null);
 
-  return <section className="slice-workbench" aria-label={`Auto slice ${displayName}`}>
-    <div className="slice-heading"><h4>Attack slicing</h4><span>Local draft</span></div>
-    <p>Detect attacks, review boundaries, then apply candidates to your draft.</p>
-    <details><summary>Analysis region and supported audio</summary>
-      <p>16/24-bit PCM WAV or AIFF · mono/stereo · 44.1/48 kHz · source ≤64 MiB · region ≤10 min.</p>
-      <p>Leave both fields empty to use the saved region or the full file. Coordinates are source PCM frames; the end is exclusive.</p>
+  return <section className="slice-workbench" aria-label={t("slicing.ariaFor", { displayName })}>
+    <div className="slice-heading"><h4>{t("slicing.heading")}</h4><span>{t("slicing.localDraft")}</span></div>
+    <p>{t("slicing.intro")}</p>
+    <details><summary>{t("slicing.regionDetails")}</summary>
+      <p>{t("slicing.supportedFormats")}</p>
+      <p>{t("slicing.regionHelp")}</p>
       <div className="slice-fields">
-        <label>Region start<input value={regionStart} onChange={e => setRegionStart(e.target.value)} inputMode="numeric" disabled={busy} /></label>
-        <label>Region end<input value={regionEnd} onChange={e => setRegionEnd(e.target.value)} inputMode="numeric" disabled={busy} /></label>
+        <label>{t("slicing.regionStart")}<input value={regionStart} onChange={e => setRegionStart(e.target.value)} inputMode="numeric" disabled={busy} /></label>
+        <label>{t("slicing.regionEnd")}<input value={regionEnd} onChange={e => setRegionEnd(e.target.value)} inputMode="numeric" disabled={busy} /></label>
       </div>
     </details>
     <div className="slice-actions">
-      <button disabled={busy || editing} onClick={() => void analyze()}>{busy ? "Analyzing…" : readyId ? "Analyze again" : "Detect attacks"}</button>
-      {(busy || readyId) && <button disabled={editing} onClick={() => void cancel()}>{busy ? "Cancel analysis" : "Close analysis"}</button>}
+      <button
+        type="button"
+        disabled={busy || editing || librarySelectionRange === null}
+        onClick={() => void analyzeSelectedLibraryRange()}
+      >
+        {t("slicing.analyzeSelectedRange")}
+      </button>
+      <button disabled={busy || editing} onClick={() => void analyze()}>
+        {busy ? t("slicing.analyzing") : readyId ? t("slicing.analyzeAgain") : t("slicing.detectAttacks")}
+      </button>
+      {(busy || readyId) && (
+        <button disabled={editing} onClick={() => void cancel()}>
+          {busy ? t("slicing.cancelAnalysis") : t("slicing.closeAnalysis")}
+        </button>
+      )}
     </div>
-    {busy && <p role="status">{job?.phase === "analyzing" ? "Detecting attacks…" : "Reading and validating source PCM…"}</p>}
-    {(error || job?.error) && <p role="alert" className="slice-error">{error ?? job?.error?.message}</p>}
+    {busy && (
+      <p role="status">
+        {job?.phase === "analyzing" ? t("slicing.detectingAttacks") : t("slicing.readingSource")}
+      </p>
+    )}
+    {analysisRegion !== null && (
+      <p className="slice-coordinate" role="status" aria-label={t("slicing.analysisRegionHeading")}>
+        {t("slicing.analysisRegionHeading")}:{" "}
+        {t("slicing.analysisRegionFrames", {
+          start: analysisRegion.startFrame,
+          end: analysisRegion.endExclusive,
+        })}
+      </p>
+    )}
+    <SliceErrorAlert error={displayedError} t={t} />
     {readyId && draft && <>
-      <fieldset disabled={editing} className="slice-fields"><legend>Detection</legend>
-        <label>Sensitivity {parameters.sensitivity}<input type="range" min="0" max="100" value={parameters.sensitivity} onChange={e => changeParameter("sensitivity", Number(e.target.value))} /></label>
-        <label>Minimum interval (ms)<input type="number" min="10" max="250" value={parameters.minimumIntervalMs} onChange={e => changeParameter("minimumIntervalMs", Number(e.target.value))} /></label>
-        <label>Pre-roll (ms)<input type="number" min="0" max="10" step="0.1" value={parameters.preRollUs / 1000} onChange={e => changeParameter("preRollUs", Math.round(Number(e.target.value) * 1000))} /></label>
-        <label>Silence floor (dB)<input type="number" min="-90" max="-40" value={parameters.silenceFloorDb} onChange={e => changeParameter("silenceFloorDb", Number(e.target.value))} /></label>
-        <label>Quiet-point snap (ms)<input type="number" min="0" max="2" step="0.1" value={parameters.snapRadiusUs / 1000} onChange={e => changeParameter("snapRadiusUs", Math.round(Number(e.target.value) * 1000))} /></label>
+      <fieldset disabled={editing} className="slice-fields"><legend>{t("slicing.detectionLegend")}</legend>
+        <label>{t("slicing.sensitivity")} {parameters.sensitivity}<input type="range" min="0" max="100" value={parameters.sensitivity} onChange={e => changeParameter("sensitivity", Number(e.target.value))} /></label>
+        <label>{t("slicing.minimumIntervalMs")}<input type="number" min="10" max="250" value={parameters.minimumIntervalMs} onChange={e => changeParameter("minimumIntervalMs", Number(e.target.value))} /></label>
+        <label>{t("slicing.preRollMs")}<input type="number" min="0" max="10" step="0.1" value={parameters.preRollUs / 1000} onChange={e => changeParameter("preRollUs", Math.round(Number(e.target.value) * 1000))} /></label>
+        <label>{t("slicing.silenceFloorDb")}<input type="number" min="-90" max="-40" value={parameters.silenceFloorDb} onChange={e => changeParameter("silenceFloorDb", Number(e.target.value))} /></label>
+        <label>{t("slicing.snapRadiusMs")}<input type="number" min="0" max="2" step="0.1" value={parameters.snapRadiusUs / 1000} onChange={e => changeParameter("snapRadiusUs", Math.round(Number(e.target.value) * 1000))} /></label>
       </fieldset>
       {view && <>
         <div className="slice-actions"><button onClick={() => zoom(true)}>Zoom in</button><button onClick={() => zoom(false)}>Zoom out</button><button aria-label="Pan earlier" onClick={() => pan(-1n)}>←</button><button aria-label="Pan later" onClick={() => pan(1n)}>→</button><button onClick={() => setView(draft.region)}>Full region</button></div>
@@ -302,24 +384,36 @@ function SliceSession({ rootId, fileInstanceId, displayName, api = sliceApi }: P
         <div className="slice-actions"><button disabled={editing} onClick={() => void play(view)}>Play visible region</button><button disabled={!selectedMarker || editing} onClick={() => { if (selectedMarker) void play(selectedMarker); }}>Play selected slice</button><button onClick={stop} disabled={!playing && !previewing}>Stop</button></div>
         <p className="slice-hint">Preview supports up to 30 seconds per region. Zoom in for longer slices.</p>
       </>}
-      <p role="status">{proposing ? "Updating candidates…" : proposal ? `${proposal.candidateCount} candidates · ${proposal.suppressedCount} suppressed` : "Candidates unavailable"}</p>
-      {proposal?.candidateCount === 0 && <p>No attacks found at these settings. Manual boundaries can still be inserted.</p>}
-      {proposal?.exceedsDraftLimit && <p role="alert">More than 4096 candidates. Only the first 4096 are displayed; applying is blocked. Reduce sensitivity or narrow the region.</p>}
+      <p role="status">
+        {proposing
+          ? t("slicing.updatingCandidates")
+          : proposal
+            ? t("slicing.candidatesSummary", {
+              count: proposal.candidateCount,
+              suppressed: proposal.suppressedCount,
+            })
+            : t("slicing.candidatesUnavailable")}
+      </p>
+      {proposal?.candidateCount === 0 && <p>{t("slicing.noAttacksFound")}</p>}
+      {proposal?.exceedsDraftLimit && <p role="alert">{t("slicing.exceedsDraftLimit")}</p>}
       {warnings.length > 0 && <details><summary>{warnings.length} candidate boundaries need review</summary><ul>{warnings.slice(0, PAGE).map(c => <li key={c.candidateId}>Frame {c.suggestedStartFrame}: {c.warnings.map(w => w === "LEFT_EDGE_TRUNCATED" ? "sound already active at file start" : w === "PRE_ROLL_CLIPPED" ? "pre-roll clipped by region" : "uncertain attack position").join(", ")}</li>)}</ul>{warnings.length > PAGE && <p>Showing the first {PAGE} warnings. Zoom into candidates to inspect their positions.</p>}</details>}
       <div className="slice-actions">
-        <button disabled={editing || proposing || !proposal || proposal.exceedsDraftLimit} onClick={() => { if (proposal) void edit({ kind: "acceptProposal", proposalId: proposal.proposalId }); }}>Apply candidates to draft</button>
+        <button disabled={editing || proposing || !proposal || proposal.exceedsDraftLimit} onClick={() => { if (proposal) void edit({ kind: "acceptProposal", proposalId: proposal.proposalId }); }}>{t("slicing.applyCandidates")}</button>
         <button disabled={editing || !draft.canUndo} onClick={() => void edit({ kind: "undo" })}>Undo</button><button disabled={editing || !draft.canRedo} onClick={() => void edit({ kind: "redo" })}>Redo</button>
       </div>
-      <p>{draft.markers.length} draft slices · revision {draft.revision}. Hand edits and fixed boundaries survive re-analysis; unlocking permits replacement. Undo history lasts for this analysis session.</p>
-      {draft.markers.length > 64 && <p className="slice-notice">This draft exceeds Octatrack’s 64-slice output limit.</p>}
-      <form className="slice-actions" onSubmit={e => { e.preventDefault(); try { frame(insertFrame); void edit({ kind: "insert", frame: insertFrame }); } catch (err) { setError(message(err)); } }}>
+      <p>{t("slicing.draftSummary", { count: draft.markers.length, revision: draft.revision })}</p>
+      {draft.markers.length > 64 && <p className="slice-notice">{t("slicing.exceedsOtLimit")}</p>}
+      <form className="slice-actions" onSubmit={e => { e.preventDefault(); try { frame(insertFrame); void edit({ kind: "insert", frame: insertFrame }); } catch (err) { setError(normalizeSliceError(err)); } }}>
         <label>Insert at frame<input aria-label="Insert at frame" inputMode="numeric" value={insertFrame} onChange={e => setInsertFrame(e.target.value)} disabled={editing} /></label><button disabled={editing}>Insert boundary</button>
       </form>
       <div className="slice-table"><table><thead><tr><th>Start frame</th><th>End (exclusive)</th><th>Fixed</th><th>Actions</th></tr></thead><tbody>
         {draft.markers.slice(page * PAGE, (page + 1) * PAGE).map(m => <MarkerRow key={`${m.markerId}:${m.startFrame}`} marker={m} disabled={editing} selected={selected === m.markerId} onSelect={() => setSelected(m.markerId)} edit={edit} />)}
       </tbody></table></div>
       {draft.markers.length > PAGE && <div className="slice-actions"><button disabled={page === 0} onClick={() => setPage(p => p - 1)}>Previous boundaries</button><span>Page {page + 1} / {Math.ceil(draft.markers.length / PAGE)}</span><button disabled={(page + 1) * PAGE >= draft.markers.length} onClick={() => setPage(p => p + 1)}>Next boundaries</button></div>}
-      <p className="slice-notice">Draft edits are saved in Masta-Octa. Octatrack .ot export is not available yet.{job?.sampleRate === 48000 ? " Octatrack output will require a separate 44.1 kHz asset and re-analysis." : ""}</p>
+      <p className="slice-notice">
+        {t("slicing.exportNotice")}
+        {job?.sampleRate === 48000 ? t("slicing.reanalyze48000") : ""}
+      </p>
     </>}
   </section>;
 }

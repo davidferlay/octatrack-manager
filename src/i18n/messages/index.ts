@@ -30,6 +30,12 @@ export type MessageParams = {
   'common.errorWithDetail': { summary: string; detail: string }
   'waveform.error.detail': { detail: string }
   'waveform.viewportFrames': { start: string; end: string }
+  'slicing.ariaFor': { displayName: string }
+  'slicing.analysisRegionFrames': { start: string; end: string }
+  'slicing.candidatesSummary': { count: number; suppressed: number }
+  'slicing.reviewBoundaries': { count: number }
+  'slicing.draftSummary': { count: number; revision: number }
+  'slicing.error.genericDetail': { detail: string }
 }
 
 export type MessageKeyWithParams = keyof MessageParams

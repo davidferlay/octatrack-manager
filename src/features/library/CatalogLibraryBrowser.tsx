@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type {
   AudioApi,
   LibrarySnapshot,
@@ -9,7 +9,10 @@ import { useTranslate } from "../../i18n";
 import { ManualAssetMetadataEditor } from "../metadata/ManualAssetMetadataEditor";
 import { ProjectWorkspace } from "../project-workspace";
 import { UsageGraphPanel } from "../usage";
-import { WaveformPreview } from "../waveform/WaveformPreview";
+import {
+  WaveformPreview,
+  type LibraryCommittedGeometryRange,
+} from "../waveform/WaveformPreview";
 import { SliceWorkbench } from "../slicing/SliceWorkbench";
 import { AudioLibrary } from "./AudioLibrary";
 import { CatalogFileList } from "./CatalogFileList";
@@ -61,6 +64,18 @@ export function CatalogLibraryBrowser({
   const t = useTranslate();
   const browse = useCatalogBrowse(snapshot, { onBrowseContextChange });
   const shellInspector = inspectorPlacement === "shell";
+  const [libraryGeometryRange, setLibraryGeometryRange] =
+    useState<LibraryCommittedGeometryRange | null>(null);
+  const [stopLibraryPlaybackToken, setStopLibraryPlaybackToken] = useState(0);
+  const handleLibraryGeometryRange = useCallback(
+    (range: LibraryCommittedGeometryRange | null) => {
+      setLibraryGeometryRange(range);
+    },
+    [],
+  );
+  const requestStopLibraryPlayback = useCallback(() => {
+    setStopLibraryPlaybackToken((token) => token + 1);
+  }, []);
 
   useEffect(() => {
     if (!onSelectedAssetChange) return;
@@ -117,11 +132,15 @@ export function CatalogLibraryBrowser({
                 rootId={rootId}
                 assetId={browse.selectedFile.assetId}
                 displayName={browse.selectedFile.displayName}
+                onCommittedGeometryRangeChange={handleLibraryGeometryRange}
+                stopPlaybackToken={stopLibraryPlaybackToken}
               />
               <SliceWorkbench
                 rootId={rootId}
                 fileInstanceId={browse.selectedFile.fileInstanceId}
                 displayName={browse.selectedFile.displayName}
+                librarySelectionRange={libraryGeometryRange}
+                onRequestStopLibraryPlayback={requestStopLibraryPlayback}
               />
               <UsageGraphPanel
                 relativePath={browse.selectedFile.relativePath}

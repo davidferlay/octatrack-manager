@@ -18,6 +18,7 @@ AS-0〜AS-4のローカル編集機能を接続した。Libraryの音声Inspecto
 | `ot-storage-ports::slice_drafts` / `ot-catalog::slice_drafts` | root fingerprint・相対パス・source hashに束縛した独立テーブル。revision CASと全行transaction、schema v7 migration |
 | `slice_workbench` / `v2_api` | RootRegistryとfileInstanceId認可、安全なdescriptor open、解析ジョブ、window/root/job束縛、期限付き一回限りの区間PCM token、Undo/Redo |
 | `src/features/slicing` / `src/api/slices.ts` | 明示解析と候補反映、設定変更、波形拡大・移動、frame単位の境界編集、固定、削除、Web Audio区間試聴 |
+| MO-M7-RANGE-TO-SLICE-ANALYSIS-1 | Library 波形の確定幾何範囲 → **Analyze selected range** → 既存 `v2_audio_onsets_start`。異なる ROI の既存 draft は `ANALYSIS_REGION_MISMATCH` |
 
 元フレーム0を基準にhop=128、low FFT=2048、mid/high FFT=1024とする。
 ROI外の実PCMを前後500ms取得し、人工的なROI境界を無音で埋めない。

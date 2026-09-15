@@ -193,6 +193,64 @@ export const enMessages = {
   'workspace.toggleNav': 'Toggle catalog navigation',
   'workspace.splitResizeAria': 'Resize panes',
   'workspace.trailSeparator': '›',
+
+  'slicing.ariaFor': 'Auto slice {displayName}',
+  'slicing.heading': 'Attack slicing',
+  'slicing.localDraft': 'Local draft',
+  'slicing.intro':
+    'Detect attacks, review boundaries, then apply candidates to your draft.',
+  'slicing.regionDetails': 'Analysis region and supported audio',
+  'slicing.supportedFormats':
+    '16/24-bit PCM WAV or AIFF · mono/stereo · 44.1/48 kHz · source ≤64 MiB · region ≤10 min.',
+  'slicing.regionHelp':
+    'Leave both fields empty to use the saved region or the full file. Coordinates are source PCM frames; the end is exclusive.',
+  'slicing.regionStart': 'Region start',
+  'slicing.regionEnd': 'Region end',
+  'slicing.analyzeSelectedRange': 'Analyze selected range',
+  'slicing.detectAttacks': 'Detect attacks',
+  'slicing.analyzeAgain': 'Analyze again',
+  'slicing.analyzing': 'Analyzing…',
+  'slicing.cancelAnalysis': 'Cancel analysis',
+  'slicing.closeAnalysis': 'Close analysis',
+  'slicing.readingSource': 'Reading and validating source PCM…',
+  'slicing.detectingAttacks': 'Detecting attacks…',
+  'slicing.analysisRegionHeading': 'Analysis region used for this job',
+  'slicing.analysisRegionFrames': 'Frames [{start}, {end})',
+  'slicing.detectionLegend': 'Detection',
+  'slicing.sensitivity': 'Sensitivity',
+  'slicing.minimumIntervalMs': 'Minimum interval (ms)',
+  'slicing.preRollMs': 'Pre-roll (ms)',
+  'slicing.silenceFloorDb': 'Silence floor (dB)',
+  'slicing.snapRadiusMs': 'Quiet-point snap (ms)',
+  'slicing.applyCandidates': 'Apply candidates to draft',
+  'slicing.updatingCandidates': 'Updating candidates…',
+  'slicing.candidatesUnavailable': 'Candidates unavailable',
+  'slicing.candidatesSummary': '{count} candidates · {suppressed} suppressed',
+  'slicing.noAttacksFound':
+    'No attacks found at these settings. Manual boundaries can still be inserted.',
+  'slicing.exceedsDraftLimit':
+    'More than 4096 candidates. Only the first 4096 are displayed; applying is blocked. Reduce sensitivity or narrow the region.',
+  'slicing.reviewBoundaries': '{count} candidate boundaries need review',
+  'slicing.draftSummary':
+    '{count} draft slices · revision {revision}. Hand edits and fixed boundaries survive re-analysis; unlocking permits replacement. Undo history lasts for this analysis session.',
+  'slicing.exceedsOtLimit': "This draft exceeds Octatrack's 64-slice output limit.",
+  'slicing.exportNotice':
+    'Draft edits are saved in Masta-Octa. Octatrack .ot export is not available yet.',
+  'slicing.reanalyze48000':
+    ' Octatrack output will require a separate 44.1 kHz asset and re-analysis.',
+  'slicing.error.generic': 'Slice operation could not complete.',
+  'slicing.error.genericDetail': 'Slice operation could not complete. {detail}',
+  'slicing.error.ANALYSIS_REGION_MISMATCH':
+    'This file already has a draft for a different analysis region. Change or branch drafts is not available yet.',
+  'slicing.error.ANALYSIS_BUSY': 'Another analysis is already running.',
+  'slicing.error.ANALYSIS_CANCELLED': 'Analysis was cancelled.',
+  'slicing.error.ANALYSIS_NOT_FOUND': 'Analysis is no longer available.',
+  'slicing.error.DRAFT_CONFLICT': 'The draft changed; reload it before editing.',
+  'slicing.error.SOURCE_CHANGED': 'Source changed; rescan and analyze again.',
+  'slicing.error.AUDIO_LIMIT_EXCEEDED':
+    'Source exceeds the current snapshot or analysis size limit.',
+  'slicing.error.INVALID_SLICE_REQUEST': 'The analysis request was invalid.',
+  'slicing.error.REQUEST_SUPERSEDED': 'A newer request replaced this one.',
 } as const
 
 export type MessageKey = keyof typeof enMessages

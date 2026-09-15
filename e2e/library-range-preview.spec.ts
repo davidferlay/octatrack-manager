@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { uiText } from "./i18n";
+import { showInspectorFromContextBar } from "./narrowWorkspace";
 import { LOCALE_STORAGE_KEY } from "../src/i18n/registry";
 
 function installLibraryMocks(page: import("@playwright/test").Page) {
@@ -86,12 +87,16 @@ async function installLocale(page: import("@playwright/test").Page, locale: "ja"
 async function exerciseRangePreview(
   page: import("@playwright/test").Page,
   locale: "ja" | "en",
+  options?: { narrow?: boolean },
 ) {
   await installLocale(page, locale);
   await installLibraryMocks(page);
   await page.goto("/");
   await page.getByRole("button", { name: uiText(locale, "sources.chooseRoot") }).click();
   await page.getByRole("button", { name: /LOOP\.wav/ }).click();
+  if (options?.narrow) {
+    await showInspectorFromContextBar(page, locale);
+  }
   await expect(page.getByRole("img", { name: uiText(locale, "waveform.plotAria") })).toBeVisible();
   await page.getByLabel(uiText(locale, "waveform.startFrame")).fill("1000");
   await page.getByLabel(uiText(locale, "waveform.endFrame")).fill("2000");
@@ -118,6 +123,6 @@ for (const locale of ["ja", "en"] as const) {
 
   test(`[${locale}] keeps selection and calls range preview IPC at 840px`, async ({ page }) => {
     await page.setViewportSize({ width: 840, height: 900 });
-    await exerciseRangePreview(page, locale);
+    await exerciseRangePreview(page, locale, { narrow: true });
   });
 }

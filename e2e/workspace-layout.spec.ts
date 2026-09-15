@@ -1,5 +1,15 @@
 import { test, expect } from "@playwright/test";
 import { uiText } from "./i18n";
+import { LOCALE_STORAGE_KEY } from "../src/i18n/registry";
+
+async function installJaLocale(page: import("@playwright/test").Page) {
+  await page.addInitScript(
+    ([storageKey, localeId]) => {
+      localStorage.setItem(storageKey, localeId);
+    },
+    [LOCALE_STORAGE_KEY, "ja"] as const,
+  );
+}
 
 async function chooseRoot(page: import("@playwright/test").Page) {
   const chooseRootButton = page.getByRole("button", { name: uiText("ja", "sources.chooseRoot") });
@@ -10,6 +20,7 @@ async function chooseRoot(page: import("@playwright/test").Page) {
 test.describe("Workspace layout (synthetic IPC)", () => {
   test("connects catalog nav to sample list and inspector at 1280px", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
+    await installJaLocale(page);
     await page.addInitScript(() => {
       (window as Window & { __E2E_ROOT_PATH__?: string }).__E2E_ROOT_PATH__ = "/tmp/fixture-root";
       (window as any).__TAURI_INTERNALS__ = {
@@ -69,20 +80,21 @@ test.describe("Workspace layout (synthetic IPC)", () => {
           if (cmd === "v2_asset_metadata_get") {
             return { tags: [], note: "" };
           }
-          return {};
+          throw new Error(`Unexpected IPC in workspace-layout fixture: ${cmd}`);
         },
       };
     });
 
     await page.goto("/");
     await chooseRoot(page);
-    await expect(page.getByText("KICK.wav")).toBeVisible();
-    await page.getByRole("button", { name: "KICK.wav" }).click();
-    await expect(page.getByLabelText(uiText("ja", "inspector.aria"))).toContainText("KICK.wav");
+    await expect(page.getByRole("button", { name: /KICK\.wav/ })).toBeVisible();
+    await page.getByRole("button", { name: /KICK\.wav/ }).click();
+    await expect(page.getByLabel(uiText("ja", "inspector.aria"))).toContainText("KICK.wav");
   });
 
   test("exposes narrow layout toggles at 840px", async ({ page }) => {
     await page.setViewportSize({ width: 840, height: 900 });
+    await installJaLocale(page);
     await page.addInitScript(() => {
       (window as Window & { __E2E_ROOT_PATH__?: string }).__E2E_ROOT_PATH__ = "/tmp/fixture-root";
       (window as any).__TAURI_INTERNALS__ = {
@@ -106,14 +118,20 @@ test.describe("Workspace layout (synthetic IPC)", () => {
             return { schema: cmd, recoveryRequired: false, operations: [] };
           }
           if (cmd === "v2_clone_verification_status") return null;
-          return {};
+          throw new Error(`Unexpected IPC in workspace-layout narrow fixture: ${cmd}`);
         },
       };
     });
 
     await page.goto("/");
     await chooseRoot(page);
-    await expect(page.getByRole("button", { name: uiText("ja", "workspace.toggleNav") })).toBeVisible();
-    await expect(page.getByRole("button", { name: uiText("ja", "workspace.showInspector") })).toBeVisible();
+    await page.waitForFunction(() => window.matchMedia("(max-width: 840px)").matches);
+    const contextBar = page.getByTestId("app-shell-context");
+    await expect(contextBar.getByRole("button", { name: uiText("ja", "workspace.toggleNav") })).toBeVisible({
+      timeout: 15000,
+    });
+    await expect(contextBar.getByRole("button", { name: uiText("ja", "workspace.showInspector") })).toBeVisible({
+      timeout: 15000,
+    });
   });
 });

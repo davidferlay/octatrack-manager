@@ -55,11 +55,11 @@ test("read-only library supports attack review, boundary editing and undo", asyn
   await page.goto("/");
   await page.getByRole("button", { name: uiText("ja", "sources.chooseRoot") }).click();
   await page.getByRole("button", { name: /LOOP\.wav/ }).click();
-  const editor = page.getByRole("region", { name: "Auto slice LOOP.wav" });
-  await editor.getByRole("button", { name: "Detect attacks" }).click();
-  await expect(editor.getByRole("button", { name: "Apply candidates to draft" })).toBeEnabled();
+  const editor = page.getByRole("region", { name: uiText("ja", "slicing.ariaFor", { displayName: "LOOP.wav" }) });
+  await editor.getByRole("button", { name: uiText("ja", "slicing.detectAttacks") }).click();
+  await expect(editor.getByRole("button", { name: uiText("ja", "slicing.applyCandidates") })).toBeEnabled();
   expect(await page.evaluate(() => (window as any).__E2E_SLICE_CALLS__.filter((c: any) => c.cmd === "v2_slice_draft_update"))).toEqual([]);
-  await editor.getByRole("button", { name: "Apply candidates to draft" }).click();
+  await editor.getByRole("button", { name: uiText("ja", "slicing.applyCandidates") }).click();
   const boundary = editor.getByLabel("Start frame candidate-11025");
   await boundary.fill("11000");
   await boundary.press("Enter");

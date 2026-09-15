@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   audioApi,
@@ -41,7 +41,10 @@ import { ManualAssetMetadataEditor } from "../metadata/ManualAssetMetadataEditor
 import { UsageGraphPanel } from "../usage";
 import { WorkspaceStatusBar } from "../workspace/WorkspaceStatusBar";
 import { WorkspaceTopBar } from "../workspace/WorkspaceTopBar";
-import { WaveformPreview } from "../waveform/WaveformPreview";
+import {
+  WaveformPreview,
+  type LibraryCommittedGeometryRange,
+} from "../waveform/WaveformPreview";
 import { SliceWorkbench } from "../slicing/SliceWorkbench";
 import "./RootRegistryPanel.css";
 
@@ -99,6 +102,18 @@ export function RootRegistryPanel({
   const [changeBusy, setChangeBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<CatalogAssetSelection | null>(null);
+  const [libraryGeometryRange, setLibraryGeometryRange] =
+    useState<LibraryCommittedGeometryRange | null>(null);
+  const [stopLibraryPlaybackToken, setStopLibraryPlaybackToken] = useState(0);
+  const handleLibraryGeometryRange = useCallback(
+    (range: LibraryCommittedGeometryRange | null) => {
+      setLibraryGeometryRange(range);
+    },
+    [],
+  );
+  const requestStopLibraryPlayback = useCallback(() => {
+    setStopLibraryPlaybackToken((token) => token + 1);
+  }, []);
   const [recovery, setRecovery] = useState<ChangeRecoveryStatus | null>(null);
   const [renameRecovery, setRenameRecovery] = useState<RenameRecoveryStatus | null>(null);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
@@ -119,6 +134,12 @@ export function RootRegistryPanel({
     setCenterView("list");
     setNavigationOpen(true);
   }, [session?.rootId]);
+
+  useEffect(() => {
+    if (!narrow) {
+      setNavigationOpen(true);
+    }
+  }, [narrow]);
 
   async function refreshCloneVerification(rootId: string) {
     try {
@@ -488,7 +509,7 @@ export function RootRegistryPanel({
     />
   );
 
-  const narrowControls = narrow ? (
+  const narrowControls = (
     <div className="mo-app-shell__narrow-controls">
       <Button variant="secondary" onClick={() => setNavigationOpen((open) => !open)}>
         {t("workspace.toggleNav")}
@@ -512,7 +533,7 @@ export function RootRegistryPanel({
         </>
       )}
     </div>
-  ) : null;
+  );
 
   const statusBar = (
     <WorkspaceStatusBar
@@ -607,11 +628,15 @@ export function RootRegistryPanel({
                   rootId={session.rootId}
                   assetId={selectedAsset.assetId}
                   displayName={selectedAsset.displayName}
+                  onCommittedGeometryRangeChange={handleLibraryGeometryRange}
+                  stopPlaybackToken={stopLibraryPlaybackToken}
                 />
                 <SliceWorkbench
                   rootId={session.rootId}
                   fileInstanceId={selectedAsset.fileInstanceId}
                   displayName={selectedAsset.displayName}
+                  librarySelectionRange={libraryGeometryRange}
+                  onRequestStopLibraryPlayback={requestStopLibraryPlayback}
                 />
                 <UsageGraphPanel
                   relativePath={selectedAsset.relativePath}
