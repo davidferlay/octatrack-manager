@@ -209,11 +209,11 @@ describe("CatalogLibraryBrowser", () => {
       "root-opaque",
       "asset:v1:pool",
     );
-    expect(audioClient.queryWaveform).toHaveBeenCalledWith(
+    await waitFor(() => expect(audioClient.queryWaveform).toHaveBeenCalledWith(
       "root-opaque",
       "asset:v1:pool",
       { range: null, targetPoints: 640 },
-    );
+    ));
     expect(screen.getByLabelText(tJa("library.assetInspectorAria"))).not.toHaveTextContent("sha256:");
   });
 

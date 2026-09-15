@@ -316,16 +316,15 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ### 6.0 現在の次作業（2026-09-15）
 
-**作業ID:** `MO-UI-I18N-LIBRARY-1`（製品 PR。Draft 提出。merge しない）
+**作業ID:** `MO-M7-WAVEFORM-PANE-RESOLUTION-1`（製品 PR。Draft 提出。merge しない）
 
-GitHub `main` 基準（#127 merge）: `5771bad`。
+ベース: #128 マージ後の GitHub `main`（未マージ時は `feat/ui-i18n-library-1` 上で実装可）。
 
-Library / Inspector 向け **ja/en 翻訳基盤**（新規 npm 依存なし）と日本語既定 UI、表示専用の区間時間ラベル。
-正本: `docs/I18N.md`。RC8 Gate C PASS / M5 COMPLETE の凍結記録は変更しない。
+Inspector 波形の **`targetPoints` をペイン CSS 幅連動**（64 点量子化、32–4096、150ms debounce）。区間試聴・ja/en i18n を維持。正本: `docs/planning/WAVEFORM_V2_INTEGRATION.md` §13.4。
 
-**Library range preview:** **MERGED**（#127、`MO-M7-LIBRARY-RANGE-PREVIEW-1`）。
+**Library i18n foundation:** Draft **#128**（`MO-UI-I18N-LIBRARY-1`）。**Library range preview:** **MERGED**（#127）。
 
-**次作業（製品 PR）:** WFM2 / Canvas / zoom、`OperationsDialog`、残 UI 翻訳（Clone/Rename/Change、Slice workbench 等）、#105 Auto Slice 残機能。#103 / #104 / #105 は reopen しない。
+**次作業（製品 PR）:** WFM2 / Canvas / zoom / 波形上ドラッグ選択、`OperationsDialog`、残 UI 翻訳、#105 Auto Slice 残機能。#103 / #104 / #105 は reopen しない。
 
 **履歴 — RC8 closeout docs:** `MO-RC8-GATE-C-M5-CLOSEOUT-DOCS-1`（docs 記録。試験は追加しない）
 

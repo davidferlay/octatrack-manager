@@ -296,7 +296,7 @@ Inspector で選択中サンプルについて、**フレーム address 可能�
 | --- | --- |
 | v2 cache key | **`waveform-v2-{content-hash-hex}.json`**（v1 と同 digest、名前空間のみ分離）。descriptor-relative は **未採用** |
 | Library range IPC | **`startFrame` / `endFrameExclusive`**（decimal u64 string）。Slice DTO は変更しない |
-| Inspector `targetPoints` | **固定 640**（`WaveformPreview`）。幅連動は後続 |
+| Inspector `targetPoints` | **ペイン幅連動**（`MO-M7-WAVEFORM-PANE-RESOLUTION-1`）。CSS px 1:1、64 点量子化、32–4096。`devicePixelRatio` 非倍増 |
 | Backend | `v2_audio_waveform_query` + `ot-audio` `waveform:v2` full-file per-channel pyramid cache |
 | Preview | **v1 先頭 60s** のまま（ranged preview は PR-2） |
 | キャンセル | Library 専用 generation（**spawn 前** `fetch_add`）+ frontend request id |
@@ -317,6 +317,17 @@ Inspector で選択中サンプルについて、**フレーム address 可能�
 | 未実装 | WFM2、Canvas/zoom、descriptor-relative cache、媒体 write |
 
 Legacy write containment（#125/#126）は引き続き有効。公開配布は **NOT AUTHORIZED**。
+
+### 13.4 MO-M7-WAVEFORM-PANE-RESOLUTION-1
+
+| 項目 | 決定 |
+| --- | --- |
+| 計測 | `.waveform-preview-plot` コンテナの **CSS 幅**（`ResizeObserver`） |
+| `targetPoints` | 幅 px を 1:1 目安に **64 点量子化**し **32–4096** に clamp。`devicePixelRatio` では倍増しない |
+| 抑制 | 150ms debounce。同一 `rootId` / `assetId` / `range: null` / `targetPoints` では再 IPC しない |
+| stale | 既存 `waveformRequest` + 応答時 `targetPoints` 照合。解像度再取得中も peaks を空にしない |
+| 状態 | リサイズ・locale 切替で区間フレーム入力・Play/Stop・Library 選択をリセットしない |
+| 未実装 | zoom / pan / Canvas、WFM2、波形 range 再クエリ |
 
 ### 13.2 後続でよい
 
