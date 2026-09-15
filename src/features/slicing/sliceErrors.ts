@@ -8,9 +8,11 @@ const KNOWN_SLICE_ERROR_CODES = [
   "DRAFT_CONFLICT",
   "SOURCE_CHANGED",
   "AUDIO_LIMIT_EXCEEDED",
-  "INVALID_SLICE_REQUEST",
   "REQUEST_SUPERSEDED",
 ] as const;
+
+/** Broad backend bucket — use `message` detail, not a single catalog string. */
+export const INVALID_SLICE_REQUEST_CODE = "INVALID_SLICE_REQUEST";
 
 type KnownSliceErrorCode = (typeof KNOWN_SLICE_ERROR_CODES)[number];
 
@@ -49,17 +51,20 @@ export function normalizeSliceError(error: unknown): SliceErrorState {
 
 export function shouldShowDiagnosticDetail(state: SliceErrorState): boolean {
   if (!state.detail) return false;
-  if (state.code === "INVALID_SLICE_REQUEST") return true;
+  if (state.code === INVALID_SLICE_REQUEST_CODE) return false;
   if (!state.code || !isKnownCode(state.code)) return true;
   return false;
 }
 
 export function sliceErrorSummary(t: TranslateFn, state: SliceErrorState): string {
+  if (state.code === INVALID_SLICE_REQUEST_CODE) {
+    if (state.detail) {
+      return t("slicing.error.genericDetail", { detail: state.detail });
+    }
+    return t("slicing.error.INVALID_SLICE_REQUEST");
+  }
   if (state.code && isKnownCode(state.code)) {
     return t(`slicing.error.${state.code}` as Parameters<TranslateFn>[0]);
-  }
-  if (shouldShowDiagnosticDetail(state)) {
-    return t("slicing.error.generic");
   }
   if (state.detail) {
     return t("slicing.error.genericDetail", { detail: state.detail });

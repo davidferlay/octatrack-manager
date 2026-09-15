@@ -27,7 +27,7 @@ Playwright E2E success is **not** treated as this acceptance.
 | CI on head (Frontend, Rust, E2E, Gate C ubuntu+macos) | **PASS** | Actions run [34929667085](https://github.com/kaz4g/masterocta/actions/runs/34929667085) |
 | PR Draft state (plan: maintain Draft) | **NOTE** | GitHub `isDraft: false` (Ready for review). Re-draft requires operator-approved `gh pr ready 131 --undo` (Auto-review may gate). |
 | Review fix 1 — stop in-flight range preview on analyze | **PASS** | `WaveformPreview.tsx` + `WaveformPreview.test.tsx` |
-| Review fix 2 — `INVALID_SLICE_REQUEST` detail node | **PASS** | `sliceErrors.ts`, `SliceErrorAlert.tsx` |
+| Review fix 2 — `INVALID_SLICE_REQUEST` retains backend message in summary | **PASS** | `sliceErrors.ts`, `SliceErrorAlert.tsx` |
 | Review fix 3 — locale change does not reset draft | **PASS** | `SliceWorkbench.tsx` effect deps |
 | Review fix 4 — error re-translates on locale switch | **PASS** | `SliceErrorState` + render-time `t` |
 

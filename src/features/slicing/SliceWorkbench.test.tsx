@@ -251,8 +251,9 @@ describe("attack slicing workbench", () => {
     mount(api);
     await detect();
     fireEvent.click(screen.getByRole("button", { name: "Play visible region" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(tJa("slicing.error.INVALID_SLICE_REQUEST"));
-    expect(screen.getByText("preview exceeds 30 seconds or 16 MiB")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      tJa("slicing.error.genericDetail", { detail: "preview exceeds 30 seconds or 16 MiB" }),
+    );
     expect(screen.queryByText(tJa("waveform.error.rangePreviewLimit"))).not.toBeInTheDocument();
   });
 
@@ -286,13 +287,15 @@ describe("attack slicing workbench", () => {
     });
     mount(api, { withLocaleToggle: true });
     fireEvent.click(screen.getByRole("button", { name: tJa("slicing.detectAttacks") }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(tJa("slicing.error.INVALID_SLICE_REQUEST"));
-    expect(screen.getByText("history is empty")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      tJa("slicing.error.genericDetail", { detail: "history is empty" }),
+    );
     const startCalls = vi.mocked(api.start).mock.calls.length;
 
     fireEvent.click(screen.getByRole("button", { name: "Toggle locale" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(tEn("slicing.error.INVALID_SLICE_REQUEST"));
-    expect(screen.getByText("history is empty")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      tEn("slicing.error.genericDetail", { detail: "history is empty" }),
+    );
     expect(vi.mocked(api.start).mock.calls.length).toBe(startCalls);
   });
 
