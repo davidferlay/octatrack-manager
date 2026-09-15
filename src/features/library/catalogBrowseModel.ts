@@ -122,3 +122,12 @@ export function fileExtensionFromName(displayName: string): string {
   if (dot <= 0 || dot === displayName.length - 1) return "—";
   return displayName.slice(dot + 1).toUpperCase();
 }
+
+export function displayStorageScopeLabel(
+  scope: LibraryAudioFile["storageScope"],
+  t: TranslateFn,
+): string {
+  if (scope === "set_audio_pool") return t("library.scopeSetPool");
+  if (scope === "project_local") return t("library.scopeProjectLocal");
+  return t("library.scopeUnclassified");
+}

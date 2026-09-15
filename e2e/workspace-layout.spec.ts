@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { catalogFileRowLocator, clickCatalogFileRow } from "./catalogFileRow";
 import { uiText } from "./i18n";
 import { showInspectorFromContextBar } from "./narrowWorkspace";
 import { LOCALE_STORAGE_KEY } from "../src/i18n/registry";
@@ -88,9 +89,11 @@ test.describe("Workspace layout (synthetic IPC)", () => {
 
     await page.goto("/");
     await chooseRoot(page);
-    await expect(page.getByRole("button", { name: /KICK\.wav/ })).toBeVisible();
-    await page.getByRole("button", { name: /KICK\.wav/ }).click();
-    await expect(page.getByLabel(uiText("ja", "inspector.aria"))).toContainText("KICK.wav");
+    await expect(catalogFileRowLocator(page, "ja", "KICK.wav")).toBeVisible();
+    await clickCatalogFileRow(page, "ja", "KICK.wav");
+    await expect(
+      page.getByRole("complementary", { name: uiText("ja", "inspector.aria") }),
+    ).toContainText("KICK.wav");
   });
 
   test("exposes narrow layout toggles at 840px", async ({ page }) => {
@@ -192,7 +195,7 @@ test.describe("Workspace layout (synthetic IPC)", () => {
 
     await page.setViewportSize({ width: 840, height: 900 });
     await expect(shell).toHaveClass(/mo-app-shell--narrow/);
-    await page.getByRole("button", { name: /KICK\.wav/ }).click();
+    await clickCatalogFileRow(page, "ja", "KICK.wav");
     const listHeading = page.getByRole("heading", { name: uiText("ja", "library.audioFilesHeading") });
     const inspector = page.locator("aside.mo-inspector-pane");
     await expect(listHeading).toBeVisible();

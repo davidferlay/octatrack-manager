@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { clickCatalogFileRow } from "./catalogFileRow";
 import { uiText } from "./i18n";
 import { LOCALE_STORAGE_KEY } from "../src/i18n/registry";
 import { showInspectorFromContextBar } from "./narrowWorkspace";
@@ -86,7 +87,7 @@ test("zoom, pan, and keyboard range preview in ja", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
   await page.getByRole("button", { name: uiText("ja", "sources.chooseRoot") }).click();
-  await page.getByRole("button", { name: /ZOOM\.wav/ }).click();
+  await clickCatalogFileRow(page, "ja", "ZOOM.wav");
   const waveform = page.getByRole("region", {
     name: uiText("ja", "waveform.ariaFor", { displayName: "ZOOM.wav" }),
   });
@@ -124,7 +125,7 @@ test("zoom controls fit 840px inspector width in en", async ({ page }) => {
   await page.setViewportSize({ width: 840, height: 900 });
   await page.goto("/");
   await page.getByRole("button", { name: uiText("en", "sources.chooseRoot") }).click();
-  await page.getByRole("button", { name: /ZOOM\.wav/ }).click();
+  await clickCatalogFileRow(page, "ja", "ZOOM.wav");
   await showInspectorFromContextBar(page, "en");
   await expect(page.getByRole("button", { name: uiText("en", "waveform.zoomIn") })).toBeVisible();
   await expect(page.getByRole("button", { name: uiText("en", "waveform.fitSelection") })).toBeVisible();

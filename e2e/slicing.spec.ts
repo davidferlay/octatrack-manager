@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { clickCatalogFileRow } from "./catalogFileRow";
 import { uiText } from "./i18n";
 
 test("read-only library supports attack review, boundary editing and undo", async ({ page }) => {
@@ -54,7 +55,8 @@ test("read-only library supports attack review, boundary editing and undo", asyn
   });
   await page.goto("/");
   await page.getByRole("button", { name: uiText("ja", "sources.chooseRoot") }).click();
-  await page.getByRole("button", { name: /LOOP\.wav/ }).click();
+  await clickCatalogFileRow(page, "ja", "LOOP.wav");
+  await page.getByRole("tab", { name: uiText("ja", "inspector.tabSlice") }).click();
   const editor = page.getByRole("region", { name: uiText("ja", "slicing.ariaFor", { displayName: "LOOP.wav" }) });
   await editor.getByRole("button", { name: uiText("ja", "slicing.detectAttacks") }).click();
   await expect(editor.getByRole("button", { name: uiText("ja", "slicing.applyCandidates") })).toBeEnabled();

@@ -27,23 +27,18 @@ import {
   AdditiveCopyChangeDrawer,
   CloneOperatorPanel,
   RenameOperatorPanel,
-  RenamePreparedNotice,
   RenameSampleModal,
 } from "../changes";
-import { InspectorPane } from "../inspector";
+import { InspectorPane, InspectorTabbedAssetPanel } from "../inspector";
 import { CatalogBrowseProvider } from "../library/CatalogBrowseContext";
 import {
   type CatalogAssetSelection,
   type CatalogBrowseContext,
 } from "../library/CatalogLibraryBrowser";
 import { CatalogWorkspaceMain, CatalogWorkspaceNav } from "../library/CatalogWorkspaceViews";
-import { ManualAssetMetadataEditor } from "../metadata/ManualAssetMetadataEditor";
-import { UsageGraphPanel } from "../usage";
 import { WorkspaceStatusBar } from "../workspace/WorkspaceStatusBar";
 import { WorkspaceTopBar } from "../workspace/WorkspaceTopBar";
 import { useLibraryGeometrySelection } from "../waveform/libraryGeometrySelection";
-import { WaveformPreview } from "../waveform/WaveformPreview";
-import { SliceWorkbench } from "../slicing/SliceWorkbench";
 import "./RootRegistryPanel.css";
 
 export type RootDirectoryPicker = () => Promise<string | null>;
@@ -476,6 +471,12 @@ export function RootRegistryPanel({
   }
 
   const catalogReady = session !== null && library !== null;
+  const selectedLibraryFile = useMemo(() => {
+    if (library === null || selectedAsset === null) return undefined;
+    return library.audioFiles.find(
+      (file) => file.fileInstanceId === selectedAsset.fileInstanceId,
+    );
+  }, [library, selectedAsset]);
   const writeEnabled = session?.mode === "write_enabled" && session.capabilities.write;
   const writeBlocked = recovery === null
     || recovery.recoveryRequired
@@ -601,7 +602,11 @@ export function RootRegistryPanel({
       }
       main={
         catalogReady ? (
-          <CatalogWorkspaceMain totalFiles={library.audioFiles.length} />
+          <CatalogWorkspaceMain
+            totalFiles={library.audioFiles.length}
+            catalogRefreshing={busy}
+            catalogError={error}
+          />
         ) : (
           <p className="root-registry-main-empty">{t("roots.mainEmpty")}</p>
         )
@@ -613,57 +618,27 @@ export function RootRegistryPanel({
               assetLabel={selectedAsset?.displayName}
               relativePath={selectedAsset?.relativePath}
             >
-              {selectedAsset !== null && session !== null && (
+              {selectedAsset !== null && session !== null && selectedLibraryFile !== undefined && (
                 <div key={`${session.rootId}:${selectedAsset.fileInstanceId}`}>
-                <RenamePreparedNotice recovery={renameRecovery} />
-                <div className="root-registry-rename-actions">
-                  <Button
-                    variant="secondary"
-                    disabled={busy || changeBusy || renameBlocked}
-                    onClick={openRenameModal}
-                    title={
-                      !writeEnabled
-                        ? "Enable edit mode in Sources before renaming"
-                        : renameBlocked
-                          ? "Resolve recovery before starting another rename"
-                          : "Review and prepare a same-directory sample rename"
-                    }
-                  >
-                    Rename
-                  </Button>
-                  {!writeEnabled && (
-                    <p className="root-registry-rename-hint">Edit mode required</p>
-                  )}
+                  <InspectorTabbedAssetPanel
+                    rootId={session.rootId}
+                    file={selectedLibraryFile}
+                    snapshot={library}
+                    audioClient={audioClient}
+                    metadataClient={metadataClient}
+                    geometrySelectionGeneration={geometrySelectionGeneration}
+                    librarySelectionRange={librarySelectionRange}
+                    stopPlaybackToken={stopLibraryPlaybackToken}
+                    renameRecovery={renameRecovery}
+                    renameBlocked={renameBlocked}
+                    renameBusy={busy || changeBusy}
+                    writeEnabled={writeEnabled === true}
+                    onRename={openRenameModal}
+                    onCommittedGeometryRangeChange={handleLibraryGeometryRange}
+                    onRequestStopLibraryPlayback={requestStopLibraryPlayback}
+                  />
                 </div>
-                <WaveformPreview
-                  api={audioClient}
-                  rootId={session.rootId}
-                  assetId={selectedAsset.assetId}
-                  fileInstanceId={selectedAsset.fileInstanceId}
-                  geometrySelectionGeneration={geometrySelectionGeneration}
-                  displayName={selectedAsset.displayName}
-                  onCommittedGeometryRangeChange={handleLibraryGeometryRange}
-                  stopPlaybackToken={stopLibraryPlaybackToken}
-                />
-                <SliceWorkbench
-                  rootId={session.rootId}
-                  fileInstanceId={selectedAsset.fileInstanceId}
-                  displayName={selectedAsset.displayName}
-                  librarySelectionRange={librarySelectionRange}
-                  onRequestStopLibraryPlayback={requestStopLibraryPlayback}
-                />
-                <UsageGraphPanel
-                  relativePath={selectedAsset.relativePath}
-                  edges={library.usageEdges}
-                />
-                <ManualAssetMetadataEditor
-                  api={metadataClient}
-                  rootId={session.rootId}
-                  assetId={selectedAsset.assetId}
-                  displayName={selectedAsset.displayName}
-                />
-              </div>
-            )}
+              )}
             </InspectorPane>
           </div>
         ) : undefined

@@ -316,7 +316,16 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ### 6.0 現在の次作業（2026-09-15）
 
-**作業ID:** `MO-M7-RANGE-TO-SLICE-ANALYSIS-1`（製品 PR。Draft 提出。merge しない）
+**作業ID:** `MO-UI-LIBRARY-INSPECTOR-MIGRATION-1`（製品 PR。Draft 提出。merge しない）
+
+**基点:** GitHub `main` `bb9b814`（#132 workspace foundation merge 後）。ブランチ
+`feat/ui-library-inspector-migration-1`。中央 `CatalogFileList` 列構成と右 Inspector タブ
+（Preview / Slice / Info / Usage / Notes）。引き継ぎ正本:
+`docs/testing/MO_UI_LIBRARY_INSPECTOR_MIGRATION_1_PR.md`。
+
+**次工程:** `MO-UI-OPERATIONS-DRAWER-1`（Change Drawer 全面再編。今回は触らない）。
+
+**履歴 — M7 range→slice:** `MO-M7-RANGE-TO-SLICE-ANALYSIS-1`（製品 PR。Draft 提出。merge しない）
 
 **Native acceptance (`MO-M7-RANGE-TO-SLICE-NATIVE-ACCEPTANCE-1`):** 記録
 `docs/testing/M7_RANGE_TO_SLICE_NATIVE_ACCEPTANCE.md`（head `31ef6ca`）。

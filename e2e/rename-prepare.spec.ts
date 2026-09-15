@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { clickCatalogFileRow } from "./catalogFileRow";
 import { uiText } from "./i18n";
 import { expectEditEnabledInContextBar } from "./narrowWorkspace";
 
@@ -201,7 +202,7 @@ test.describe("Rename prepare workflow", () => {
     await expect(page.getByRole("button", { name: uiText("ja", "sources.editMode") })).toBeEnabled();
     await page.getByRole("button", { name: uiText("ja", "sources.editMode") }).click();
     await expectEditEnabledInContextBar(page, "ja");
-    await page.getByRole("button", { name: /KICK\.wav/ }).click();
+    await clickCatalogFileRow(page, "ja", "KICK.wav");
     await page.getByRole("button", { name: "Rename" }).click();
     await page.getByLabel("New file name").fill("KICK_DEEP.wav");
     await page.getByRole("button", { name: "Review Rename" }).click();
@@ -324,7 +325,7 @@ test.describe("Rename prepare workflow", () => {
     await expect(page.getByRole("button", { name: uiText("ja", "sources.editMode") })).toBeEnabled();
     await page.getByRole("button", { name: uiText("ja", "sources.editMode") }).click();
     await expectEditEnabledInContextBar(page, "ja");
-    await page.getByRole("button", { name: /KICK\.wav/ }).click();
+    await clickCatalogFileRow(page, "ja", "KICK.wav");
     await page.getByRole("button", { name: "Rename" }).click();
     await page.getByLabel("New file name").fill("KICK_DEEP.wav");
     await page.getByRole("button", { name: "Review Rename" }).click();

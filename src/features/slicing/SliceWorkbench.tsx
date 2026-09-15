@@ -18,6 +18,8 @@ interface Props {
   api?: SliceApi;
   librarySelectionRange?: LibraryCommittedGeometryRange | null;
   onRequestStopLibraryPlayback?: () => void;
+  onAnalysisBusyChange?: (busy: boolean) => void;
+  registerAnalysisCancel?: (cancel: (() => void) | null) => void;
 }
 const WIDTH = 640;
 const PAGE = 50;
@@ -34,6 +36,8 @@ function SliceSession({
   api = sliceApi,
   librarySelectionRange = null,
   onRequestStopLibraryPlayback,
+  onAnalysisBusyChange,
+  registerAnalysisCancel,
 }: Props) {
   const t = useTranslate();
   const [job, setJob] = useState<SliceJob | null>(null);
@@ -148,6 +152,22 @@ function SliceSession({
       catch (e) { if (alive.current) setError(normalizeSliceError(e)); }
     }
   }
+  const cancelRef = useRef(cancel);
+  cancelRef.current = cancel;
+
+  useEffect(() => {
+    if (!registerAnalysisCancel) return;
+    registerAnalysisCancel(() => {
+      void cancelRef.current();
+    });
+    return () => registerAnalysisCancel(null);
+  }, [registerAnalysisCancel]);
+
+  useEffect(() => {
+    onAnalysisBusyChange?.(
+      starting || job?.phase === "reading" || job?.phase === "analyzing",
+    );
+  }, [starting, job, onAnalysisBusyChange]);
 
   useEffect(() => {
     if (!job || !["reading", "analyzing"].includes(job.phase)) return;

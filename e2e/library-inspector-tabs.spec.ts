@@ -7,17 +7,17 @@ import { LOCALE_STORAGE_KEY } from "../src/i18n/registry";
 function installLibraryMocks(page: import("@playwright/test").Page) {
   return page.addInitScript(() => {
     const source = window as any;
-    source.__E2E_ROOT_PATH__ = "/tmp/synthetic-range-preview-root";
-    source.__E2E_RANGE_CALLS__ = [];
+    source.__E2E_ROOT_PATH__ = "/tmp/synthetic-inspector-tabs-root";
+    source.__E2E_IPC_CALLS__ = [];
     source.__TAURI_INTERNALS__ = {
       transformCallback: () => {},
       invoke: async (cmd: string, args: any = {}) => {
-        source.__E2E_RANGE_CALLS__.push({ cmd, args });
+        source.__E2E_IPC_CALLS__.push({ cmd, args });
         if (cmd === "v2_root_register" || cmd === "v2_root_status") {
           return {
-            rootId: "root-range",
-            displayName: "Synthetic range preview",
-            deviceFingerprint: `rootfp:v1:${"a".repeat(64)}`,
+            rootId: "root-tabs",
+            displayName: "Synthetic inspector tabs",
+            deviceFingerprint: `rootfp:v1:${"b".repeat(64)}`,
             mode: "read_only",
             observedRevision: 1,
             expiresInSeconds: 3600,
@@ -31,8 +31,8 @@ function installLibraryMocks(page: import("@playwright/test").Page) {
             standaloneProjects: [],
             usageEdges: [],
             audioFiles: [{
-              fileInstanceId: "file-range",
-              assetId: "asset-range",
+              fileInstanceId: "file-tabs",
+              assetId: "asset-tabs",
               displayName: "LOOP.wav",
               relativePath: "DRUMS/AUDIO/LOOP.wav",
               byteSize: 88244,
@@ -55,21 +55,6 @@ function installLibraryMocks(page: import("@playwright/test").Page) {
             channelPeaks: [[{ min: -0.5, max: 0.5 }]],
           };
         }
-        if (cmd === "v2_audio_preview_range_create") {
-          return {
-            previewToken: "preview:v1:range",
-            expiresInSeconds: 120,
-            mimeType: "audio/wav",
-            byteLength: 4,
-            durationMillis: 500,
-            truncated: false,
-            sampleRate: 44100,
-            range: args.range,
-          };
-        }
-        if (cmd === "v2_audio_preview_read") {
-          return new Uint8Array([82, 73, 70, 70]).buffer;
-        }
         return null;
       },
     };
@@ -85,45 +70,55 @@ async function installLocale(page: import("@playwright/test").Page, locale: "ja"
   );
 }
 
-async function exerciseRangePreview(
+async function openSampleInspector(
   page: import("@playwright/test").Page,
   locale: "ja" | "en",
-  options?: { narrow?: boolean },
+  narrow: boolean,
 ) {
   await installLocale(page, locale);
   await installLibraryMocks(page);
   await page.goto("/");
   await page.getByRole("button", { name: uiText(locale, "sources.chooseRoot") }).click();
   await clickCatalogFileRow(page, locale, "LOOP.wav");
-  if (options?.narrow) {
+  if (narrow) {
     await showInspectorFromContextBar(page, locale);
   }
-  await expect(page.getByRole("img", { name: uiText(locale, "waveform.plotAria") })).toBeVisible();
-  await page.getByLabel(uiText(locale, "waveform.startFrame")).fill("1000");
-  await page.getByLabel(uiText(locale, "waveform.endFrame")).fill("2000");
-  await page.getByRole("button", { name: uiText(locale, "waveform.playRange") }).click();
-  await expect.poll(async () => page.evaluate(() => {
-    const calls = (window as any).__E2E_RANGE_CALLS__ ?? [];
-    return calls.some((entry: any) => entry.cmd === "v2_audio_preview_range_create");
-  })).toBe(true);
-  const calls: any[] = await page.evaluate(() => (window as any).__E2E_RANGE_CALLS__);
-  const createCall = calls.find((entry) => entry.cmd === "v2_audio_preview_range_create");
-  expect(createCall.args.assetId).toBe("asset-range");
-  expect(createCall.args.range).toEqual({
-    startFrame: "1000",
-    endFrameExclusive: "2000",
-  });
-  expect(calls.some((entry) => entry.cmd === "v2_audio_preview_read")).toBe(true);
+  await expect(page.getByRole("tab", { name: uiText(locale, "inspector.tabPreview") })).toBeVisible();
 }
 
 for (const locale of ["ja", "en"] as const) {
-  test(`[${locale}] keeps selection and calls range preview IPC at 1280px`, async ({ page }) => {
+  test(`[${locale}] inspector tabs keep preview state at 1280px`, async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
-    await exerciseRangePreview(page, locale);
+    await openSampleInspector(page, locale, false);
+
+    await page.getByLabel(uiText(locale, "waveform.startFrame")).fill("1000");
+    await page.getByRole("tab", { name: uiText(locale, "inspector.tabInfo") }).click();
+    await expect(page.getByText(uiText(locale, "inspector.infoScope"))).toBeVisible();
+
+    await page.getByRole("tab", { name: uiText(locale, "inspector.tabNotes") }).click();
+    const note = page.getByRole("textbox", { name: uiText(locale, "metadata.noteAria") });
+    await note.fill("tab persistence");
+
+    await page.getByRole("tab", { name: uiText(locale, "inspector.tabPreview") }).click();
+    await expect(page.getByLabel(uiText(locale, "waveform.startFrame"))).toHaveValue("1000");
+    await page.getByRole("tab", { name: uiText(locale, "inspector.tabNotes") }).click();
+    await expect(page.getByRole("textbox", { name: uiText(locale, "metadata.noteAria") })).toHaveValue(
+      "tab persistence",
+    );
+
+    const waveformQueries = await page.evaluate(() => {
+      const calls = (window as any).__E2E_IPC_CALLS__ ?? [];
+      return calls.filter((entry: any) => entry.cmd === "v2_audio_waveform_query").length;
+    });
+    expect(waveformQueries).toBeLessThanOrEqual(2);
   });
 
-  test(`[${locale}] keeps selection and calls range preview IPC at 840px`, async ({ page }) => {
+  test(`[${locale}] inspector tabs at 840px narrow layout`, async ({ page }) => {
     await page.setViewportSize({ width: 840, height: 900 });
-    await exerciseRangePreview(page, locale, { narrow: true });
+    await openSampleInspector(page, locale, true);
+    await page.getByRole("tab", { name: uiText(locale, "inspector.tabUsage") }).click();
+    await expect(page.getByLabel(uiText(locale, "usage.aria"))).toContainText(
+      uiText(locale, "usage.heading"),
+    );
   });
 }
