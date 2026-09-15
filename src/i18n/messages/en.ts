@@ -189,6 +189,8 @@ export const enMessages = {
   'workspace.statusErrorSummary': 'Error (see details below)',
   'workspace.openChangeDrawer': 'Open change drawer',
   'workspace.showInspector': 'Show inspector',
+  'workspace.showInspectorStatusAria':
+    'Show inspector from status bar while the sample list is full screen',
   'workspace.showList': 'Show sample list',
   'workspace.toggleNav': 'Toggle catalog navigation',
   'workspace.splitResizeAria': 'Resize panes',

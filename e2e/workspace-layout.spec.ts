@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { uiText } from "./i18n";
+import { showInspectorFromContextBar } from "./narrowWorkspace";
 import { LOCALE_STORAGE_KEY } from "../src/i18n/registry";
 
 async function installJaLocale(page: import("@playwright/test").Page) {
@@ -133,5 +134,76 @@ test.describe("Workspace layout (synthetic IPC)", () => {
     await expect(contextBar.getByRole("button", { name: uiText("ja", "workspace.showInspector") })).toBeVisible({
       timeout: 15000,
     });
+  });
+
+  test("stacks list and inspector at 840px and restores wide layout at 1280px", async ({ page }) => {
+    await installJaLocale(page);
+    await page.addInitScript(() => {
+      (window as Window & { __E2E_ROOT_PATH__?: string }).__E2E_ROOT_PATH__ = "/tmp/fixture-root";
+      (window as any).__TAURI_INTERNALS__ = {
+        transformCallback: () => {},
+        invoke: async (cmd: string) => {
+          if (cmd === "v2_root_register") {
+            return {
+              rootId: "root-opaque",
+              displayName: "Fixture Root",
+              deviceFingerprint: "0123456789abcdef",
+              mode: "read_only",
+              observedRevision: 1,
+              expiresInSeconds: 3600,
+              capabilities: { read: true, write: false, stableDeviceIdentity: true },
+            };
+          }
+          if (cmd === "v2_library_list") {
+            return {
+              sets: [{
+                displayName: "LIVE_SET",
+                relativePath: "LIVE_SET",
+                hasAudioPool: true,
+                projects: [],
+              }],
+              standaloneProjects: [],
+              audioFiles: [{
+                fileInstanceId: "fileinst:v1:opaque",
+                assetId: "asset:v1:opaque",
+                displayName: "KICK.wav",
+                relativePath: "LIVE_SET/AUDIO/KICK.wav",
+                byteSize: 2048,
+                storageScope: "set_audio_pool",
+              }],
+              usageEdges: [],
+            };
+          }
+          if (cmd === "v2_change_recovery_status" || cmd === "v2_rename_recovery_status") {
+            return { schema: cmd, recoveryRequired: false, operations: [] };
+          }
+          if (cmd === "v2_clone_verification_status") return null;
+          if (cmd === "v2_asset_metadata_get") return { tags: [], note: "" };
+          throw new Error(`Unexpected IPC: ${cmd}`);
+        },
+      };
+    });
+
+    await page.setViewportSize({ width: 841, height: 900 });
+    await page.goto("/");
+    await chooseRoot(page);
+    const shell = page.locator(".mo-app-shell");
+    await expect(shell).not.toHaveClass(/mo-app-shell--narrow/);
+
+    await page.setViewportSize({ width: 840, height: 900 });
+    await expect(shell).toHaveClass(/mo-app-shell--narrow/);
+    await page.getByRole("button", { name: /KICK\.wav/ }).click();
+    const listHeading = page.getByRole("heading", { name: uiText("ja", "library.audioFilesHeading") });
+    const inspector = page.locator("aside.mo-inspector-pane");
+    await expect(listHeading).toBeVisible();
+    await expect(inspector).not.toBeVisible();
+    await showInspectorFromContextBar(page, "ja");
+    await expect(inspector).toBeVisible();
+    await expect(listHeading).not.toBeVisible();
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await expect(shell).not.toHaveClass(/mo-app-shell--narrow/);
+    await expect(inspector).toBeVisible();
+    await expect(listHeading).toBeVisible();
   });
 });

@@ -1,5 +1,9 @@
 import { defineConfig, devices } from '@playwright/test'
 
+const port = Number(process.env.PLAYWRIGHT_PORT ?? 1420)
+const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${port}`
+const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_SERVER === 'true'
+
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
@@ -9,7 +13,7 @@ export default defineConfig({
   workers: process.env.CI ? 2 : undefined,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:1420',
+    baseURL,
     trace: 'on-first-retry',
   },
   projects: [
@@ -19,9 +23,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm run dev',
-    url: 'http://localhost:1420',
-    reuseExistingServer: !process.env.CI,
+    command: `pnpm run dev -- --port ${port} --strictPort`,
+    url: baseURL,
+    reuseExistingServer,
     timeout: 120000,
   },
 })

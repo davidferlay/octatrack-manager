@@ -5,7 +5,8 @@
 | | SHA |
 | --- | --- |
 | Start (branch from `origin/main`) | `4da00644493b79195be7082221a1753082652ec5` |
-| Final head | see PR head after docs commit |
+| FIX-1 head | `80c83d77f8eacbc961d50ba940e8331a442978fe` |
+| FIX-2 head | see PR head after FIX-2 push |
 
 ## Problem / this stage
 
@@ -56,6 +57,17 @@ Embedded `CatalogLibraryBrowser` (3-column) remains for unit tests.
 
 - `MO-UI-LIBRARY-INSPECTOR-MIGRATION-1`: inspector density/tabs, operator i18n, OperationsDialog deferral unchanged.
 - PR #131 (range→slice analysis) not merged; no cherry-pick.
+
+## MO-UI-WORKSPACE-FIX-2
+
+| Issue | Verdict | Fix |
+| --- | --- | --- |
+| `libraryGeometryRange` not tied to selection identity | Valid P1 (timing-dependent) | `libraryGeometrySelection.ts` + generation guard; `effectiveRange` only for matching selection |
+| Narrow layout JS + CSS `@media` duplicate | Valid P2 | Single `useMediaQuery` in `RootRegistryPanel`; `AppShell` `narrowLayout` prop; layout CSS on classes |
+| Duplicate inspector buttons | Intentional | Top bar = explicit view toggle; status bar = recovery while list-only on narrow; `workspace.showInspectorStatusAria` |
+| External search double page-0 | Non-blocker | Comment only on `useCatalogBrowse` effect |
+
+E2E: see `docs/testing/E2E_WORKTREE.md` — local default no longer reuses `:1420` unless `PLAYWRIGHT_REUSE_SERVER=true`.
 
 ## Screenshots
 

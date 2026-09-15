@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   audioApi,
@@ -41,10 +41,8 @@ import { ManualAssetMetadataEditor } from "../metadata/ManualAssetMetadataEditor
 import { UsageGraphPanel } from "../usage";
 import { WorkspaceStatusBar } from "../workspace/WorkspaceStatusBar";
 import { WorkspaceTopBar } from "../workspace/WorkspaceTopBar";
-import {
-  WaveformPreview,
-  type LibraryCommittedGeometryRange,
-} from "../waveform/WaveformPreview";
+import { useLibraryGeometrySelection } from "../waveform/libraryGeometrySelection";
+import { WaveformPreview } from "../waveform/WaveformPreview";
 import { SliceWorkbench } from "../slicing/SliceWorkbench";
 import "./RootRegistryPanel.css";
 
@@ -102,14 +100,27 @@ export function RootRegistryPanel({
   const [changeBusy, setChangeBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<CatalogAssetSelection | null>(null);
-  const [libraryGeometryRange, setLibraryGeometryRange] =
-    useState<LibraryCommittedGeometryRange | null>(null);
   const [stopLibraryPlaybackToken, setStopLibraryPlaybackToken] = useState(0);
+  const geometryTarget = useMemo(
+    () => (session !== null && selectedAsset !== null
+      ? {
+        rootId: session.rootId,
+        fileInstanceId: selectedAsset.fileInstanceId,
+        assetId: selectedAsset.assetId,
+      }
+      : null),
+    [session, selectedAsset],
+  );
+  const {
+    selectionGeneration: geometrySelectionGeneration,
+    effectiveRange: librarySelectionRange,
+    notifyCommittedGeometryRange,
+  } = useLibraryGeometrySelection(geometryTarget);
   const handleLibraryGeometryRange = useCallback(
-    (range: LibraryCommittedGeometryRange | null) => {
-      setLibraryGeometryRange(range);
+    (_range: unknown, notification?: Parameters<typeof notifyCommittedGeometryRange>[0]) => {
+      if (notification !== undefined) notifyCommittedGeometryRange(notification);
     },
-    [],
+    [notifyCommittedGeometryRange],
   );
   const requestStopLibraryPlayback = useCallback(() => {
     setStopLibraryPlaybackToken((token) => token + 1);
@@ -576,6 +587,7 @@ export function RootRegistryPanel({
         </>
       )}
       narrowControls={narrowControls}
+      narrowLayout={narrow}
       navigationOpen={navigationOpen}
       onNavigationOpenChange={setNavigationOpen}
       centerView={centerView}
@@ -627,6 +639,8 @@ export function RootRegistryPanel({
                   api={audioClient}
                   rootId={session.rootId}
                   assetId={selectedAsset.assetId}
+                  fileInstanceId={selectedAsset.fileInstanceId}
+                  geometrySelectionGeneration={geometrySelectionGeneration}
                   displayName={selectedAsset.displayName}
                   onCommittedGeometryRangeChange={handleLibraryGeometryRange}
                   stopPlaybackToken={stopLibraryPlaybackToken}
@@ -635,7 +649,7 @@ export function RootRegistryPanel({
                   rootId={session.rootId}
                   fileInstanceId={selectedAsset.fileInstanceId}
                   displayName={selectedAsset.displayName}
-                  librarySelectionRange={libraryGeometryRange}
+                  librarySelectionRange={librarySelectionRange}
                   onRequestStopLibraryPlayback={requestStopLibraryPlayback}
                 />
                 <UsageGraphPanel

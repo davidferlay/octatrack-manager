@@ -58,7 +58,11 @@ export function WorkspaceStatusBar({
           </Button>
         )}
         {inspectorHidden && onShowInspector !== undefined && (
-          <Button variant="secondary" onClick={onShowInspector}>
+          <Button
+            variant="secondary"
+            aria-label={t("workspace.showInspectorStatusAria")}
+            onClick={onShowInspector}
+          >
             {t("workspace.showInspector")}
           </Button>
         )}

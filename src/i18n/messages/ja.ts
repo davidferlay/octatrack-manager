@@ -195,6 +195,8 @@ export const jaMessages: Record<MessageKey, string> = {
   'workspace.statusErrorSummary': 'エラー（下の詳細を参照）',
   'workspace.openChangeDrawer': '変更ドロワーを開く',
   'workspace.showInspector': 'インスペクターを表示',
+  'workspace.showInspectorStatusAria':
+    '一覧表示中 — ステータスバーからインスペクターを開く',
   'workspace.showList': 'サンプル一覧を表示',
   'workspace.toggleNav': 'カタログナビの表示切替',
   'workspace.splitResizeAria': 'ペイン幅の調整',

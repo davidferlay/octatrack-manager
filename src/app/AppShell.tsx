@@ -1,6 +1,5 @@
 import { type HTMLAttributes, type ReactNode, useEffect } from 'react'
 import { SplitPane } from '../design-system'
-import { useMediaQuery } from '../hooks/useMediaQuery'
 import { useTranslate } from '../i18n'
 import './AppShell.css'
 
@@ -36,6 +35,8 @@ export interface AppShellProps extends HTMLAttributes<HTMLElement> {
   onCenterViewChange?: (view: AppShellCenterView) => void
   /** Render narrow-layout toggles (nav / list / inspector). */
   narrowControls?: ReactNode
+  /** When true, stack main/inspector by centerView (840px layout). Owned by caller. */
+  narrowLayout?: boolean
 }
 
 /**
@@ -62,17 +63,17 @@ export function AppShell({
   defaultCenterView = 'list',
   onCenterViewChange,
   narrowControls,
+  narrowLayout = false,
   className,
   ...rest
 }: AppShellProps) {
   const t = useTranslate()
-  const narrow = useMediaQuery('(max-width: 840px)')
   const navOpen = navigationOpen ?? defaultNavigationOpen
   const activeCenterView = centerView ?? defaultCenterView
   const showInspector = inspector != null
-  const mainHidden = narrow && showInspector && activeCenterView === 'inspector'
-  const inspectorHidden = narrow && showInspector && activeCenterView === 'list'
-  const innerStackMode = narrow && showInspector
+  const mainHidden = narrowLayout && showInspector && activeCenterView === 'inspector'
+  const inspectorHidden = narrowLayout && showInspector && activeCenterView === 'list'
+  const innerStackMode = narrowLayout && showInspector
     ? mainHidden
       ? 'inspector-only'
       : inspectorHidden
@@ -81,12 +82,12 @@ export function AppShell({
     : 'both'
   const innerDividerHidden = innerStackMode !== 'both'
   useEffect(() => {
-    if (!narrow && activeCenterView !== 'list') {
+    if (!narrowLayout && activeCenterView !== 'list') {
       onCenterViewChange?.('list')
     }
-  }, [narrow, activeCenterView, onCenterViewChange])
+  }, [narrowLayout, activeCenterView, onCenterViewChange])
 
-  const merged = ['mo-app-shell', narrow ? 'mo-app-shell--narrow' : '', className]
+  const merged = ['mo-app-shell', narrowLayout ? 'mo-app-shell--narrow' : '', className]
     .filter(Boolean)
     .join(' ')
 

@@ -62,6 +62,7 @@ export function useCatalogBrowse(
   const setSearch = options?.onSearchChange ?? setInternalSearch;
   const [sort, setSort] = useState<CatalogFileSort>("name");
   const [requestedPage, setRequestedPage] = useState(0);
+  // Top-bar search calls setLocationSearch directly; reset page when external search changes.
   useEffect(() => {
     if (options?.externalSearch === undefined) return;
     setRequestedPage(0);
