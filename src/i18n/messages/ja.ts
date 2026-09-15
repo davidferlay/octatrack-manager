@@ -224,6 +224,7 @@ export const jaMessages: Record<MessageKey, string> = {
     'draft の編集は Masta-Octa に保存されます。Octatrack .ot エクスポートは未対応です。',
   'slicing.reanalyze48000':
     ' Octatrack 出力には別の 44.1 kHz アセットと再解析が必要です。',
+  'slicing.error.generic': 'スライス操作を完了できませんでした。',
   'slicing.error.genericDetail': 'スライス操作を完了できませんでした。{detail}',
   'slicing.error.ANALYSIS_REGION_MISMATCH':
     'このファイルには別の解析範囲の draft が既にあります。範囲変更や draft 分岐は未対応です。',

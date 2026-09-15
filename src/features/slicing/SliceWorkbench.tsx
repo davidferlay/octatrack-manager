@@ -7,7 +7,8 @@ import {
 import { useTranslate } from "../../i18n";
 import type { LibraryCommittedGeometryRange } from "../waveform/WaveformPreview";
 import { frame, frameAt, inRange, position, previewChannels } from "./frames";
-import { sliceErrorMessage } from "./sliceErrors";
+import { SliceErrorAlert } from "./SliceErrorAlert";
+import { normalizeSliceError, type SliceErrorState } from "./sliceErrors";
 import "./SliceWorkbench.css";
 
 interface Props {
@@ -37,7 +38,7 @@ function SliceSession({
   const t = useTranslate();
   const [job, setJob] = useState<SliceJob | null>(null);
   const [starting, setStarting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<SliceErrorState | null>(null);
   const [parameters, setParameters] = useState(defaultOnsetParameters);
   const [draft, setDraft] = useState<SliceDraft | null>(null);
   const [proposal, setProposal] = useState<SliceProposal | null>(null);
@@ -97,7 +98,7 @@ function SliceSession({
       jobId.current = next.jobId;
       setJob(next);
     } catch (e) {
-      if (alive.current && epoch === generation.current) setError(sliceErrorMessage(t, e));
+      if (alive.current && epoch === generation.current) setError(normalizeSliceError(e));
     } finally {
       if (alive.current && epoch === generation.current) setStarting(false);
     }
@@ -113,7 +114,7 @@ function SliceSession({
         region = { startFrame: regionStart, endExclusive: regionEnd };
       }
     } catch (e) {
-      setError(sliceErrorMessage(t, e));
+      setError(normalizeSliceError(e));
       return;
     }
     await startAnalysis(region);
@@ -131,7 +132,7 @@ function SliceSession({
         endExclusive: librarySelectionRange.endFrameExclusive,
       };
     } catch (e) {
-      setError(sliceErrorMessage(t, e));
+      setError(normalizeSliceError(e));
       return;
     }
     await startAnalysis(region);
@@ -144,7 +145,7 @@ function SliceSession({
     setJob(null); setDraft(null); setProposal(null); setView(null); setStarting(false);
     if (id) {
       try { await api.cancel(rootId, id); }
-      catch (e) { if (alive.current) setError(sliceErrorMessage(t, e)); }
+      catch (e) { if (alive.current) setError(normalizeSliceError(e)); }
     }
   }
 
@@ -156,7 +157,7 @@ function SliceSession({
         next => { if (active) setJob(next); },
         e => {
           if (!active) return;
-          setError(sliceErrorMessage(t, e));
+          setError(normalizeSliceError(e));
           setJob({ ...job, phase: "failed" });
         },
       );
@@ -169,9 +170,9 @@ function SliceSession({
     let active = true;
     api.draft(rootId, readyId).then(next => {
       if (active) { setDraft(next); setView(next.region); setInsertFrame(next.region.startFrame); }
-    }, e => { if (active) setError(sliceErrorMessage(t, e)); });
+    }, e => { if (active) setError(normalizeSliceError(e)); });
     return () => { active = false; };
-  }, [api, readyId, rootId, t]);
+  }, [api, readyId, rootId]);
 
   useEffect(() => {
     if (!readyId || !draft) return;
@@ -180,11 +181,11 @@ function SliceSession({
     const timer = window.setTimeout(() => {
       api.propose(rootId, readyId, draft.revision, parameters).then(
         next => { if (active) { setProposal(next); setProposing(false); } },
-        e => { if (active) { setError(sliceErrorMessage(t, e)); setProposing(false); } },
+        e => { if (active) { setError(normalizeSliceError(e)); setProposing(false); } },
       );
     }, 180);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [api, draft, parameters, readyId, rootId, t]);
+  }, [api, draft, parameters, readyId, rootId]);
 
   useEffect(() => {
     if (!readyId || !view) return;
@@ -192,10 +193,10 @@ function SliceSession({
     setWaveform(null);
     api.waveform(rootId, readyId, view, WIDTH).then(
       next => { if (active) setWaveform(next); },
-      e => { if (active) setError(sliceErrorMessage(t, e)); },
+      e => { if (active) setError(normalizeSliceError(e)); },
     );
     return () => { active = false; };
-  }, [api, readyId, rootId, t, view]);
+  }, [api, readyId, rootId, view]);
 
   async function edit(input: SliceEdit) {
     if (!readyId || !draft || editBusy.current) return;
@@ -209,7 +210,7 @@ function SliceSession({
       }
     } catch (e) {
       if (alive.current && epoch === generation.current) {
-        setError(sliceErrorMessage(t, e));
+        setError(normalizeSliceError(e));
         // A conflict always reloads authoritative data; never retry the mutation.
         if (typeof e === "object" && e !== null && "code" in e && e.code === "DRAFT_CONFLICT") {
           try {
@@ -243,7 +244,7 @@ function SliceSession({
       source.start(context.current.currentTime, 0, buffer.duration);
       setPlaying(true);
     } catch (e) {
-      if (alive.current && epoch === playGeneration.current) setError(sliceErrorMessage(t, e));
+      if (alive.current && epoch === playGeneration.current) setError(normalizeSliceError(e));
     }
     finally { if (alive.current && epoch === playGeneration.current) setPreviewing(false); }
   }
@@ -285,7 +286,7 @@ function SliceSession({
   const analysisRegion = job?.region ?? draft?.region ?? null;
   const displayedError =
     error
-    ?? (job?.error ? sliceErrorMessage(t, job.error) : null);
+    ?? (job?.error ? normalizeSliceError(job.error) : null);
 
   return <section className="slice-workbench" aria-label={t("slicing.ariaFor", { displayName })}>
     <div className="slice-heading"><h4>{t("slicing.heading")}</h4><span>{t("slicing.localDraft")}</span></div>
@@ -329,7 +330,7 @@ function SliceSession({
         })}
       </p>
     )}
-    {displayedError !== null && <p role="alert" className="slice-error">{displayedError}</p>}
+    <SliceErrorAlert error={displayedError} t={t} />
     {readyId && draft && <>
       <fieldset disabled={editing} className="slice-fields"><legend>{t("slicing.detectionLegend")}</legend>
         <label>{t("slicing.sensitivity")} {parameters.sensitivity}<input type="range" min="0" max="100" value={parameters.sensitivity} onChange={e => changeParameter("sensitivity", Number(e.target.value))} /></label>
@@ -402,7 +403,7 @@ function SliceSession({
       </div>
       <p>{t("slicing.draftSummary", { count: draft.markers.length, revision: draft.revision })}</p>
       {draft.markers.length > 64 && <p className="slice-notice">{t("slicing.exceedsOtLimit")}</p>}
-      <form className="slice-actions" onSubmit={e => { e.preventDefault(); try { frame(insertFrame); void edit({ kind: "insert", frame: insertFrame }); } catch (err) { setError(sliceErrorMessage(t, err)); } }}>
+      <form className="slice-actions" onSubmit={e => { e.preventDefault(); try { frame(insertFrame); void edit({ kind: "insert", frame: insertFrame }); } catch (err) { setError(normalizeSliceError(err)); } }}>
         <label>Insert at frame<input aria-label="Insert at frame" inputMode="numeric" value={insertFrame} onChange={e => setInsertFrame(e.target.value)} disabled={editing} /></label><button disabled={editing}>Insert boundary</button>
       </form>
       <div className="slice-table"><table><thead><tr><th>Start frame</th><th>End (exclusive)</th><th>Fixed</th><th>Actions</th></tr></thead><tbody>

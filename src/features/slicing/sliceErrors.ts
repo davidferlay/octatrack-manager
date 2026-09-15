@@ -18,18 +18,56 @@ function isKnownCode(code: string): code is KnownSliceErrorCode {
   return (KNOWN_SLICE_ERROR_CODES as readonly string[]).includes(code);
 }
 
-export function sliceErrorMessage(t: TranslateFn, error: unknown): string {
+export type SliceErrorState = {
+  code?: string;
+  detail?: string;
+};
+
+function trimDetail(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+/** Normalize IPC / local failures for locale-independent state. */
+export function normalizeSliceError(error: unknown): SliceErrorState {
   if (typeof error === "object" && error !== null && "code" in error) {
     const code = String((error as { code: unknown }).code);
-    if (isKnownCode(code)) {
-      return t(`slicing.error.${code}` as Parameters<TranslateFn>[0]);
-    }
+    const message =
+      "message" in error && (error as { message?: unknown }).message != null
+        ? String((error as { message: unknown }).message)
+        : undefined;
+    return { code, detail: trimDetail(message) };
   }
-  const detail =
-    typeof error === "object" && error !== null && "message" in error
-      ? String((error as { message?: unknown }).message)
-      : error instanceof Error
-        ? error.message
-        : String(error);
-  return t("slicing.error.genericDetail", { detail });
+  if (error instanceof Error) {
+    return { detail: trimDetail(error.message) };
+  }
+  if (typeof error === "string") {
+    return { detail: trimDetail(error) };
+  }
+  return { detail: trimDetail(String(error)) };
+}
+
+export function shouldShowDiagnosticDetail(state: SliceErrorState): boolean {
+  if (!state.detail) return false;
+  if (state.code === "INVALID_SLICE_REQUEST") return true;
+  if (!state.code || !isKnownCode(state.code)) return true;
+  return false;
+}
+
+export function sliceErrorSummary(t: TranslateFn, state: SliceErrorState): string {
+  if (state.code && isKnownCode(state.code)) {
+    return t(`slicing.error.${state.code}` as Parameters<TranslateFn>[0]);
+  }
+  if (shouldShowDiagnosticDetail(state)) {
+    return t("slicing.error.generic");
+  }
+  if (state.detail) {
+    return t("slicing.error.genericDetail", { detail: state.detail });
+  }
+  return t("slicing.error.generic");
+}
+
+/** @deprecated Use normalizeSliceError + sliceErrorSummary at render time. */
+export function sliceErrorMessage(t: TranslateFn, error: unknown): string {
+  return sliceErrorSummary(t, normalizeSliceError(error));
 }

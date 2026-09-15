@@ -209,6 +209,13 @@ export function WaveformPreview({
     headAudioRef.current?.pause();
   }, []);
 
+  const stopSelectedRange = useCallback(() => {
+    rangeRequest.current += 1;
+    stopRangePlayback();
+    setRangeLoading(false);
+    setRangeError(null);
+  }, [stopRangePlayback]);
+
   useLayoutEffect(() => {
     const element = plotContainerRef.current;
     if (element === null) {
@@ -448,8 +455,8 @@ export function WaveformPreview({
   }, [committedGeometryRange, onCommittedGeometryRangeChange]);
 
   useEffect(() => {
-    stopRangePlayback();
-  }, [stopPlaybackToken, stopRangePlayback]);
+    stopSelectedRange();
+  }, [stopPlaybackToken, stopSelectedRange]);
 
   const committedSelection = committedGeometryRange;
 
@@ -721,13 +728,6 @@ export function WaveformPreview({
     } finally {
       if (rangeRequest.current === request) setRangeLoading(false);
     }
-  }
-
-  function stopSelectedRange() {
-    rangeRequest.current += 1;
-    stopRangePlayback();
-    setRangeLoading(false);
-    setRangeError(null);
   }
 
   const rangeControlsDisabled = fileMetadata === null || rangeLoading;

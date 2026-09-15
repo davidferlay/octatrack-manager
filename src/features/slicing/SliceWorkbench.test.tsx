@@ -1,7 +1,9 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SliceApi, SliceDraft, SliceJob, SliceProposal } from "../../api/slices";
-import { tJa } from "../../i18n/testStrings";
+import { writeStoredLocaleId } from "../../i18n/applyLocale";
+import { useLocale } from "../../i18n/LocaleProvider";
+import { tEn, tJa } from "../../i18n/testStrings";
 import { withLocaleProvider } from "../../i18n/testUtils";
 import { SliceWorkbench } from "./SliceWorkbench";
 
@@ -69,9 +71,10 @@ function mount(
   extra: {
     librarySelectionRange?: { startFrame: string; endFrameExclusive: string } | null;
     onRequestStopLibraryPlayback?: () => void;
+    withLocaleToggle?: boolean;
   } = {},
 ) {
-  return render(withLocaleProvider(
+  const workbench = (
     <SliceWorkbench
       rootId="root-1"
       fileInstanceId="file-1"
@@ -79,8 +82,25 @@ function mount(
       api={api}
       librarySelectionRange={extra.librarySelectionRange ?? null}
       onRequestStopLibraryPlayback={extra.onRequestStopLibraryPlayback}
-    />,
-  ));
+    />
+  );
+  if (!extra.withLocaleToggle) {
+    return render(withLocaleProvider(workbench));
+  }
+  function LocaleHarness() {
+    const { localeId, setLocaleId } = useLocale();
+    return (
+      <>
+        <button
+          type="button"
+          aria-label="Toggle locale"
+          onClick={() => setLocaleId(localeId === "ja" ? "en" : "ja")}
+        />
+        {workbench}
+      </>
+    );
+  }
+  return render(withLocaleProvider(<LocaleHarness />));
 }
 async function detect() {
   fireEvent.click(screen.getByRole("button", { name: tJa("slicing.detectAttacks") }));
@@ -90,6 +110,10 @@ async function detect() {
 }
 
 describe("attack slicing workbench", () => {
+  beforeEach(() => {
+    writeStoredLocaleId("ja");
+  });
+
   it("requires explicit analysis and candidate acceptance before saving a draft", async () => {
     const api = client();
     mount(api);
@@ -216,5 +240,79 @@ describe("attack slicing workbench", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: tJa("slicing.analyzeSelectedRange") }));
     expect(await screen.findByRole("alert")).toHaveTextContent(tJa("slicing.error.ANALYSIS_REGION_MISMATCH"));
+  });
+
+  it("shows INVALID_SLICE_REQUEST summary and backend diagnostic detail for slice preview limits", async () => {
+    const api = client();
+    vi.mocked(api.preview).mockRejectedValue({
+      code: "INVALID_SLICE_REQUEST",
+      message: "preview exceeds 30 seconds or 16 MiB",
+    });
+    mount(api);
+    await detect();
+    fireEvent.click(screen.getByRole("button", { name: "Play visible region" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(tJa("slicing.error.INVALID_SLICE_REQUEST"));
+    expect(screen.getByText("preview exceeds 30 seconds or 16 MiB")).toBeInTheDocument();
+    expect(screen.queryByText(tJa("waveform.error.rangePreviewLimit"))).not.toBeInTheDocument();
+  });
+
+  it("keeps view and insert frame across locale changes without refetching draft data", async () => {
+    const api = client();
+    mount(api, { withLocaleToggle: true });
+    await detect();
+    fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
+    await waitFor(() => expect(vi.mocked(api.waveform).mock.calls.length).toBeGreaterThan(1));
+    const draftCalls = vi.mocked(api.draft).mock.calls.length;
+    const proposeCalls = vi.mocked(api.propose).mock.calls.length;
+    const waveformCalls = vi.mocked(api.waveform).mock.calls.length;
+
+    const framesBefore = screen.getByText(/Frames \[/).textContent;
+    fireEvent.change(screen.getByLabelText("Insert at frame"), { target: { value: "1200" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle locale" }));
+    expect(await screen.findByRole("heading", { name: tEn("slicing.heading") })).toBeInTheDocument();
+    expect(screen.getByText(framesBefore!)).toBeInTheDocument();
+    expect(screen.getByLabelText("Insert at frame")).toHaveValue("1200");
+    expect(vi.mocked(api.draft).mock.calls.length).toBe(draftCalls);
+    expect(vi.mocked(api.propose).mock.calls.length).toBe(proposeCalls);
+    expect(vi.mocked(api.waveform).mock.calls.length).toBe(waveformCalls);
+  });
+
+  it("retranslates displayed errors on locale change without extra IPC", async () => {
+    const api = client();
+    vi.mocked(api.start).mockRejectedValue({
+      code: "INVALID_SLICE_REQUEST",
+      message: "history is empty",
+    });
+    mount(api, { withLocaleToggle: true });
+    fireEvent.click(screen.getByRole("button", { name: tJa("slicing.detectAttacks") }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(tJa("slicing.error.INVALID_SLICE_REQUEST"));
+    expect(screen.getByText("history is empty")).toBeInTheDocument();
+    const startCalls = vi.mocked(api.start).mock.calls.length;
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle locale" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(tEn("slicing.error.INVALID_SLICE_REQUEST"));
+    expect(screen.getByText("history is empty")).toBeInTheDocument();
+    expect(vi.mocked(api.start).mock.calls.length).toBe(startCalls);
+  });
+
+  it("ignores a late start failure after analysis was superseded", async () => {
+    const api = client();
+    let rejectStart!: (error: unknown) => void;
+    vi.mocked(api.start).mockImplementation(
+      () => new Promise((_resolve, reject) => { rejectStart = reject; }),
+    );
+    mount(api);
+    fireEvent.click(screen.getByRole("button", { name: tJa("slicing.detectAttacks") }));
+    await waitFor(() => expect(
+      screen.getByRole("button", { name: tJa("slicing.cancelAnalysis") }),
+    ).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: tJa("slicing.cancelAnalysis") }));
+    rejectStart({
+      code: "INVALID_SLICE_REQUEST",
+      message: "stale failure",
+    });
+    await Promise.resolve();
+    expect(screen.queryByText("stale failure")).not.toBeInTheDocument();
   });
 });

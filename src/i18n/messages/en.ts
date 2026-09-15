@@ -218,6 +218,7 @@ export const enMessages = {
     'Draft edits are saved in Masta-Octa. Octatrack .ot export is not available yet.',
   'slicing.reanalyze48000':
     ' Octatrack output will require a separate 44.1 kHz asset and re-analysis.',
+  'slicing.error.generic': 'Slice operation could not complete.',
   'slicing.error.genericDetail': 'Slice operation could not complete. {detail}',
   'slicing.error.ANALYSIS_REGION_MISMATCH':
     'This file already has a draft for a different analysis region. Change or branch drafts is not available yet.',
