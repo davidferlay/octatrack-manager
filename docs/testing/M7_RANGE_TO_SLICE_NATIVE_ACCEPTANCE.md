@@ -2,9 +2,11 @@
 
 **Work ID:** `MO-M7-RANGE-TO-SLICE-NATIVE-ACCEPTANCE-1`  
 **Pull Request:** https://github.com/kaz4g/masterocta/pull/131  
-**Application commit (build SHA):** `31ef6caeda25095f21b49b1096423f96c3f35478`  
+**Application commit (last product code before acceptance artifacts):**
+`31ef6caeda25095f21b49b1096423f96c3f35478`  
+**Acceptance docs/fixture scripts commit:** `4197b9a8d2cc859eb7b4d6fa90fe30a312d6f339`  
 **Host OS:** Darwin 25.6.0 (macOS)  
-**Recorded (UTC):** 2026-09-15T04:52Z  
+**Recorded (UTC):** 2026-09-15T04:52Z (CI on docs commit: Actions run [34931132373](https://github.com/kaz4g/masterocta/actions/runs/34931132373) — all checks **success**)  
 
 This record is **sanitized**: no operator home paths, no real Octatrack media,
 no catalog file paths from production installs.
