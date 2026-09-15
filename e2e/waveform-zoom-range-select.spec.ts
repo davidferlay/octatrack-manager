@@ -108,7 +108,11 @@ test("zoom, pan, and keyboard range preview in ja", async ({ page }) => {
     const calls = (window as any).__E2E_RANGE_CALLS__ ?? [];
     return calls.some((entry: any) => entry.cmd === "v2_audio_preview_range_create");
   })).toBe(true);
-  await waveform.getByRole("button", { name: uiText("ja", "waveform.stop") }).click();
+  const rangeCall = await page.evaluate(() => {
+    const calls = (window as any).__E2E_RANGE_CALLS__ ?? [];
+    return calls.find((entry: any) => entry.cmd === "v2_audio_preview_range_create")?.args?.range;
+  });
+  expect(rangeCall).toEqual({ startFrame: "1000", endFrameExclusive: "5000" });
 });
 
 test("zoom controls fit 840px inspector width in en", async ({ page }) => {
