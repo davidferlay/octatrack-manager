@@ -316,15 +316,15 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ### 6.0 現在の次作業（2026-09-15）
 
-**作業ID:** `MO-M7-WAVEFORM-ZOOM-RANGE-SELECT-1`（製品 PR。Draft 提出。merge しない）
+**作業ID:** `MO-M7-RANGE-TO-SLICE-ANALYSIS-1`（製品 PR。Draft 提出。merge しない）
 
-ベース: GitHub `main` `cbf8f26`（#128）+ ローカル合成 **#129** `170e410`（`main` 未取り込み分）。ブランチ `feat/m7-waveform-zoom-range-select-1`。
+ベース: GitHub `main` `4da00644493b79195be7082221a1753082652ec5`（#130 merge）。ブランチ `feat/m7-range-to-slice-analysis-1`。
 
-Library Inspector: ボタン **zoom / pan / 全体表示**、波形 **ドラッグ区間選択**、既存フレーム入力・Play/Stop 接続。`v2_audio_waveform_query` に viewport `range` + #129 `targetPoints`。正本: `docs/planning/WAVEFORM_V2_INTEGRATION.md` §13.5。
+Library の **確定幾何範囲**（試聴上限と分離）を Attack slicing の **明示「この範囲を解析」** へ渡す。既存 `v2_audio_onsets_start` / draft CAS / 候補反映のみ。異なる解析範囲の既存 draft は `ANALYSIS_REGION_MISMATCH` で拒否（分岐 draft 未実装）。
 
-**#128 i18n:** **MERGED**（`cbf8f26`）。**#129 pane resolution:** MERGED（スタック `170e410`、`main` 待ち）。**Library range preview:** **MERGED**（#127）。
+**#130 zoom/range:** **MERGED**。**#128 i18n** / **#127 range preview** / **#129 pane resolution:** main 取り込み済み。
 
-**次作業（製品 PR）:** WFM2 / Canvas、`OperationsDialog`、残 UI 翻訳、#105 Auto Slice 残機能。#103 / #104 / #105 は reopen しない。
+**次作業（製品 PR）:** WFM2 / Canvas、`OperationsDialog`、Slice 残 UI 翻訳、#105 Auto Slice 残機能。#103 / #104 / #105 は reopen しない。
 
 **履歴 — RC8 closeout docs:** `MO-RC8-GATE-C-M5-CLOSEOUT-DOCS-1`（docs 記録。試験は追加しない）
 

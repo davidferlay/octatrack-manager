@@ -27,6 +27,7 @@ import { useTranslate, type TranslateFn } from "../../i18n";
 import {
   defaultLibraryPreviewEndFrame,
   validateFrameRange,
+  validateGeometryFrameRange,
 } from "./frameMath";
 import {
   readPlotContainerWidthCss,
@@ -50,6 +51,8 @@ import "./WaveformPreview.css";
 const VIEWBOX_WIDTH = 640;
 const VIEWBOX_HEIGHT = 140;
 
+export type LibraryCommittedGeometryRange = ViewportRange;
+
 interface WaveformPreviewProps {
   rootId: string;
   assetId: string;
@@ -57,6 +60,10 @@ interface WaveformPreviewProps {
   api?: AudioApi;
   /** Override debounce for tests; production uses WAVEFORM_QUERY_DEBOUNCE_MS. */
   queryDebounceMs?: number;
+  /** Fires when the committed geometry range changes (not on every keystroke). */
+  onCommittedGeometryRangeChange?: (range: LibraryCommittedGeometryRange | null) => void;
+  /** Increment to stop range preview playback from a sibling control (e.g. slice analysis). */
+  stopPlaybackToken?: number;
 }
 
 function errorMessage(error: unknown): string {
@@ -109,6 +116,8 @@ export function WaveformPreview({
   displayName,
   api = audioApi,
   queryDebounceMs = WAVEFORM_QUERY_DEBOUNCE_MS,
+  onCommittedGeometryRangeChange,
+  stopPlaybackToken = 0,
 }: WaveformPreviewProps) {
   const t = useTranslate();
   const [waveform, setWaveform] = useState<AudioWaveformWindow | null>(null);
@@ -415,17 +424,15 @@ export function WaveformPreview({
     return frameRangesEqual(waveform.range, axisViewport);
   }, [axisViewport, debouncedTargetPoints, waveform]);
 
-  const committedSelection = useMemo((): ViewportRange | null => {
-    if (fileMetadata === null || rangeInvalid !== null || rangeEndFrameExclusive === "") {
+  const committedGeometryRange = useMemo((): ViewportRange | null => {
+    if (fileMetadata === null || rangeEndFrameExclusive === "") {
       return null;
     }
     try {
-      validateFrameRange(
+      validateGeometryFrameRange(
         rangeStartFrame,
         rangeEndFrameExclusive,
         fileMetadata.frameCount,
-        fileMetadata.sampleRate,
-        fileMetadata.channels,
       );
       return {
         startFrame: rangeStartFrame,
@@ -434,7 +441,17 @@ export function WaveformPreview({
     } catch {
       return null;
     }
-  }, [fileMetadata, rangeEndFrameExclusive, rangeInvalid, rangeStartFrame]);
+  }, [fileMetadata, rangeEndFrameExclusive, rangeStartFrame]);
+
+  useEffect(() => {
+    onCommittedGeometryRangeChange?.(committedGeometryRange);
+  }, [committedGeometryRange, onCommittedGeometryRangeChange]);
+
+  useEffect(() => {
+    stopRangePlayback();
+  }, [stopPlaybackToken, stopRangePlayback]);
+
+  const committedSelection = committedGeometryRange;
 
   const highlightSelection = dragDraftRange ?? committedSelection;
 
@@ -458,14 +475,12 @@ export function WaveformPreview({
   }, [fileMetadata, t]);
 
   const rangeDurationHint = useMemo(() => {
-    if (fileMetadata === null || rangeInvalid !== null) return null;
+    if (committedGeometryRange === null || fileMetadata === null) return null;
     try {
-      validateFrameRange(
+      validateGeometryFrameRange(
         rangeStartFrame,
         rangeEndFrameExclusive,
         fileMetadata.frameCount,
-        fileMetadata.sampleRate,
-        fileMetadata.channels,
       );
     } catch {
       return null;
@@ -476,7 +491,7 @@ export function WaveformPreview({
       fileMetadata.sampleRate,
       t,
     );
-  }, [fileMetadata, rangeEndFrameExclusive, rangeInvalid, rangeStartFrame, t]);
+  }, [committedGeometryRange, fileMetadata, rangeEndFrameExclusive, rangeStartFrame, t]);
 
   const navigationDisabled = fileMetadata === null
     || viewportLength(axisViewport ?? { startFrame: "0", endFrameExclusive: "0" }) <= 0n;

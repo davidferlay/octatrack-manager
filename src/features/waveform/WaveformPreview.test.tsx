@@ -871,6 +871,32 @@ describe("WaveformPreview", () => {
     expect(screen.getByLabelText(tJa("waveform.endFrame"))).toHaveValue("20672");
   });
 
+  it("reports committed geometry ranges to the inspector without requiring preview validity", async () => {
+    const onRange = vi.fn();
+    const client = api();
+    render(
+      <WaveformPreview
+        queryDebounceMs={0}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+        onCommittedGeometryRangeChange={onRange}
+      />,
+    );
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    fireEvent.change(screen.getByLabelText(tJa("waveform.startFrame")), {
+      target: { value: "8820" },
+    });
+    fireEvent.change(screen.getByLabelText(tJa("waveform.endFrame")), {
+      target: { value: "22050" },
+    });
+    await waitFor(() => expect(onRange).toHaveBeenLastCalledWith({
+      startFrame: "8820",
+      endFrameExclusive: "22050",
+    }));
+  });
+
   it("does not stretch stale peaks after the viewport changes", async () => {
     const client = api();
     let resolveOld: ((value: AudioWaveformWindow) => void) | undefined;
