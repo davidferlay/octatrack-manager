@@ -6,7 +6,7 @@
 | --- | --- |
 | Start (branch from `origin/main`) | `4da00644493b79195be7082221a1753082652ec5` |
 | FIX-1 head | `80c83d77f8eacbc961d50ba940e8331a442978fe` |
-| FIX-2 head | see PR head after FIX-2 push |
+| FIX-2 head | `bac7808755f39598ca597dda509b3ad8e5ab9a82` |
 
 ## Problem / this stage
 
@@ -41,11 +41,11 @@ Embedded `CatalogLibraryBrowser` (3-column) remains for unit tests.
 | Check | Result |
 | --- | --- |
 | `pnpm run typecheck` | PASS |
-| `pnpm run test:frontend` (562 tests) | PASS |
+| `pnpm run test:frontend` (587 tests) | PASS (FIX-2 local) |
 | `pnpm run check:containment` | PASS |
 | `pnpm run build` | PASS |
 | `pnpm run check:architecture` | NOT_RUN — `cargo` unavailable in agent environment (ENOENT) |
-| `pnpm run test:e2e` | NOT_RUN locally — CI on PR |
+| `pnpm run test:e2e` | PASS locally FIX-2 (`CI=true`, 436 tests) |
 | Native Tauri + real catalog | NOT_RUN — operator acceptance pending |
 
 ## Mock vs native
