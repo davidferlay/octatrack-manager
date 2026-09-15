@@ -46,6 +46,7 @@ import {
   zoomViewport,
   type ViewportRange,
 } from "./viewportRange";
+import type { LibraryGeometryNotification } from "./libraryGeometrySelection";
 import "./WaveformPreview.css";
 
 const VIEWBOX_WIDTH = 640;
@@ -57,11 +58,17 @@ interface WaveformPreviewProps {
   rootId: string;
   assetId: string;
   displayName: string;
+  fileInstanceId?: string;
+  /** Bumped when catalog selection identity changes; tags geometry notifications. */
+  geometrySelectionGeneration?: number;
   api?: AudioApi;
   /** Override debounce for tests; production uses WAVEFORM_QUERY_DEBOUNCE_MS. */
   queryDebounceMs?: number;
   /** Fires when the committed geometry range changes (not on every keystroke). */
-  onCommittedGeometryRangeChange?: (range: LibraryCommittedGeometryRange | null) => void;
+  onCommittedGeometryRangeChange?: (
+    range: LibraryCommittedGeometryRange | null,
+    notification?: LibraryGeometryNotification,
+  ) => void;
   /** Increment to stop range preview playback from a sibling control (e.g. slice analysis). */
   stopPlaybackToken?: number;
 }
@@ -114,6 +121,8 @@ export function WaveformPreview({
   rootId,
   assetId,
   displayName,
+  fileInstanceId,
+  geometrySelectionGeneration = 0,
   api = audioApi,
   queryDebounceMs = WAVEFORM_QUERY_DEBOUNCE_MS,
   onCommittedGeometryRangeChange,
@@ -451,8 +460,26 @@ export function WaveformPreview({
   }, [fileMetadata, rangeEndFrameExclusive, rangeStartFrame]);
 
   useEffect(() => {
-    onCommittedGeometryRangeChange?.(committedGeometryRange);
-  }, [committedGeometryRange, onCommittedGeometryRangeChange]);
+    if (onCommittedGeometryRangeChange === undefined) return;
+    if (fileInstanceId === undefined) {
+      onCommittedGeometryRangeChange(committedGeometryRange);
+      return;
+    }
+    onCommittedGeometryRangeChange(committedGeometryRange, {
+      rootId,
+      assetId,
+      fileInstanceId,
+      selectionGeneration: geometrySelectionGeneration,
+      range: committedGeometryRange,
+    });
+  }, [
+    committedGeometryRange,
+    onCommittedGeometryRangeChange,
+    rootId,
+    assetId,
+    fileInstanceId,
+    geometrySelectionGeneration,
+  ]);
 
   useEffect(() => {
     stopSelectedRange();

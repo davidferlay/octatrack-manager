@@ -174,6 +174,28 @@ export const enMessages = {
 
   'common.errorWithDetail': '{summary}: {detail}',
 
+  'workspace.disconnected': 'Not connected',
+  'workspace.topActionsAria': 'Workspace actions',
+  'workspace.refreshCatalog': 'Refresh catalog',
+  'workspace.navAria': 'Catalog locations',
+  'workspace.navHeading': 'Catalog',
+  'workspace.navLoading': 'Loading catalog…',
+  'workspace.selectSourceHint': 'Select a source to browse locations.',
+  'workspace.statusAria': 'Workspace status',
+  'workspace.statusConnected': 'Connected',
+  'workspace.statusDisconnected': 'Disconnected',
+  'workspace.statusProcessing': 'Processing…',
+  'workspace.statusAttention': 'Attention required',
+  'workspace.statusErrorSummary': 'Error (see details below)',
+  'workspace.openChangeDrawer': 'Open change drawer',
+  'workspace.showInspector': 'Show inspector',
+  'workspace.showInspectorStatusAria':
+    'Show inspector from status bar while the sample list is full screen',
+  'workspace.showList': 'Show sample list',
+  'workspace.toggleNav': 'Toggle catalog navigation',
+  'workspace.splitResizeAria': 'Resize panes',
+  'workspace.trailSeparator': '›',
+
   'slicing.ariaFor': 'Auto slice {displayName}',
   'slicing.heading': 'Attack slicing',
   'slicing.localDraft': 'Local draft',

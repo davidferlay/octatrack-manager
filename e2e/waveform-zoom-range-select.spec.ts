@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { uiText } from "./i18n";
 import { LOCALE_STORAGE_KEY } from "../src/i18n/registry";
+import { showInspectorFromContextBar } from "./narrowWorkspace";
 
 function installLibraryMocks(page: import("@playwright/test").Page) {
   return page.addInitScript(() => {
@@ -124,6 +125,7 @@ test("zoom controls fit 840px inspector width in en", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: uiText("en", "sources.chooseRoot") }).click();
   await page.getByRole("button", { name: /ZOOM\.wav/ }).click();
+  await showInspectorFromContextBar(page, "en");
   await expect(page.getByRole("button", { name: uiText("en", "waveform.zoomIn") })).toBeVisible();
   await expect(page.getByRole("button", { name: uiText("en", "waveform.fitSelection") })).toBeVisible();
 });

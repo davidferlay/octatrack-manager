@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { uiText } from "./i18n";
+import { expectEditEnabledInContextBar } from "./narrowWorkspace";
 
 const planId = `plan:v1:${"a".repeat(64)}`;
 const operationId = `operation:v1:${"a".repeat(64)}`;
@@ -199,9 +200,7 @@ test.describe("Rename prepare workflow", () => {
     await expect(page.getByText("PROJECT_A")).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole("button", { name: uiText("ja", "sources.editMode") })).toBeEnabled();
     await page.getByRole("button", { name: uiText("ja", "sources.editMode") }).click();
-    await expect(
-      page.getByTestId("app-shell-sources").getByText(uiText("ja", "sources.editEnabledBadge"), { exact: true }),
-    ).toBeVisible();
+    await expectEditEnabledInContextBar(page, "ja");
     await page.getByRole("button", { name: /KICK\.wav/ }).click();
     await page.getByRole("button", { name: "Rename" }).click();
     await page.getByLabel("New file name").fill("KICK_DEEP.wav");
@@ -324,9 +323,7 @@ test.describe("Rename prepare workflow", () => {
     await expect(page.getByText("PROJECT_A")).toBeVisible({ timeout: 10000 });
     await expect(page.getByRole("button", { name: uiText("ja", "sources.editMode") })).toBeEnabled();
     await page.getByRole("button", { name: uiText("ja", "sources.editMode") }).click();
-    await expect(
-      page.getByTestId("app-shell-sources").getByText(uiText("ja", "sources.editEnabledBadge"), { exact: true }),
-    ).toBeVisible();
+    await expectEditEnabledInContextBar(page, "ja");
     await page.getByRole("button", { name: /KICK\.wav/ }).click();
     await page.getByRole("button", { name: "Rename" }).click();
     await page.getByLabel("New file name").fill("KICK_DEEP.wav");

@@ -180,6 +180,28 @@ export const jaMessages: Record<MessageKey, string> = {
 
   'common.errorWithDetail': '{summary}: {detail}',
 
+  'workspace.disconnected': '未接続',
+  'workspace.topActionsAria': 'ワークスペース操作',
+  'workspace.refreshCatalog': 'カタログを再読み込み',
+  'workspace.navAria': 'カタログの場所',
+  'workspace.navHeading': 'カタログ',
+  'workspace.navLoading': 'カタログを読み込み中…',
+  'workspace.selectSourceHint': '場所を表示するソースを選択してください。',
+  'workspace.statusAria': 'ワークスペースの状態',
+  'workspace.statusConnected': '接続済み',
+  'workspace.statusDisconnected': '未接続',
+  'workspace.statusProcessing': '処理中…',
+  'workspace.statusAttention': '要確認',
+  'workspace.statusErrorSummary': 'エラー（下の詳細を参照）',
+  'workspace.openChangeDrawer': '変更ドロワーを開く',
+  'workspace.showInspector': 'インスペクターを表示',
+  'workspace.showInspectorStatusAria':
+    '一覧表示中 — ステータスバーからインスペクターを開く',
+  'workspace.showList': 'サンプル一覧を表示',
+  'workspace.toggleNav': 'カタログナビの表示切替',
+  'workspace.splitResizeAria': 'ペイン幅の調整',
+  'workspace.trailSeparator': '›',
+
   'slicing.ariaFor': '{displayName} の自動スライス',
   'slicing.heading': 'アタックスライス',
   'slicing.localDraft': 'ローカル draft',

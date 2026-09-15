@@ -1,8 +1,22 @@
 /* Residual styles for RootRegistryPanel composition empty state.
  * Shell / Sources chrome live in AppShell.css and SourcesPane.css. */
-.root-registry-main-empty {
+.root-registry-main-empty,
+.root-registry-nav-empty {
   margin: 0;
   color: var(--mo-text-muted);
+}
+
+.root-registry-context-error {
+  margin: var(--mo-space-2) 0 0;
+  color: var(--mo-danger, #c44);
+  font-size: var(--mo-font-size-sm);
+}
+
+.root-registry-inspector-host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  outline: none;
 }
 
 .root-registry-rename-actions {

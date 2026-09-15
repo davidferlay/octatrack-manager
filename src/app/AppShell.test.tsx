@@ -40,6 +40,19 @@ describe('AppShell', () => {
     expect(screen.getByTestId('app-shell-context')).toHaveTextContent('Context summary')
   })
 
+  it('renders an optional status bar above the change drawer', () => {
+    render(
+      <AppShell
+        sources={<div>Sources content</div>}
+        main={<div>Main content</div>}
+        statusBar={<div>Connection OK</div>}
+        changeDrawer={<div>Review additive copy</div>}
+      />,
+    )
+
+    expect(screen.getByTestId('app-shell-status')).toHaveTextContent('Connection OK')
+  })
+
   it('renders the Change Drawer below the workspace regions', () => {
     render(
       <AppShell
@@ -50,6 +63,23 @@ describe('AppShell', () => {
     )
 
     expect(screen.getByText('Review additive copy')).toBeInTheDocument()
+  })
+
+  it('hides inspector pane in narrow list view without unmounting', () => {
+    render(
+      <AppShell
+        narrowLayout
+        centerView="list"
+        sources={<div>Sources content</div>}
+        main={<div>Main content</div>}
+        inspector={<div>Inspector content</div>}
+      />,
+    )
+    expect(screen.getByText('Main content')).toBeVisible()
+    expect(screen.getByText('Inspector content')).not.toBeVisible()
+    const inspectorPane = screen.getByText('Inspector content').closest('.mo-app-shell__inspector')
+    expect(inspectorPane).toHaveClass('mo-app-shell__pane--stack-hidden')
+    expect(inspectorPane).toHaveAttribute('inert')
   })
 
   it('resizes Sources width in uncontrolled mode by default', () => {

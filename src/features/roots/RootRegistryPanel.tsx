@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   audioApi,
@@ -19,8 +19,9 @@ import {
   type RootApi,
   type RootSession,
 } from "../../api";
-import { AppShell } from "../../app/index";
+import { AppShell, type AppShellCenterView } from "../../app/index";
 import { Button } from "../../design-system";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { createTranslate, readStoredLocaleId, useTranslate } from "../../i18n";
 import {
   AdditiveCopyChangeDrawer,
@@ -30,18 +31,18 @@ import {
   RenameSampleModal,
 } from "../changes";
 import { InspectorPane } from "../inspector";
+import { CatalogBrowseProvider } from "../library/CatalogBrowseContext";
 import {
-  CatalogLibraryBrowser,
   type CatalogAssetSelection,
   type CatalogBrowseContext,
 } from "../library/CatalogLibraryBrowser";
+import { CatalogWorkspaceMain, CatalogWorkspaceNav } from "../library/CatalogWorkspaceViews";
 import { ManualAssetMetadataEditor } from "../metadata/ManualAssetMetadataEditor";
-import { SourcesPane } from "../sources";
 import { UsageGraphPanel } from "../usage";
-import {
-  WaveformPreview,
-  type LibraryCommittedGeometryRange,
-} from "../waveform/WaveformPreview";
+import { WorkspaceStatusBar } from "../workspace/WorkspaceStatusBar";
+import { WorkspaceTopBar } from "../workspace/WorkspaceTopBar";
+import { useLibraryGeometrySelection } from "../waveform/libraryGeometrySelection";
+import { WaveformPreview } from "../waveform/WaveformPreview";
 import { SliceWorkbench } from "../slicing/SliceWorkbench";
 import "./RootRegistryPanel.css";
 
@@ -99,14 +100,27 @@ export function RootRegistryPanel({
   const [changeBusy, setChangeBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<CatalogAssetSelection | null>(null);
-  const [libraryGeometryRange, setLibraryGeometryRange] =
-    useState<LibraryCommittedGeometryRange | null>(null);
   const [stopLibraryPlaybackToken, setStopLibraryPlaybackToken] = useState(0);
+  const geometryTarget = useMemo(
+    () => (session !== null && selectedAsset !== null
+      ? {
+        rootId: session.rootId,
+        fileInstanceId: selectedAsset.fileInstanceId,
+        assetId: selectedAsset.assetId,
+      }
+      : null),
+    [session, selectedAsset],
+  );
+  const {
+    selectionGeneration: geometrySelectionGeneration,
+    effectiveRange: librarySelectionRange,
+    notifyCommittedGeometryRange,
+  } = useLibraryGeometrySelection(geometryTarget);
   const handleLibraryGeometryRange = useCallback(
-    (range: LibraryCommittedGeometryRange | null) => {
-      setLibraryGeometryRange(range);
+    (_range: unknown, notification?: Parameters<typeof notifyCommittedGeometryRange>[0]) => {
+      if (notification !== undefined) notifyCommittedGeometryRange(notification);
     },
-    [],
+    [notifyCommittedGeometryRange],
   );
   const requestStopLibraryPlayback = useCallback(() => {
     setStopLibraryPlaybackToken((token) => token + 1);
@@ -118,6 +132,25 @@ export function RootRegistryPanel({
   const [cloneVerification, setCloneVerification] = useState<CloneVerification | null>(null);
   const [sourceEvidenceId, setSourceEvidenceId] = useState<string | null>(null);
   const [browseContext, setBrowseContext] = useState<CatalogBrowseContext | null>(null);
+  const [locationSearch, setLocationSearch] = useState("");
+  const [navigationOpen, setNavigationOpen] = useState(true);
+  const [centerView, setCenterView] = useState<AppShellCenterView>("list");
+  const catalogEpochRef = useRef(0);
+  const changeDrawerRef = useRef<HTMLDivElement>(null);
+  const inspectorPaneRef = useRef<HTMLDivElement>(null);
+  const narrow = useMediaQuery("(max-width: 840px)");
+
+  useEffect(() => {
+    setLocationSearch("");
+    setCenterView("list");
+    setNavigationOpen(true);
+  }, [session?.rootId]);
+
+  useEffect(() => {
+    if (!narrow) {
+      setNavigationOpen(true);
+    }
+  }, [narrow]);
 
   async function refreshCloneVerification(rootId: string) {
     try {
@@ -155,7 +188,10 @@ export function RootRegistryPanel({
       const rawPath = await selectDirectory();
       if (rawPath === null) return;
       registered = await api.registerRoot(rawPath);
+      catalogEpochRef.current += 1;
+      const loadEpoch = catalogEpochRef.current;
       const snapshot = await api.listLibrary(registered.rootId);
+      if (loadEpoch !== catalogEpochRef.current) return;
       setSession(registered);
       setLibrary(snapshot);
       setSelectedAsset(null);
@@ -195,6 +231,7 @@ export function RootRegistryPanel({
     setError(null);
     try {
       await api.closeRoot(session.rootId);
+      catalogEpochRef.current += 1;
       setSession(null);
       setLibrary(null);
       setSelectedAsset(null);
@@ -263,14 +300,34 @@ export function RootRegistryPanel({
     }
   }
 
+  async function refreshLibrary() {
+    if (session === null) return;
+    const loadEpoch = catalogEpochRef.current;
+    setBusy(true);
+    setError(null);
+    try {
+      const snapshot = await api.listLibrary(session.rootId);
+      if (loadEpoch !== catalogEpochRef.current) return;
+      setLibrary(snapshot);
+    } catch (reason) {
+      if (loadEpoch === catalogEpochRef.current) {
+        setError(errorMessage(reason));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function refreshAfterWrite(failureMessage: string) {
     if (session === null) return;
+    const loadEpoch = catalogEpochRef.current;
     try {
       const [latestSession, snapshot, latestRecovery] = await Promise.all([
         api.rootStatus(session.rootId),
         api.listLibrary(session.rootId),
         changeClient.recoveryStatus(session.rootId),
       ]);
+      if (loadEpoch !== catalogEpochRef.current) return;
       setSession(latestSession);
       setLibrary(snapshot);
       setRecovery(latestRecovery);
@@ -313,10 +370,13 @@ export function RootRegistryPanel({
   }
 
   async function adoptCloneRoot(cloneRootId: string) {
+    catalogEpochRef.current += 1;
+    const loadEpoch = catalogEpochRef.current;
     const [latestSession, snapshot] = await Promise.all([
       api.rootStatus(cloneRootId),
       api.listLibrary(cloneRootId),
     ]);
+    if (loadEpoch !== catalogEpochRef.current) return;
     setSession(latestSession);
     setLibrary(snapshot);
     setSelectedAsset(null);
@@ -429,86 +489,132 @@ export function RootRegistryPanel({
     setRenameModalOpen(true);
   }
 
-  const contextBar = catalogReady && session !== null ? (
-    <div className="root-registry-context-bar" aria-label={t("context.libraryAria")}>
-      <span className="root-registry-context-bar__root">{session.displayName}</span>
-      <span className="root-registry-context-bar__mode">
-        {writeEnabled ? t("context.editEnabled") : t("context.readOnly")}
-      </span>
-      {browseContext !== null && (
+  function focusChangeDrawer() {
+    changeDrawerRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    changeDrawerRef.current?.focus({ preventScroll: true });
+  }
+
+  function showInspectorPane() {
+    setCenterView("inspector");
+    window.requestAnimationFrame(() => {
+      inspectorPaneRef.current?.focus({ preventScroll: true });
+    });
+  }
+
+  const topBar = (
+    <WorkspaceTopBar
+      session={session}
+      writeEnabled={writeEnabled === true}
+      writeBlocked={writeBlocked}
+      busy={busy || changeBusy}
+      search={locationSearch}
+      onSearchChange={setLocationSearch}
+      searchDisabled={!catalogReady}
+      browseContext={browseContext}
+      onChooseRoot={registerRoot}
+      onRefreshCatalog={() => void refreshLibrary()}
+      onCloseRoot={() => void closeRoot()}
+      onEnableWrite={() => void enableWrite()}
+      onDisableWrite={() => void disableWrite()}
+      catalogReady={catalogReady}
+    />
+  );
+
+  const narrowControls = (
+    <div className="mo-app-shell__narrow-controls">
+      <Button variant="secondary" onClick={() => setNavigationOpen((open) => !open)}>
+        {t("workspace.toggleNav")}
+      </Button>
+      {catalogReady && (
         <>
-          <span className="root-registry-context-bar__trail">
-            {browseContext.sourceLabel} › {browseContext.locationLabel}
-          </span>
-          <span className="root-registry-context-bar__counts">
-            {browseContext.hasSearch
-              ? t("context.matchingInLocation", {
-                  matching: browseContext.matchingCount,
-                  total: browseContext.locationCount,
-                })
-              : t("context.samplesInLocation", { count: browseContext.locationCount })}
-          </span>
+          <Button
+            variant="secondary"
+            aria-pressed={centerView === "list"}
+            onClick={() => setCenterView("list")}
+          >
+            {t("workspace.showList")}
+          </Button>
+          <Button
+            variant="secondary"
+            aria-pressed={centerView === "inspector"}
+            onClick={() => setCenterView("inspector")}
+          >
+            {t("workspace.showInspector")}
+          </Button>
         </>
       )}
     </div>
-  ) : undefined;
+  );
 
-  return (
-    <>
-      <AppShell
-      contextBar={contextBar}
-      sources={
-        <SourcesPane
-          session={session}
-          busy={busy || changeBusy}
-          error={error}
-          onRegister={registerRoot}
-          onClose={closeRoot}
-          onEnableWrite={enableWrite}
-          onDisableWrite={disableWrite}
-          writeBlocked={writeBlocked}
-        >
-          {catalogReady && (
-            <CloneOperatorPanel
-              session={session}
-              cloneVerification={cloneVerification}
-              busy={busy || changeBusy}
-              sourceEvidenceRecorded={sourceEvidenceId !== null}
-              onCreateManagedClone={handleCreateManagedClone}
-              onRecordSourceEvidence={handleRecordSourceEvidence}
-              onRegisterExternalClone={handleRegisterExternalClone}
-              onVerifyExternal={handleVerifyExternalClone}
-              onReverify={handleReverifyClone}
-            />
+  const statusBar = (
+    <WorkspaceStatusBar
+      connected={session !== null}
+      busy={busy}
+      changeBusy={changeBusy}
+      error={error}
+      recovery={recovery}
+      renameRecovery={renameRecovery}
+      onFocusChangeDrawer={focusChangeDrawer}
+      onShowInspector={showInspectorPane}
+      inspectorHidden={narrow && centerView === "list"}
+    />
+  );
+
+  const cloneFooter = catalogReady && session !== null ? (
+    <CloneOperatorPanel
+      session={session}
+      cloneVerification={cloneVerification}
+      busy={busy || changeBusy}
+      sourceEvidenceRecorded={sourceEvidenceId !== null}
+      onCreateManagedClone={handleCreateManagedClone}
+      onRecordSourceEvidence={handleRecordSourceEvidence}
+      onRegisterExternalClone={handleRegisterExternalClone}
+      onVerifyExternal={handleVerifyExternalClone}
+      onReverify={handleReverifyClone}
+    />
+  ) : null;
+
+  const workspaceShell = (
+    <AppShell
+      contextBar={(
+        <>
+          {topBar}
+          {error !== null && (
+            <p className="root-registry-context-error" role="alert">
+              {error}
+            </p>
           )}
-        </SourcesPane>
+        </>
+      )}
+      narrowControls={narrowControls}
+      narrowLayout={narrow}
+      navigationOpen={navigationOpen}
+      onNavigationOpenChange={setNavigationOpen}
+      centerView={centerView}
+      onCenterViewChange={setCenterView}
+      sources={
+        catalogReady ? (
+          <CatalogWorkspaceNav footer={cloneFooter} />
+        ) : (
+          <p className="root-registry-nav-empty">{t("roots.mainEmpty")}</p>
+        )
       }
       main={
         catalogReady ? (
-          <CatalogLibraryBrowser
-            key={session.rootId}
-            rootId={session.rootId}
-            snapshot={library}
-            audioClient={audioClient}
-            metadataClient={metadataClient}
-            inspectorPlacement="shell"
-            onSelectedAssetChange={setSelectedAsset}
-            onBrowseContextChange={setBrowseContext}
-          />
+          <CatalogWorkspaceMain totalFiles={library.audioFiles.length} />
         ) : (
           <p className="root-registry-main-empty">{t("roots.mainEmpty")}</p>
         )
       }
       inspector={
         catalogReady ? (
-          <InspectorPane
-            assetLabel={selectedAsset?.displayName}
-            relativePath={selectedAsset?.relativePath}
-          >
-            {selectedAsset !== null && (
-              <div
-                key={`${session.rootId}:${selectedAsset.assetId}:${selectedAsset.relativePath}`}
-              >
+          <div ref={inspectorPaneRef} tabIndex={-1} className="root-registry-inspector-host">
+            <InspectorPane
+              assetLabel={selectedAsset?.displayName}
+              relativePath={selectedAsset?.relativePath}
+            >
+              {selectedAsset !== null && session !== null && (
+                <div key={`${session.rootId}:${selectedAsset.fileInstanceId}`}>
                 <RenamePreparedNotice recovery={renameRecovery} />
                 <div className="root-registry-rename-actions">
                   <Button
@@ -533,6 +639,8 @@ export function RootRegistryPanel({
                   api={audioClient}
                   rootId={session.rootId}
                   assetId={selectedAsset.assetId}
+                  fileInstanceId={selectedAsset.fileInstanceId}
+                  geometrySelectionGeneration={geometrySelectionGeneration}
                   displayName={selectedAsset.displayName}
                   onCommittedGeometryRangeChange={handleLibraryGeometryRange}
                   stopPlaybackToken={stopLibraryPlaybackToken}
@@ -541,7 +649,7 @@ export function RootRegistryPanel({
                   rootId={session.rootId}
                   fileInstanceId={selectedAsset.fileInstanceId}
                   displayName={selectedAsset.displayName}
-                  librarySelectionRange={libraryGeometryRange}
+                  librarySelectionRange={librarySelectionRange}
                   onRequestStopLibraryPlayback={requestStopLibraryPlayback}
                 />
                 <UsageGraphPanel
@@ -556,12 +664,14 @@ export function RootRegistryPanel({
                 />
               </div>
             )}
-          </InspectorPane>
+            </InspectorPane>
+          </div>
         ) : undefined
       }
+      statusBar={statusBar}
       changeDrawer={
         catalogReady ? (
-          <>
+          <div ref={changeDrawerRef} tabIndex={-1}>
             <RenameOperatorPanel
               session={session}
               changeRecovery={recovery}
@@ -590,10 +700,28 @@ export function RootRegistryPanel({
               onBusyChange={setChangeBusy}
               onRecoveryChange={setRecovery}
             />
-          </>
+          </div>
         ) : undefined
       }
     />
+  );
+
+  return (
+    <>
+      {catalogReady && session !== null && library !== null ? (
+        <CatalogBrowseProvider
+          key={session.rootId}
+          snapshot={library}
+          search={locationSearch}
+          onSearchChange={setLocationSearch}
+          onSelectedAssetChange={setSelectedAsset}
+          onBrowseContextChange={setBrowseContext}
+        >
+          {workspaceShell}
+        </CatalogBrowseProvider>
+      ) : (
+        workspaceShell
+      )}
     {catalogReady && renameModalOpen && renameModalAsset !== null && session !== null && (
       <RenameSampleModal
         open={renameModalOpen}

@@ -14,6 +14,9 @@ import './SplitPane.css'
 interface SplitPaneContextValue {
   primarySize: number
   primaryVisible: boolean
+  minPrimary: number
+  maxPrimary: number
+  setPrimarySize: (percent: number) => void
   startResize: (e: ReactMouseEvent) => void
 }
 
@@ -95,7 +98,14 @@ function SplitPaneRoot({
 
   return (
     <SplitPaneContext.Provider
-      value={{ primarySize, primaryVisible, startResize }}
+      value={{
+        primarySize,
+        primaryVisible,
+        minPrimary,
+        maxPrimary,
+        setPrimarySize,
+        startResize,
+      }}
     >
       <div ref={containerRef} className={merged} {...rest}>
         {children}
@@ -128,14 +138,27 @@ function SplitPanePrimary({
   )
 }
 
-export type SplitPaneDividerProps = HTMLAttributes<HTMLDivElement>
+export interface SplitPaneDividerProps extends HTMLAttributes<HTMLDivElement> {
+  resizeAriaLabel?: string
+  keyboardStep?: number
+}
 
 function SplitPaneDivider({
   className,
   onMouseDown,
+  onKeyDown,
+  resizeAriaLabel = 'Resize panes',
+  keyboardStep = 2,
   ...rest
 }: SplitPaneDividerProps) {
-  const { primaryVisible, startResize } = useSplitPaneContext('SplitPane.Divider')
+  const {
+    primaryVisible,
+    startResize,
+    primarySize,
+    setPrimarySize,
+    minPrimary,
+    maxPrimary,
+  } = useSplitPaneContext('SplitPane.Divider')
   if (!primaryVisible) return null
   const merged = ['mo-split-pane__divider', 'panel-divider', className]
     .filter(Boolean)
@@ -143,9 +166,26 @@ function SplitPaneDivider({
   return (
     <div
       className={merged}
+      role="separator"
+      aria-orientation="vertical"
+      aria-valuenow={Math.round(primarySize)}
+      aria-valuemin={minPrimary}
+      aria-valuemax={maxPrimary}
+      aria-label={resizeAriaLabel}
+      tabIndex={0}
       onMouseDown={(e) => {
         startResize(e)
         onMouseDown?.(e)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault()
+          setPrimarySize(primarySize - keyboardStep)
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault()
+          setPrimarySize(primarySize + keyboardStep)
+        }
+        onKeyDown?.(e)
       }}
       {...rest}
     />
