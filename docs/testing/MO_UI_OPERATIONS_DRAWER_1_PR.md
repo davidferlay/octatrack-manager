@@ -5,7 +5,7 @@
 | | SHA |
 | --- | --- |
 | Base (#133 `feat/ui-library-inspector-migration-1`) | `285999ee9f7c7ee5eed836afb0e01cc6cb85f8c7` |
-| Final head | _(set at push)_ |
+| Final head | `2090794fa46c55d33097e1ce7e67a9db3323df12` |
 
 ## Dependency
 
@@ -49,7 +49,7 @@
 | `pnpm run typecheck` | PASS |
 | `pnpm run test:frontend` | PASS — 78 files / 601 tests |
 | `pnpm run build` | PASS |
-| `pnpm run check:architecture` | _(record at push)_ |
+| `pnpm run check:architecture` | **NOT_RUN** — `cargo metadata` unavailable in this environment |
 | `cargo fmt/clippy/test` | _(NOT_RUN if no cargo in environment)_ |
 | E2E rename-prepare / rename-operator / waveform 840px | Updated for Drawer + locale; run on CI |
 | Native Tauri acceptance | **NOT_RUN** — mock IPC only |
