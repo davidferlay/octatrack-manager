@@ -6,12 +6,9 @@ import type {
 } from "../../api";
 import { audioApi, metadataApi } from "../../api";
 import { useTranslate } from "../../i18n";
-import { ManualAssetMetadataEditor } from "../metadata/ManualAssetMetadataEditor";
+import { InspectorTabbedAssetPanel } from "../inspector";
 import { ProjectWorkspace } from "../project-workspace";
-import { UsageGraphPanel } from "../usage";
 import { useLibraryGeometrySelection } from "../waveform/libraryGeometrySelection";
-import { WaveformPreview } from "../waveform/WaveformPreview";
-import { SliceWorkbench } from "../slicing/SliceWorkbench";
 import { AudioLibrary } from "./AudioLibrary";
 import { CatalogFileList } from "./CatalogFileList";
 import { CatalogLocationNav } from "./CatalogLocationNav";
@@ -138,32 +135,22 @@ export function CatalogLibraryBrowser({
               className="catalog-library-inspector-content"
               key={`${rootId}:${browse.selectedFile.fileInstanceId}`}
             >
-              <WaveformPreview
-                api={audioClient}
+              <InspectorTabbedAssetPanel
                 rootId={rootId}
-                assetId={browse.selectedFile.assetId}
-                fileInstanceId={browse.selectedFile.fileInstanceId}
+                file={browse.selectedFile}
+                snapshot={snapshot}
+                audioClient={audioClient}
+                metadataClient={metadataClient}
                 geometrySelectionGeneration={geometrySelectionGeneration}
-                displayName={browse.selectedFile.displayName}
-                onCommittedGeometryRangeChange={handleLibraryGeometryRange}
-                stopPlaybackToken={stopLibraryPlaybackToken}
-              />
-              <SliceWorkbench
-                rootId={rootId}
-                fileInstanceId={browse.selectedFile.fileInstanceId}
-                displayName={browse.selectedFile.displayName}
                 librarySelectionRange={librarySelectionRange}
+                stopPlaybackToken={stopLibraryPlaybackToken}
+                renameRecovery={null}
+                renameBlocked
+                renameBusy={false}
+                writeEnabled={false}
+                onRename={() => undefined}
+                onCommittedGeometryRangeChange={handleLibraryGeometryRange}
                 onRequestStopLibraryPlayback={requestStopLibraryPlayback}
-              />
-              <UsageGraphPanel
-                relativePath={browse.selectedFile.relativePath}
-                edges={snapshot.usageEdges}
-              />
-              <ManualAssetMetadataEditor
-                api={metadataClient}
-                rootId={rootId}
-                assetId={browse.selectedFile.assetId}
-                displayName={browse.selectedFile.displayName}
               />
             </div>
           )}

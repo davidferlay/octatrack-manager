@@ -11,15 +11,14 @@ describe('InspectorPane', () => {
     expect(screen.getByText(tJa('inspector.empty'))).toBeInTheDocument()
   })
 
-  it('renders asset label, relative path, and children without absolute paths', () => {
+  it('renders tabbed children without duplicating the legacy header', () => {
     render(
       <InspectorPane assetLabel="KICK.wav" relativePath="LIVE_SET/AUDIO/KICK.wav">
         <div>Waveform and notes</div>
       </InspectorPane>,
     )
-    expect(screen.getByText('KICK.wav')).toBeInTheDocument()
-    expect(screen.getByText('LIVE_SET/AUDIO/KICK.wav')).toBeInTheDocument()
     expect(screen.getByText('Waveform and notes')).toBeInTheDocument()
+    expect(screen.queryByText(tJa('inspector.title'))).not.toBeInTheDocument()
     expect(screen.queryByText('/private/')).not.toBeInTheDocument()
   })
 })

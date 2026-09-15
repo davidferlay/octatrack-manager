@@ -24,7 +24,8 @@ export interface CatalogFileListProps {
   onSortChange: (next: CatalogFileSort) => void;
   onPageChange: (next: number) => void;
   hideSearch?: boolean;
-  showExtension?: boolean;
+  catalogRefreshing?: boolean;
+  catalogError?: string | null;
 }
 
 export function CatalogFileList({
@@ -38,7 +39,8 @@ export function CatalogFileList({
   onSortChange,
   onPageChange,
   hideSearch = false,
-  showExtension = false,
+  catalogRefreshing = false,
+  catalogError = null,
 }: CatalogFileListProps) {
   const t = useTranslate();
 
@@ -47,6 +49,10 @@ export function CatalogFileList({
     : search.trim() !== "" && fileQuery.matchingCount === 0
       ? t("library.noSearchMatches")
       : null;
+
+  const selectedOffPage = selectedFileInstanceId !== null
+    && !fileQuery.visible.some((file) => file.fileInstanceId === selectedFileInstanceId)
+    && locationFiles.some((file) => file.fileInstanceId === selectedFileInstanceId);
 
   return (
     <div className="catalog-library-column catalog-library-files" aria-label={t("library.audioFilesAria")}>
@@ -84,30 +90,76 @@ export function CatalogFileList({
             })
           : t("library.fileCountLocation", { total: fileQuery.locationCount })}
       </p>
-      <div className="catalog-library-options">
-        {fileQuery.visible.map((file) => (
-          <button
-            type="button"
-            className="catalog-library-file"
-            aria-pressed={file.fileInstanceId === selectedFileInstanceId}
-            key={file.fileInstanceId}
-            onClick={() => onSelectFile(file.fileInstanceId)}
-          >
-            <div>
-              <strong title={file.displayName}>{file.displayName}</strong>
-              <code title={file.relativePath}>{file.relativePath}</code>
-            </div>
-            <span className="catalog-library-file__meta">
-              {showExtension && (
-                <span className="catalog-library-file__ext">
+      {catalogRefreshing && (
+        <p className="catalog-library-list-status" role="status">
+          {t("library.fileListRefreshing")}
+        </p>
+      )}
+      {catalogError !== null && catalogError !== "" && (
+        <p className="catalog-library-list-error" role="alert">
+          {t("library.fileListLoadFailed")}
+        </p>
+      )}
+      {selectedOffPage && (
+        <p className="catalog-library-list-offpage" role="status">
+          {t("library.selectionOffPage")}
+        </p>
+      )}
+      <div
+        className="catalog-file-table"
+        role="grid"
+        aria-rowcount={fileQuery.visible.length + 1}
+        aria-colcount={3}
+      >
+        <div className="catalog-file-table__header" role="row" aria-rowindex={1}>
+          <span className="catalog-file-table__cell catalog-file-table__cell--name" role="columnheader">
+            {t("library.columnName")}
+          </span>
+          <span className="catalog-file-table__cell catalog-file-table__cell--size" role="columnheader">
+            {t("library.columnSize")}
+          </span>
+          <span className="catalog-file-table__cell catalog-file-table__cell--format" role="columnheader">
+            {t("library.columnFormat")}
+          </span>
+        </div>
+        <div className="catalog-file-table__body" role="rowgroup">
+          {fileQuery.visible.map((file, index) => {
+            const selected = file.fileInstanceId === selectedFileInstanceId;
+            return (
+              <div
+                className="catalog-file-table__row"
+                role="row"
+                aria-rowindex={index + 2}
+                tabIndex={0}
+                aria-selected={selected}
+                key={file.fileInstanceId}
+                onClick={() => onSelectFile(file.fileInstanceId)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelectFile(file.fileInstanceId);
+                  }
+                }}
+              >
+                <span className="catalog-file-table__cell catalog-file-table__cell--name" role="gridcell">
+                  <strong className="catalog-file-table__name" title={file.displayName}>
+                    {file.displayName}
+                  </strong>
+                  <code className="catalog-file-table__path" title={file.relativePath}>
+                    {file.relativePath}
+                  </code>
+                </span>
+                <span className="catalog-file-table__cell catalog-file-table__cell--size" role="gridcell">
+                  {formatCatalogBytes(file.byteSize)}
+                </span>
+                <span className="catalog-file-table__cell catalog-file-table__cell--format" role="gridcell">
                   {fileExtensionFromName(file.displayName)}
                 </span>
-              )}
-              {formatCatalogBytes(file.byteSize)}
-            </span>
-          </button>
-        ))}
-        {emptyFilesMessage !== null && (
+              </div>
+            );
+          })}
+        </div>
+        {emptyFilesMessage !== null && fileQuery.visible.length === 0 && (
           <p className="catalog-library-empty">{emptyFilesMessage}</p>
         )}
       </div>

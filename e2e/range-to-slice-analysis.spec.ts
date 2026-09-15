@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { clickCatalogFileRow } from "./catalogFileRow";
 import { uiText } from "./i18n";
 
 test("library range selection flows into explicit slice analysis", async ({ page }) => {
@@ -139,12 +140,13 @@ test("library range selection flows into explicit slice analysis", async ({ page
   await page.setViewportSize({ width: 1280, height: 840 });
   await page.goto("/");
   await page.getByRole("button", { name: uiText("ja", "sources.chooseRoot") }).click();
-  await page.getByRole("button", { name: /RANGE\.wav/ }).click();
+  await clickCatalogFileRow(page, "ja", "RANGE.wav");
 
   await page.getByLabel(uiText("ja", "waveform.startFrame")).fill("11025");
   await page.getByLabel(uiText("ja", "waveform.endFrame")).fill("22050");
   await page.getByRole("button", { name: uiText("ja", "waveform.playRange") }).click();
 
+  await page.getByRole("tab", { name: uiText("ja", "inspector.tabSlice") }).click();
   const slice = page.getByRole("region", { name: uiText("ja", "slicing.ariaFor", { displayName: "RANGE.wav" }) });
   await slice.getByRole("button", { name: uiText("ja", "slicing.analyzeSelectedRange") }).click();
 

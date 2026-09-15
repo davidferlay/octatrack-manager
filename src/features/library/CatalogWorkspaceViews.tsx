@@ -33,7 +33,17 @@ export function CatalogWorkspaceNav({ footer }: { footer?: ReactNode }) {
   );
 }
 
-export function CatalogWorkspaceMain({ totalFiles }: { totalFiles: number }) {
+export interface CatalogWorkspaceMainProps {
+  totalFiles: number;
+  catalogRefreshing?: boolean;
+  catalogError?: string | null;
+}
+
+export function CatalogWorkspaceMain({
+  totalFiles,
+  catalogRefreshing = false,
+  catalogError = null,
+}: CatalogWorkspaceMainProps) {
   const browse = useCatalogBrowseContext();
   const t = useTranslate();
 
@@ -48,7 +58,8 @@ export function CatalogWorkspaceMain({ totalFiles }: { totalFiles: number }) {
       onSortChange={browse.setSort}
       onPageChange={browse.setRequestedPage}
       hideSearch
-      showExtension
+      catalogRefreshing={catalogRefreshing}
+      catalogError={catalogError}
     />
   );
 

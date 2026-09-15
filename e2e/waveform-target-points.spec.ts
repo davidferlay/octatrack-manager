@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { clickCatalogFileRow } from "./catalogFileRow";
 import { uiText } from "./i18n";
 import { LOCALE_STORAGE_KEY } from "../src/i18n/registry";
 
@@ -64,7 +65,7 @@ test("uses width-quantized targetPoints for v2_audio_waveform_query", async ({ p
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
   await page.getByRole("button", { name: uiText("ja", "sources.chooseRoot") }).click();
-  await page.getByRole("button", { name: /HIT\.wav/ }).click();
+  await clickCatalogFileRow(page, "ja", "HIT.wav");
   await expect(page.getByRole("img", { name: uiText("ja", "waveform.plotAria") })).toBeVisible();
 
   await expect.poll(async () => {

@@ -219,12 +219,13 @@ describe("RootRegistryPanel", () => {
     const inspector = screen.getByLabelText(tJa("inspector.aria"));
     expect(inspector).toHaveTextContent(tJa("inspector.empty"));
 
-    fireEvent.click(screen.getByRole("button", { name: /KICK\.wav/ }));
+    fireEvent.click(screen.getByText("KICK.wav"));
 
     expect(await screen.findByDisplayValue("kick")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Shell note")).toBeInTheDocument();
     expect(inspector).toHaveTextContent("KICK.wav");
     expect(inspector).toHaveTextContent("LIVE_SET/AUDIO/KICK.wav");
+    fireEvent.click(screen.getByRole("tab", { name: tJa("inspector.tabUsage") }));
     expect(
       screen.getByText(/PROJECT_A · Bank A \(1\) · S001 · Part 1 · T1 · Machine · Working/),
     ).toBeInTheDocument();
@@ -233,7 +234,7 @@ describe("RootRegistryPanel", () => {
     await waitFor(() => expect(audioClient.queryWaveform).toHaveBeenCalledWith(
       "root-opaque",
       "asset:v1:opaque",
-      { range: null, targetPoints: 640 },
+      expect.objectContaining({ range: null }),
     ));
     expect(metadataClient.loadManualAssetMetadata).toHaveBeenCalledWith(
       "root-opaque",
@@ -378,7 +379,7 @@ describe("RootRegistryPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
     expect(await screen.findByText("PROJECT_A")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /KICK\.wav/ }));
+    fireEvent.click(screen.getByText("KICK.wav"));
     const closeRoot = screen.getByRole("button", { name: tJa("sources.closeRoot") });
     fireEvent.change(screen.getByLabelText("Destination relative path"), {
       target: { value: "LIVE_SET/PROJECT_A/KICK_COPY.wav" },
@@ -440,9 +441,52 @@ describe("RootRegistryPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
     expect(await screen.findByText("PROJECT_A")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /KICK\.wav/ }));
-    expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
+    fireEvent.click(screen.getByText("KICK.wav"));
+    expect(screen.getByRole("button", { name: tJa("inspector.renameAction") })).toBeInTheDocument();
     expect(screen.getByText(/A prepared rename operation exists/i)).toBeInTheDocument();
     expect(renameClient.recoveryStatus).toHaveBeenCalled();
+  });
+
+  it("does not treat write-mode busy as a catalog refresh", async () => {
+    const api = fakeApi();
+    vi.mocked(api.enableWrite).mockImplementation(() => new Promise(() => undefined));
+    renderPanel(
+      <RootRegistryPanel
+        api={api}
+        changeClient={fakeChangeApi()}
+        cloneClient={fakeCloneApi()}
+        renameClient={fakeRenameApi()}
+        selectDirectory={vi.fn().mockResolvedValue("/tmp/fixture-root")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
+    expect(await screen.findByText("KICK.wav")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: tJa("sources.editMode") }));
+
+    expect(screen.queryByText(tJa("library.fileListRefreshing"))).not.toBeInTheDocument();
+    expect(screen.queryByText(tJa("library.fileListLoadFailed"))).not.toBeInTheDocument();
+    expect(screen.getByText("KICK.wav")).toBeInTheDocument();
+  });
+
+  it("shows catalog refresh status only while the catalog request is in flight", async () => {
+    const api = fakeApi();
+    renderPanel(
+      <RootRegistryPanel
+        api={api}
+        changeClient={fakeChangeApi()}
+        cloneClient={fakeCloneApi()}
+        renameClient={fakeRenameApi()}
+        selectDirectory={vi.fn().mockResolvedValue("/tmp/fixture-root")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
+    expect(await screen.findByText("KICK.wav")).toBeInTheDocument();
+    vi.mocked(api.listLibrary).mockImplementation(() => new Promise(() => undefined));
+    fireEvent.click(screen.getByRole("button", { name: tJa("workspace.refreshCatalog") }));
+
+    expect(await screen.findByText(tJa("library.fileListRefreshing"))).toBeInTheDocument();
+    expect(screen.getByText("KICK.wav")).toBeInTheDocument();
   });
 });

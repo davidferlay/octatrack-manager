@@ -69,8 +69,12 @@ interface WaveformPreviewProps {
     range: LibraryCommittedGeometryRange | null,
     notification?: LibraryGeometryNotification,
   ) => void;
-  /** Increment to stop range preview playback from a sibling control (e.g. slice analysis). */
+  /** Increment to stop range and head preview playback from a sibling control. */
   stopPlaybackToken?: number;
+  /** When false, plot width is frozen so hidden tabs do not re-query waveform IPC. */
+  layoutVisible?: boolean;
+  /** True while head preview loading/playback or range playback is active. */
+  onPlaybackActivityChange?: (active: boolean) => void;
 }
 
 function errorMessage(error: unknown): string {
@@ -127,12 +131,15 @@ export function WaveformPreview({
   queryDebounceMs = WAVEFORM_QUERY_DEBOUNCE_MS,
   onCommittedGeometryRangeChange,
   stopPlaybackToken = 0,
+  layoutVisible = true,
+  onPlaybackActivityChange,
 }: WaveformPreviewProps) {
   const t = useTranslate();
   const [waveform, setWaveform] = useState<AudioWaveformWindow | null>(null);
   const [waveformError, setWaveformError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
+  const [headPlaying, setHeadPlaying] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [truncated, setTruncated] = useState(false);
   const [rangeStartFrame, setRangeStartFrame] = useState("0");
@@ -145,6 +152,7 @@ export function WaveformPreview({
   const rangeRequest = useRef(0);
   const waveformRequest = useRef(0);
   const plotContainerRef = useRef<HTMLDivElement | null>(null);
+  const frozenPlotWidthRef = useRef(0);
   const lastQueryKeyRef = useRef<string | null>(null);
   const applyRangeOnNextWaveformRef = useRef(true);
   const debouncedTargetPointsRef = useRef<number | null>(null);
@@ -216,6 +224,7 @@ export function WaveformPreview({
 
   const pauseHeadPreview = useCallback(() => {
     headAudioRef.current?.pause();
+    setHeadPlaying(false);
   }, []);
 
   const stopSelectedRange = useCallback(() => {
@@ -225,6 +234,11 @@ export function WaveformPreview({
     setRangeError(null);
   }, [stopRangePlayback]);
 
+  const stopAllPlayback = useCallback(() => {
+    stopSelectedRange();
+    pauseHeadPreview();
+  }, [pauseHeadPreview, stopSelectedRange]);
+
   useLayoutEffect(() => {
     const element = plotContainerRef.current;
     if (element === null) {
@@ -232,7 +246,13 @@ export function WaveformPreview({
     }
 
     const publishWidth = (widthCss: number) => {
-      setPlotWidthCss(widthCss);
+      if (!layoutVisible) {
+        if (widthCss > 0) frozenPlotWidthRef.current = widthCss;
+        return;
+      }
+      const next = widthCss > 0 ? widthCss : frozenPlotWidthRef.current;
+      if (next > 0) frozenPlotWidthRef.current = next;
+      setPlotWidthCss(next);
     };
 
     if (typeof ResizeObserver !== "undefined") {
@@ -249,7 +269,22 @@ export function WaveformPreview({
     measure();
     window.addEventListener("resize", measure);
     return () => window.removeEventListener("resize", measure);
-  }, []);
+  }, [layoutVisible]);
+
+  useEffect(() => {
+    if (!layoutVisible) return;
+    const element = plotContainerRef.current;
+    if (element === null) return;
+    const widthCss = readPlotContainerWidthCss(element);
+    if (widthCss > 0) {
+      frozenPlotWidthRef.current = widthCss;
+      setPlotWidthCss(widthCss);
+    }
+  }, [layoutVisible]);
+
+  useEffect(() => {
+    onPlaybackActivityChange?.(previewing || headPlaying || rangePlaying || rangeLoading);
+  }, [headPlaying, onPlaybackActivityChange, previewing, rangePlaying, rangeLoading]);
 
   useEffect(() => {
     const immediate = targetPointsFromPlotWidthCss(plotWidthCss);
@@ -409,6 +444,7 @@ export function WaveformPreview({
     setRangeError(null);
     setRangeLoading(false);
     setPreviewing(false);
+    setHeadPlaying(false);
     setViewportRange(null);
     setDebouncedViewport(null);
     setFileMetadata(null);
@@ -482,8 +518,8 @@ export function WaveformPreview({
   ]);
 
   useEffect(() => {
-    stopSelectedRange();
-  }, [stopPlaybackToken, stopSelectedRange]);
+    stopAllPlayback();
+  }, [stopPlaybackToken, stopAllPlayback]);
 
   const committedSelection = committedGeometryRange;
 
@@ -966,7 +1002,12 @@ export function WaveformPreview({
           ref={headAudioRef}
           aria-label={t("waveform.previewAria", { displayName })}
           controls
-          onPlay={stopSelectedRange}
+          onPlay={() => {
+            stopSelectedRange();
+            setHeadPlaying(true);
+          }}
+          onPause={() => setHeadPlaying(false)}
+          onEnded={() => setHeadPlaying(false)}
           preload="metadata"
           src={previewUrl}
         />
