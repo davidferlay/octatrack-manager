@@ -7,6 +7,7 @@ import {
   frameFitsJsNumber,
   maxLibraryPreviewFrames,
   validateFrameRange,
+  validateGeometryFrameRange,
 } from "./frameMath";
 
 describe("frameMath", () => {
@@ -39,6 +40,15 @@ describe("frameMath", () => {
     expect(() => validateFrameRange("0", "100", "100", 44100, 2)).not.toThrow();
     expect(() => validateFrameRange("10", "10", "100", 44100, 2)).toThrow(/empty or inverted/);
     expect(() => validateFrameRange("0", "101", "100", 44100, 2)).toThrow(/beyond the file length/);
+  });
+
+  it("allows geometry-valid ranges beyond the Library preview limit for analysis handoff", () => {
+    const sixtySeconds = maxLibraryPreviewFrames(44100, 2);
+    const beyond = (sixtySeconds + 100n).toString();
+    expect(() => validateGeometryFrameRange("0", beyond, (sixtySeconds + 200n).toString())).not.toThrow();
+    expect(() => validateFrameRange("0", beyond, (sixtySeconds + 200n).toString(), 44100, 2)).toThrow(
+      /60 second or 32 MiB/,
+    );
   });
 
   it("rejects ranges over the Library 60s / 32 MiB preview limit", () => {

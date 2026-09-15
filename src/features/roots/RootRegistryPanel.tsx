@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
   audioApi,
@@ -38,7 +38,10 @@ import {
 import { ManualAssetMetadataEditor } from "../metadata/ManualAssetMetadataEditor";
 import { SourcesPane } from "../sources";
 import { UsageGraphPanel } from "../usage";
-import { WaveformPreview } from "../waveform/WaveformPreview";
+import {
+  WaveformPreview,
+  type LibraryCommittedGeometryRange,
+} from "../waveform/WaveformPreview";
 import { SliceWorkbench } from "../slicing/SliceWorkbench";
 import "./RootRegistryPanel.css";
 
@@ -96,6 +99,18 @@ export function RootRegistryPanel({
   const [changeBusy, setChangeBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedAsset, setSelectedAsset] = useState<CatalogAssetSelection | null>(null);
+  const [libraryGeometryRange, setLibraryGeometryRange] =
+    useState<LibraryCommittedGeometryRange | null>(null);
+  const [stopLibraryPlaybackToken, setStopLibraryPlaybackToken] = useState(0);
+  const handleLibraryGeometryRange = useCallback(
+    (range: LibraryCommittedGeometryRange | null) => {
+      setLibraryGeometryRange(range);
+    },
+    [],
+  );
+  const requestStopLibraryPlayback = useCallback(() => {
+    setStopLibraryPlaybackToken((token) => token + 1);
+  }, []);
   const [recovery, setRecovery] = useState<ChangeRecoveryStatus | null>(null);
   const [renameRecovery, setRenameRecovery] = useState<RenameRecoveryStatus | null>(null);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
@@ -519,11 +534,15 @@ export function RootRegistryPanel({
                   rootId={session.rootId}
                   assetId={selectedAsset.assetId}
                   displayName={selectedAsset.displayName}
+                  onCommittedGeometryRangeChange={handleLibraryGeometryRange}
+                  stopPlaybackToken={stopLibraryPlaybackToken}
                 />
                 <SliceWorkbench
                   rootId={session.rootId}
                   fileInstanceId={selectedAsset.fileInstanceId}
                   displayName={selectedAsset.displayName}
+                  librarySelectionRange={libraryGeometryRange}
+                  onRequestStopLibraryPlayback={requestStopLibraryPlayback}
                 />
                 <UsageGraphPanel
                   relativePath={selectedAsset.relativePath}

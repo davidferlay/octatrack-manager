@@ -179,4 +179,62 @@ export const jaMessages: Record<MessageKey, string> = {
   'legacy.toastWithFallback': '{fallback}: {detail}',
 
   'common.errorWithDetail': '{summary}: {detail}',
+
+  'slicing.ariaFor': '{displayName} の自動スライス',
+  'slicing.heading': 'アタックスライス',
+  'slicing.localDraft': 'ローカル draft',
+  'slicing.intro':
+    'アタックを検出し、境界を確認してから候補を draft に反映します。',
+  'slicing.regionDetails': '解析範囲と対応オーディオ',
+  'slicing.supportedFormats':
+    '16/24-bit PCM WAV または AIFF · mono/stereo · 44.1/48 kHz · ソース ≤64 MiB · 範囲 ≤10 分',
+  'slicing.regionHelp':
+    '両方空欄の場合は保存済み範囲またはファイル全体を使います。座標はソース PCM フレームで、終了は exclusive です。',
+  'slicing.regionStart': '範囲開始',
+  'slicing.regionEnd': '範囲終了',
+  'slicing.analyzeSelectedRange': 'この範囲を解析',
+  'slicing.detectAttacks': 'アタックを検出',
+  'slicing.analyzeAgain': '再解析',
+  'slicing.analyzing': '解析中…',
+  'slicing.cancelAnalysis': '解析をキャンセル',
+  'slicing.closeAnalysis': '解析を閉じる',
+  'slicing.readingSource': 'ソース PCM を読み込み・検証中…',
+  'slicing.detectingAttacks': 'アタックを検出中…',
+  'slicing.analysisRegionHeading': 'このジョブの解析対象範囲',
+  'slicing.analysisRegionFrames': 'フレーム [{start}, {end})',
+  'slicing.detectionLegend': '検出',
+  'slicing.sensitivity': '感度',
+  'slicing.minimumIntervalMs': '最小間隔 (ms)',
+  'slicing.preRollMs': 'プリロール (ms)',
+  'slicing.silenceFloorDb': '無音フロア (dB)',
+  'slicing.snapRadiusMs': 'クワイエットポイント (ms)',
+  'slicing.applyCandidates': '候補を draft に反映',
+  'slicing.updatingCandidates': '候補を更新中…',
+  'slicing.candidatesUnavailable': '候補を利用できません',
+  'slicing.candidatesSummary': '候補 {count} · 抑制 {suppressed}',
+  'slicing.noAttacksFound':
+    'この設定ではアタックが見つかりませんでした。手動で境界を追加できます。',
+  'slicing.exceedsDraftLimit':
+    '候補が 4096 を超えています。先頭 4096 のみ表示され、反映はブロックされます。感度を下げるか範囲を狭めてください。',
+  'slicing.reviewBoundaries': '確認が必要な候補境界: {count}',
+  'slicing.draftSummary':
+    'draft スライス {count} · revision {revision}。手編集と固定境界は再解析後も保持されます。固定解除で置換可能です。Undo はこの解析セッション内のみです。',
+  'slicing.exceedsOtLimit': 'この draft は Octatrack の 64 スライス上限を超えています。',
+  'slicing.exportNotice':
+    'draft の編集は Masta-Octa に保存されます。Octatrack .ot エクスポートは未対応です。',
+  'slicing.reanalyze48000':
+    ' Octatrack 出力には別の 44.1 kHz アセットと再解析が必要です。',
+  'slicing.error.generic': 'スライス操作を完了できませんでした。',
+  'slicing.error.genericDetail': 'スライス操作を完了できませんでした。{detail}',
+  'slicing.error.ANALYSIS_REGION_MISMATCH':
+    'このファイルには別の解析範囲の draft が既にあります。範囲変更や draft 分岐は未対応です。',
+  'slicing.error.ANALYSIS_BUSY': '別の解析が実行中です。',
+  'slicing.error.ANALYSIS_CANCELLED': '解析はキャンセルされました。',
+  'slicing.error.ANALYSIS_NOT_FOUND': '解析は利用できません。',
+  'slicing.error.DRAFT_CONFLICT': 'draft が変更されました。編集前に再読み込みしてください。',
+  'slicing.error.SOURCE_CHANGED': 'ソースが変更されました。再スキャンしてから再解析してください。',
+  'slicing.error.AUDIO_LIMIT_EXCEEDED':
+    'ソースが現在のスナップショットまたは解析サイズ上限を超えています。',
+  'slicing.error.INVALID_SLICE_REQUEST': '解析リクエストが無効です。',
+  'slicing.error.REQUEST_SUPERSEDED': 'より新しいリクエストに置き換えられました。',
 }

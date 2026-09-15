@@ -360,6 +360,90 @@ describe("WaveformPreview", () => {
     expect(client.readPreview).not.toHaveBeenCalled();
   });
 
+  it("does not read or play after stopPlaybackToken when range create completes", async () => {
+    const client = api();
+    let resolveCreate: (() => void) | undefined;
+    vi.mocked(client.createRangePreviewToken).mockImplementation(
+      () => new Promise((resolve) => {
+        resolveCreate = () => resolve({
+          previewToken: "preview:v1:range",
+          expiresInSeconds: 120,
+          mimeType: "audio/wav",
+          byteLength: 4,
+          durationMillis: 500,
+          truncated: false,
+          sampleRate: 44100,
+          range: { startFrame: "0", endFrameExclusive: "44100" },
+        });
+      }),
+    );
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play");
+
+    const view = render(
+      <WaveformPreview queryDebounceMs={0}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+        stopPlaybackToken={0}
+      />,
+    );
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.playRange") }));
+
+    view.rerender(
+      <WaveformPreview queryDebounceMs={0}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+        stopPlaybackToken={1}
+      />,
+    );
+
+    resolveCreate?.();
+    await waitFor(() => expect(client.createRangePreviewToken).toHaveBeenCalled());
+    expect(client.readPreview).not.toHaveBeenCalled();
+    expect(playSpy).not.toHaveBeenCalled();
+  });
+
+  it("does not play after stopPlaybackToken when range read completes", async () => {
+    const client = api();
+    let resolveRead: (() => void) | undefined;
+    vi.mocked(client.readPreview).mockImplementation(
+      () => new Promise((resolve) => {
+        resolveRead = () => resolve(new Uint8Array([82, 73, 70, 70]).buffer);
+      }),
+    );
+    const playSpy = vi.spyOn(HTMLMediaElement.prototype, "play");
+
+    const view = render(
+      <WaveformPreview queryDebounceMs={0}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+        stopPlaybackToken={0}
+      />,
+    );
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    fireEvent.click(screen.getByRole("button", { name: tJa("waveform.playRange") }));
+    await waitFor(() => expect(client.createRangePreviewToken).toHaveBeenCalled());
+
+    view.rerender(
+      <WaveformPreview queryDebounceMs={0}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+        stopPlaybackToken={1}
+      />,
+    );
+
+    resolveRead?.();
+    await waitFor(() => expect(playSpy).not.toHaveBeenCalled());
+  });
+
   it("does not play after Stop when a delayed range create completes", async () => {
     const client = api();
     let resolveCreate: (() => void) | undefined;
@@ -869,6 +953,32 @@ describe("WaveformPreview", () => {
     });
     await waitFor(() => expect(screen.getByLabelText(tJa("waveform.startFrame"))).toHaveValue("6890"));
     expect(screen.getByLabelText(tJa("waveform.endFrame"))).toHaveValue("20672");
+  });
+
+  it("reports committed geometry ranges to the inspector without requiring preview validity", async () => {
+    const onRange = vi.fn();
+    const client = api();
+    render(
+      <WaveformPreview
+        queryDebounceMs={0}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        displayName="kick.wav"
+        onCommittedGeometryRangeChange={onRange}
+      />,
+    );
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    fireEvent.change(screen.getByLabelText(tJa("waveform.startFrame")), {
+      target: { value: "8820" },
+    });
+    fireEvent.change(screen.getByLabelText(tJa("waveform.endFrame")), {
+      target: { value: "22050" },
+    });
+    await waitFor(() => expect(onRange).toHaveBeenLastCalledWith({
+      startFrame: "8820",
+      endFrameExclusive: "22050",
+    }));
   });
 
   it("does not stretch stale peaks after the viewport changes", async () => {
