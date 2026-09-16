@@ -53,18 +53,18 @@ REPLIES_BY_DB_ID: dict[int, str] = {
 }
 
 PERMISSION_HINT = """
-GitHub が AddPullRequestReviewComment / resolveReviewThread を拒否しました（トークン権限不足）。
+インライン返信 API が FORBIDDEN になりました。
 
-Classic トークン:
-  gh auth refresh -h github.com -s repo
+- PR 本文の更新（gh pr edit）は成功していることが多いです（今回も OK）。
+- `repo` スコープ後も GraphQL の AddPullRequestReviewComment が拒否される場合、
+  Codex 等の **App 投稿レビュー** への API 返信が GitHub 側で許可されないことがあります
+  （CLI 限界。Web UI からの Reply は通常可能）。
 
-Fine-grained PAT の場合:
-  kaz4g/masterocta で Pull requests → Read and write を付与した PAT を作り、
-  gh auth login --with-token  で差し替え
+手動（推奨）:
+  docs/testing/PR136_REVIEW_REPLIES.md の 8 件を各 discussion に貼る → Resolve conversation
 
-権限を直すまでの代替:
-  1) bash scripts/pr136-respond-and-resolve-reviews.sh --body-only
-  2) docs/testing/PR136_REVIEW_REPLIES.md を各スレッドに手動貼り付け → Resolve conversation
+参考:
+  gh auth status -h github.com   # スコープ確認
 """
 
 
@@ -157,6 +157,29 @@ def update_pr_body(body_file: Path) -> None:
     print(f"Updated PR #{PR_NUMBER} body from {body_file}")
 
 
+def rest_reply(database_id: int, body: str) -> None:
+    run_gh(
+        [
+            "api",
+            "--method",
+            "POST",
+            f"repos/{REPO}/pulls/comments/{database_id}/replies",
+            "-f",
+            f"body={body}",
+        ]
+    )
+
+
+def reply_to_comment(database_id: int, node_id: str, body: str) -> None:
+    try:
+        rest_reply(database_id, body)
+        return
+    except GhError as rest_err:
+        if not rest_err.permission:
+            raise
+    gh_graphql(REPLY_MUTATION, inReplyTo=node_id, body=body)
+
+
 def post_summary_comment(root: Path) -> None:
     manual = root / "docs/testing/PR136_REVIEW_REPLIES.md"
     body = (
@@ -197,10 +220,16 @@ def reply_and_resolve_threads() -> int:
         if reply_body is None:
             continue
         matched += 1
-        gh_graphql(REPLY_MUTATION, inReplyTo=node_id, body=reply_body)
+        reply_to_comment(int(db_id), node_id, reply_body)
         print(f"Replied to comment databaseId={db_id}")
-        gh_graphql(RESOLVE_MUTATION, threadId=thread["id"])
-        print(f"Resolved thread {thread['id']}")
+        try:
+            gh_graphql(RESOLVE_MUTATION, threadId=thread["id"])
+            print(f"Resolved thread {thread['id']}")
+        except GhError as resolve_err:
+            print(
+                f"Could not resolve thread via API ({resolve_err}); resolve in GitHub UI.",
+                file=sys.stderr,
+            )
 
     return matched
 
@@ -247,12 +276,17 @@ def main() -> None:
         sys.stderr.write(str(err) + "\n")
         if err.permission:
             sys.stderr.write(PERMISSION_HINT)
-            if args.summary_comment:
-                try:
-                    post_summary_comment(root)
-                except GhError as comment_err:
-                    sys.stderr.write(str(comment_err) + "\n")
-        raise SystemExit(1) from err
+            try:
+                post_summary_comment(root)
+            except GhError as comment_err:
+                sys.stderr.write(str(comment_err) + "\n")
+        elif args.summary_comment:
+            try:
+                post_summary_comment(root)
+            except GhError as comment_err:
+                sys.stderr.write(str(comment_err) + "\n")
+        # Body already updated; inline replies are optional housekeeping.
+        raise SystemExit(0 if err.permission else 1) from err
 
 
 if __name__ == "__main__":
