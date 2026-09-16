@@ -8,6 +8,50 @@ import {
 } from "./operationsStatus";
 
 describe("operationsStatus", () => {
+  it("routes status-unavailable lookups to the panel that failed", () => {
+    expect(operationsDrawerKindForStatus({
+      recovery: { schema: "change-recovery-status:v1", recoveryRequired: false, operations: [] },
+      renameRecovery: null,
+      fallback: "clone",
+    })).toBe("rename");
+
+    expect(operationsDrawerKindForStatus({
+      recovery: null,
+      renameRecovery: { schema: "rename-recovery-status:v1", recoveryRequired: false, operations: [] },
+      fallback: "clone",
+    })).toBe("copy");
+  });
+
+  it("keeps status-bar rename entry operator-only when a file is selected", () => {
+    const preparedRecovery = {
+      schema: "rename-recovery-status:v1" as const,
+      recoveryRequired: false,
+      operations: [{
+        schema: "rename-status:v1" as const,
+        operationId: "operation:v1:abc",
+        planId: null,
+        state: "prepared" as const,
+        backupSnapshotId: "snapshot:v1:abc",
+        failureCode: null,
+        planExpired: false,
+        recoveryEligible: false,
+      }],
+    };
+    expect(resolveRenameDrawerPin({
+      renameRecovery: preparedRecovery,
+      explicitAsset: undefined,
+      selectedAsset: {
+        fileInstanceId: "other",
+        assetId: "asset:other",
+        displayName: "SNARE.wav",
+        relativePath: "LIVE_SET/AUDIO/SNARE.wav",
+      },
+      writeEnabled: true,
+      writeBlocked: false,
+      operatorOnly: true,
+    })).toEqual({ open: true, pin: null });
+  });
+
   it("detects recovery and continuation states", () => {
     expect(deriveOperationsStatus({
       connected: true,

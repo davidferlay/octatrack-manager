@@ -54,6 +54,9 @@
 | 3 | Clone adoption closes drawer | `adoptCloneRoot(..., { preserveCloneDrawer })` + user-dismiss ref | E2E `rename-operator` expects in-drawer VERIFIED |
 | 4 | E2E clone aria / locale | `openCloneAria` + scoped context bar; ja catalog row | `rename-operator`, `rename-prepare`, `waveform-zoom` |
 | 5 | Focus trap includes hidden sections | `queryTabFocusableElements` | `focusable.test.ts`, `Drawer.test.tsx` |
+| 6 | Status unavailable opens clone fallback | `operationsDrawerKindForStatus` null → rename/copy panel | `operationsStatus.test.ts` |
+| 7 | Status bar focus return stale | `openOperationsFromStatus` sets `operationsReturnFocusRef` | — |
+| 8 | Prepared + selected file pins wrong sample | `operatorOnly` on status-bar rename entry | `operationsStatus.test.ts` |
 
 ## Layout
 

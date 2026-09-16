@@ -33,9 +33,13 @@ export function resolveRenameDrawerPin(input: {
   selectedAsset: CatalogAssetSelection | null;
   writeEnabled: boolean;
   writeBlocked: boolean;
+  /** Status-bar entry: never pin list selection; operator / unavailable view only. */
+  operatorOnly?: boolean;
 }): { open: true; pin: CatalogAssetSelection | null } | { open: false } {
   const existingWork = renameHasExistingOperatorWork(input.renameRecovery);
-  const candidate = input.explicitAsset ?? input.selectedAsset ?? null;
+  const candidate = input.explicitAsset
+    ?? (input.operatorOnly ? null : input.selectedAsset)
+    ?? null;
   if (candidate === null) {
     return existingWork ? { open: true, pin: null } : { open: false };
   }
@@ -73,8 +77,10 @@ export function operationsDrawerKindForStatus(input: {
   renameRecovery: RenameRecoveryStatus | null;
   fallback: "clone" | "rename" | "copy";
 }): "clone" | "rename" | "copy" {
-  if (input.renameRecovery?.recoveryRequired === true) return "rename";
+  if (input.renameRecovery === null) return "rename";
+  if (input.recovery === null) return "copy";
+  if (input.renameRecovery.recoveryRequired === true) return "rename";
   if (preparedRenameCount(input.renameRecovery) > 0) return "rename";
-  if (input.recovery?.recoveryRequired === true) return "copy";
+  if (input.recovery.recoveryRequired === true) return "copy";
   return input.fallback;
 }

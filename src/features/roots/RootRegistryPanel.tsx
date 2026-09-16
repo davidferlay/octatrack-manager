@@ -506,7 +506,11 @@ export function RootRegistryPanel({
     || recovery.recoveryRequired
     || renameRecovery.recoveryRequired;
 
-  function openOperations(kind: OperationsDrawerKind, asset?: CatalogAssetSelection) {
+  function openOperations(
+    kind: OperationsDrawerKind,
+    asset?: CatalogAssetSelection,
+    options?: { fromStatusBar?: boolean },
+  ) {
     userDismissedOperationsRef.current = false;
     if (kind === "rename") {
       const decision = resolveRenameDrawerPin({
@@ -515,6 +519,7 @@ export function RootRegistryPanel({
         selectedAsset,
         writeEnabled: writeEnabled === true,
         writeBlocked,
+        operatorOnly: options?.fromStatusBar === true,
       });
       if (!decision.open) return;
       if (!renamePrepareBusy && !changeBusy) {
@@ -525,9 +530,9 @@ export function RootRegistryPanel({
       return;
     }
     if (kind === "copy") {
-      const next = asset ?? selectedAsset;
+      const next = options?.fromStatusBar ? (asset ?? null) : (asset ?? selectedAsset);
       if (next === null) {
-        if (recovery?.recoveryRequired !== true) return;
+        if (recovery?.recoveryRequired !== true && recovery !== null) return;
       } else if (copyBlocked && recovery?.recoveryRequired !== true) {
         return;
       } else if (!renamePrepareBusy && !changeBusy) {
@@ -546,13 +551,14 @@ export function RootRegistryPanel({
     setOperationsOpen(false);
   }
 
-  function openOperationsFromStatus() {
+  function openOperationsFromStatus(focusTarget?: HTMLElement | null) {
+    operationsReturnFocusRef.current = focusTarget ?? document.activeElement as HTMLElement | null;
     const kind = operationsDrawerKindForStatus({
       recovery,
       renameRecovery,
       fallback: operationsKind,
     });
-    openOperations(kind);
+    openOperations(kind, undefined, { fromStatusBar: true });
   }
 
   function openRenameForSelection(focusTarget?: HTMLElement | null) {
