@@ -6,6 +6,8 @@
 #   git pull
 #   gh auth login
 #   bash scripts/pr136-respond-and-resolve-reviews.sh
+# Token lacks PR write? Refresh scopes, or:
+#   bash scripts/pr136-respond-and-resolve-reviews.sh --body-only --summary-comment
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-exec python3 "$ROOT/scripts/pr136-reply-and-resolve.py"
+exec python3 "$ROOT/scripts/pr136-reply-and-resolve.py" "$@"

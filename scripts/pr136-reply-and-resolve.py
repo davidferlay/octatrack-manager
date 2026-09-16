@@ -2,6 +2,7 @@
 """Reply to PR #136 review threads (FIX-1 evidence), resolve, update PR body."""
 from __future__ import annotations
 
+import argparse
 import json
 import subprocess
 import sys
@@ -51,6 +52,22 @@ REPLIES_BY_DB_ID: dict[int, str] = {
     ),
 }
 
+PERMISSION_HINT = """
+GitHub が AddPullRequestReviewComment / resolveReviewThread を拒否しました（トークン権限不足）。
+
+Classic トークン:
+  gh auth refresh -h github.com -s repo
+
+Fine-grained PAT の場合:
+  kaz4g/masterocta で Pull requests → Read and write を付与した PAT を作り、
+  gh auth login --with-token  で差し替え
+
+権限を直すまでの代替:
+  1) bash scripts/pr136-respond-and-resolve-reviews.sh --body-only
+  2) docs/testing/PR136_REVIEW_REPLIES.md を各スレッドに手動貼り付け → Resolve conversation
+"""
+
+
 THREADS_QUERY = """
 query($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
@@ -89,11 +106,22 @@ mutation($threadId: ID!) {
 """
 
 
-def run_gh(args: list[str]) -> None:
+class GhError(Exception):
+    def __init__(self, message: str, *, permission: bool = False) -> None:
+        super().__init__(message)
+        self.permission = permission
+
+
+def run_gh(args: list[str]) -> str:
     result = subprocess.run(["gh", *args], capture_output=True, text=True)
+    combined = (result.stderr or "") + (result.stdout or "")
     if result.returncode != 0:
-        sys.stderr.write(result.stderr or result.stdout or "gh failed\n")
-        raise SystemExit(result.returncode)
+        permission = (
+            "correct permissions" in combined.lower()
+            or "resource not accessible" in combined.lower()
+        )
+        raise GhError(combined.strip() or "gh failed", permission=permission)
+    return result.stdout
 
 
 def gh_graphql(query: str, **fields: str | int) -> dict:
@@ -102,23 +130,49 @@ def gh_graphql(query: str, **fields: str | int) -> dict:
         flag = "-F" if isinstance(value, int) else "-f"
         args.extend([flag, f"{key}={value}"])
     result = subprocess.run(["gh", *args], capture_output=True, text=True)
+    combined = (result.stderr or "") + (result.stdout or "")
     if result.returncode != 0:
-        sys.stderr.write(result.stderr or result.stdout or "gh graphql failed\n")
-        raise SystemExit(result.returncode)
+        permission = "correct permissions" in combined.lower()
+        raise GhError(combined.strip(), permission=permission)
     payload = json.loads(result.stdout)
     if payload.get("errors"):
-        sys.stderr.write(json.dumps(payload["errors"], indent=2) + "\n")
-        raise SystemExit(1)
+        text = json.dumps(payload["errors"])
+        permission = "FORBIDDEN" in text or "insufficient" in text.lower()
+        raise GhError(text, permission=permission)
     return payload
 
 
-def main() -> None:
-    root = Path(__file__).resolve().parent.parent
-    body_file = root / "docs/testing/PR136_BODY.md"
+def update_pr_body(body_file: Path) -> None:
+    run_gh(
+        [
+            "pr",
+            "edit",
+            str(PR_NUMBER),
+            "--repo",
+            REPO,
+            "--body-file",
+            str(body_file),
+        ]
+    )
+    print(f"Updated PR #{PR_NUMBER} body from {body_file}")
 
-    run_gh(["auth", "status", "-h", "github.com"])
-    run_gh(["repo", "view", REPO])
 
+def post_summary_comment(root: Path) -> None:
+    manual = root / "docs/testing/PR136_REVIEW_REPLIES.md"
+    body = (
+        "## FIX-1 review responses (summary)\n\n"
+        "Automated inline replies were blocked by token permissions. "
+        "Evidence for all 8 Codex threads is in "
+        f"[PR136_REVIEW_REPLIES.md](https://github.com/{REPO}/blob/feat/ui-workspace-native-acceptance-1/docs/testing/PR136_REVIEW_REPLIES.md) "
+        "on this branch. Please resolve threads after verifying.\n"
+    )
+    if manual.is_file():
+        body += f"\nLocal path: `{manual.relative_to(root)}`\n"
+    run_gh(["pr", "comment", str(PR_NUMBER), "--repo", REPO, "--body", body])
+    print("Posted summary PR comment (fallback).")
+
+
+def reply_and_resolve_threads() -> int:
     payload = gh_graphql(
         THREADS_QUERY,
         owner="kaz4g",
@@ -139,37 +193,66 @@ def main() -> None:
         node_id = root_comment.get("id")
         if db_id is None or node_id is None:
             continue
-        body = REPLIES_BY_DB_ID.get(int(db_id))
-        if body is None:
+        reply_body = REPLIES_BY_DB_ID.get(int(db_id))
+        if reply_body is None:
             continue
         matched += 1
-        gh_graphql(REPLY_MUTATION, inReplyTo=node_id, body=body)
+        gh_graphql(REPLY_MUTATION, inReplyTo=node_id, body=reply_body)
         print(f"Replied to comment databaseId={db_id}")
         gh_graphql(RESOLVE_MUTATION, threadId=thread["id"])
         print(f"Resolved thread {thread['id']}")
 
-    if matched == 0:
-        print(
-            "No matching unresolved threads (already resolved/replied, or comment IDs changed).",
-            file=sys.stderr,
-        )
+    return matched
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="PR #136 FIX-1 review housekeeping")
+    parser.add_argument(
+        "--body-only",
+        action="store_true",
+        help="Update PR description only (lower permission bar)",
+    )
+    parser.add_argument(
+        "--summary-comment",
+        action="store_true",
+        help="After failure or with --body-only, post a summary PR comment",
+    )
+    args = parser.parse_args()
+
+    root = Path(__file__).resolve().parent.parent
+    body_file = root / "docs/testing/PR136_BODY.md"
+
+    run_gh(["auth", "status", "-h", "github.com"])
+    run_gh(["repo", "view", REPO])
 
     if not body_file.is_file():
         sys.stderr.write(f"Missing {body_file}\n")
         raise SystemExit(1)
 
-    run_gh(
-        [
-            "pr",
-            "edit",
-            str(PR_NUMBER),
-            "--repo",
-            REPO,
-            "--body-file",
-            str(body_file),
-        ]
-    )
-    print(f"Updated PR #{PR_NUMBER} body from {body_file}")
+    update_pr_body(body_file)
+
+    if args.body_only:
+        if args.summary_comment:
+            post_summary_comment(root)
+        print("Skipped thread replies (--body-only).")
+        return
+
+    try:
+        matched = reply_and_resolve_threads()
+        if matched == 0:
+            print(
+                "No matching unresolved threads (already resolved/replied, or comment IDs changed)."
+            )
+    except GhError as err:
+        sys.stderr.write(str(err) + "\n")
+        if err.permission:
+            sys.stderr.write(PERMISSION_HINT)
+            if args.summary_comment:
+                try:
+                    post_summary_comment(root)
+                except GhError as comment_err:
+                    sys.stderr.write(str(comment_err) + "\n")
+        raise SystemExit(1) from err
 
 
 if __name__ == "__main__":
