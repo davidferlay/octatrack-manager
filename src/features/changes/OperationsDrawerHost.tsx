@@ -46,6 +46,7 @@ export interface OperationsDrawerHostProps {
   onCopyCommitted: () => Promise<void> | void;
   onCopyRecovered: () => Promise<void> | void;
   onBusyChange: (busy: boolean) => void;
+  onRenamePrepareBusyChange?: (busy: boolean) => void;
   onRenameRecoveryChange: (recovery: RenameRecoveryStatus) => void;
   onRecoveryChange: (recovery: ChangeRecoveryStatus) => void;
 }
@@ -86,6 +87,7 @@ export function OperationsDrawerHost({
   onCopyCommitted,
   onCopyRecovered,
   onBusyChange,
+  onRenamePrepareBusyChange,
   onRenameRecoveryChange,
   onRecoveryChange,
 }: OperationsDrawerHostProps) {
@@ -138,6 +140,7 @@ export function OperationsDrawerHost({
             refreshSession={refreshSession}
             onPrepared={onRenamePrepared}
             onRenameRecoveryChange={onRenameRecoveryChange}
+            onBusyChange={onRenamePrepareBusyChange}
           />
         )}
         <RenameOperatorPanel

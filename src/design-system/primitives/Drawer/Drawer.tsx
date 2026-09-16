@@ -6,10 +6,8 @@ import {
   type ReactNode,
 } from 'react'
 import { useModalDismiss } from '../Modal/useModalDismiss'
+import { queryTabFocusableElements } from '../focusable'
 import './Drawer.css'
-
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 function useDrawerFocusTrap(
   open: boolean,
@@ -27,15 +25,24 @@ function useDrawerFocusTrap(
     const panel = panelRef.current
     if (panel === null) return
 
-    const focusables = panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
+    function focusables(): HTMLElement[] {
+      if (panelRef.current === null) return []
+      return queryTabFocusableElements(panelRef.current)
+    }
+
     const closeButton = panel.querySelector<HTMLElement>('.mo-drawer-close')
-    const first = closeButton ?? focusables[0]
-    first?.focus()
+    const visible = focusables()
+    const first = (closeButton && visible.includes(closeButton) ? closeButton : visible[0]) ?? panel
+    first.focus()
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key !== 'Tab' || panelRef.current === null) return
-      const items = panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)
-      if (items.length === 0) return
+      const items = focusables()
+      if (items.length === 0) {
+        event.preventDefault()
+        panelRef.current.focus()
+        return
+      }
       const firstItem = items[0]
       const lastItem = items[items.length - 1]
       if (event.shiftKey && document.activeElement === firstItem) {
@@ -51,7 +58,11 @@ function useDrawerFocusTrap(
     return () => {
       document.removeEventListener('keydown', handleKeyDown)
       const returnTarget = returnFocusRef?.current ?? previousFocusRef.current
-      returnTarget?.focus()
+      if (returnTarget?.isConnected) {
+        returnTarget.focus()
+      } else {
+        panelRef.current?.focus()
+      }
     }
   }, [open, panelRef, returnFocusRef])
 }
@@ -120,6 +131,7 @@ export function Drawer({
         inert={open ? undefined : true}
         aria-labelledby="mo-drawer-title"
         hidden={!open ? true : undefined}
+        tabIndex={-1}
       >
         <header className="mo-drawer-panel__header">
           <div className="mo-drawer-panel__title-block">

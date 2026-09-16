@@ -192,9 +192,6 @@ test.describe("Rename operator workflow", () => {
       name: uiText("ja", "operations.openCloneAria"),
     }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Create managed disposable clone" }).click({ timeout: 15000 });
-    await page.getByTestId("app-shell-context").getByRole("button", {
-      name: uiText("ja", "operations.openCloneAria"),
-    }).click();
     await expect(page.getByRole("dialog")).toContainText("VERIFIED CLONE");
     await page.getByRole("button", { name: uiText("ja", "operations.closeDrawer") }).click();
     await page.getByRole("button", { name: uiText("ja", "workspace.openOperationsAria") }).click();

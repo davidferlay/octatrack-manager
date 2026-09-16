@@ -8,7 +8,9 @@
 | #133 merged to `main` | `3af9e324a5d08c99931e4761fe2506251987ddbe` |
 | Product commit (drawer implementation) | `2090794` |
 | Merge `main` into feature branch | `54273bfcde4ad14ddf08a7f2f8f4b7ff1d273a35` |
-| Final head (integration-check complete) | `a4db15c` (`9221533` product/E2E; `a4db15c` rename-prepare E2E) |
+| Integration-check green | `a4db15c` |
+| Review-fix start (Codex review on `ded1db52`) | `bdf39e8` |
+| **Final head (MO-UI-OPERATIONS-DRAWER-REVIEW-FIX-1)** | _(branch tip after push)_ |
 
 ## Dependency / base
 
@@ -38,7 +40,20 @@
 | Explicit new sample Rename/Copy | Updates pin; additive copy resets on pin change | Existing stale-plan guards unchanged |
 | Root switch / close | Clears pin; closes drawer | Existing epoch guards unchanged |
 | Prepared rename, no list selection | Status bar continuation → opens rename drawer without pin | `v2_rename_get_prepared_plan` / operator UI |
+| Rename recovery required, no selection | Status bar → rename drawer (operator only); **no new plan** | Backend `renameRecovery.operations` |
+| Rename prepare in flight | Drawer may close (display only); `renamePrepareBusy` blocks root/edit/pin swap | No cancel IPC on close |
+| Managed clone adoption | Clone drawer stays open unless user dismissed; verification for **new** clone root | `preserveCloneDrawer` vs manual root switch |
 | Restart | Drawer closed; recovery/prepared from journal via existing APIs | No new ephemeral persistence |
+
+## Codex review fixes (6 items on `ded1db52`)
+
+| # | Issue | Fix | Regression tests |
+| --- | --- | --- | --- |
+| 1 | Recovery/prepared rename drawer blocked by `renameBlocked` | `resolveRenameDrawerPin` separates new plan vs operator view | `operationsStatus.test.ts` |
+| 2 | Prepare busy local-only | `onBusyChange` → `renamePrepareBusy`; session guards | `RenameSampleModal.test.tsx` (deferred authorize) |
+| 3 | Clone adoption closes drawer | `adoptCloneRoot(..., { preserveCloneDrawer })` + user-dismiss ref | E2E `rename-operator` expects in-drawer VERIFIED |
+| 4 | E2E clone aria / locale | `openCloneAria` + scoped context bar; ja catalog row | `rename-operator`, `rename-prepare`, `waveform-zoom` |
+| 5 | Focus trap includes hidden sections | `queryTabFocusableElements` | `focusable.test.ts`, `Drawer.test.tsx` |
 
 ## Layout
 
@@ -53,7 +68,8 @@
 | Check | Result |
 | --- | --- |
 | `pnpm run typecheck` | PASS |
-| `pnpm run test:frontend` | PASS — 78 files / 601 tests |
+| `pnpm run test:frontend` | PASS — 79 files / 605 tests |
+| `pnpm run build` | PASS |
 | E2E rename-prepare / rename-operator / workspace-layout / waveform-zoom (840/1280) | PASS — 9 tests |
 | `pnpm run check:architecture` | **NOT_RUN** locally (no `cargo metadata` in agent env) |
 | Native Tauri acceptance | **NOT_RUN** — mock IPC only |

@@ -56,6 +56,7 @@ export interface RenameSampleModalProps {
   refreshSession: () => Promise<RootSession>;
   onPrepared: () => Promise<void> | void;
   onRenameRecoveryChange?: (recovery: RenameRecoveryStatus) => void;
+  onBusyChange?: (busy: boolean) => void;
 }
 
 function formatBytes(byteSize: number): string {
@@ -81,6 +82,7 @@ export function RenameSampleModal({
   refreshSession,
   onPrepared,
   onRenameRecoveryChange,
+  onBusyChange,
 }: RenameSampleModalProps) {
   const isEmbedded = presentation === "embedded";
   const isShown = isEmbedded ? visible : open;
@@ -96,6 +98,11 @@ export function RenameSampleModal({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const prepareGenerationRef = useRef(0);
+
+  useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
 
   const writeEnabled = session.mode === "write_enabled" && session.capabilities.write;
   const additiveRecovery = changeRecovery?.recoveryRequired === true;
@@ -147,6 +154,7 @@ export function RenameSampleModal({
     }
     if (!canStart) return;
 
+    const generation = ++prepareGenerationRef.current;
     setBusy(true);
     setError(null);
     setPlan(null);
@@ -180,7 +188,9 @@ export function RenameSampleModal({
       setError(renameErrorMessage(reason));
       setStage("error");
     } finally {
-      setBusy(false);
+      if (prepareGenerationRef.current === generation) {
+        setBusy(false);
+      }
     }
   }
 
@@ -195,6 +205,7 @@ export function RenameSampleModal({
   async function approveAndPrepare() {
     if (plan === null || !bindingStillValid() || !canStart || busy) return;
 
+    const generation = ++prepareGenerationRef.current;
     setBusy(true);
     setError(null);
     setProgress([]);
@@ -271,7 +282,9 @@ export function RenameSampleModal({
         // Keep the primary error when recovery status cannot be refreshed.
       }
     } finally {
-      setBusy(false);
+      if (prepareGenerationRef.current === generation) {
+        setBusy(false);
+      }
     }
   }
 

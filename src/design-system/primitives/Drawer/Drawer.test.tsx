@@ -21,4 +21,18 @@ describe("Drawer", () => {
     );
     expect(screen.getByText("Operator body")).toBeInTheDocument();
   });
+
+  it("focus trap ignores hidden inactive sections", () => {
+    render(
+      <Drawer open title="Ops" closeAriaLabel="Close" onClose={() => undefined}>
+        <section aria-hidden="true" hidden inert>
+          <button type="button">Hidden action</button>
+        </section>
+        <button type="button">Visible action</button>
+      </Drawer>,
+    );
+    const visible = screen.getByRole("button", { name: "Visible action" });
+    visible.focus();
+    expect(document.activeElement).toBe(visible);
+  });
 });
