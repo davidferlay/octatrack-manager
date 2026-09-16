@@ -126,6 +126,10 @@ export const enMessages = {
   'inspector.activityPlayback': 'Preview playback active',
   'inspector.activityAnalysis': 'Slice analysis running',
   'inspector.showSliceTab': 'Show slice tab',
+  'inspector.expandSliceWorkspace': 'Expand slice editor',
+  'inspector.expandSliceWorkspaceAria': 'Open slice editor in the main workspace',
+  'inspector.exitSliceWorkspace': 'Return to normal view',
+  'inspector.exitSliceWorkspaceAria': 'Close expanded slice editor and return to catalog view',
 
   'usage.aria': 'Usage graph',
   'usage.heading': 'Usage',

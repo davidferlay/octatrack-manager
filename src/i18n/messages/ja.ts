@@ -131,6 +131,10 @@ export const jaMessages: Record<MessageKey, string> = {
   'inspector.activityPlayback': 'プレビュー再生中',
   'inspector.activityAnalysis': 'スライス解析実行中',
   'inspector.showSliceTab': 'スライスタブを表示',
+  'inspector.expandSliceWorkspace': '広く編集',
+  'inspector.expandSliceWorkspaceAria': 'スライス編集を中央ワークスペースで広く開く',
+  'inspector.exitSliceWorkspace': '通常表示へ戻る',
+  'inspector.exitSliceWorkspaceAria': '拡張スライス編集を閉じてカタログ表示に戻る',
 
   'usage.aria': '使用状況グラフ',
   'usage.heading': '使用状況',

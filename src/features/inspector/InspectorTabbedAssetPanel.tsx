@@ -49,6 +49,12 @@ export interface InspectorTabbedAssetPanelProps {
     typeof WaveformPreview
   >[0]["onCommittedGeometryRangeChange"];
   onRequestStopLibraryPlayback: () => void;
+  /** When set, slice UI is owned by RootRegistryPanel (portal host + single session). */
+  sliceCompactHostRef?: (element: HTMLDivElement | null) => void;
+  sliceWorkspaceExpanded?: boolean;
+  sliceAnalysisBusy?: boolean;
+  onRequestExpandSliceWorkspace?: () => void;
+  onSliceAnalysisCancel?: () => void;
 }
 
 function tabIndexForTabs(active: InspectorTabId): Record<InspectorTabId, number> {
@@ -79,17 +85,25 @@ export function InspectorTabbedAssetPanel({
   onCopy,
   onCommittedGeometryRangeChange,
   onRequestStopLibraryPlayback,
+  sliceCompactHostRef,
+  sliceWorkspaceExpanded = false,
+  sliceAnalysisBusy: sliceAnalysisBusyProp,
+  onRequestExpandSliceWorkspace,
+  onSliceAnalysisCancel,
 }: InspectorTabbedAssetPanelProps) {
   const t = useTranslate();
   const tablistId = useId();
   const [activeTab, setActiveTab] = useState<InspectorTabId>("preview");
   const [playbackActive, setPlaybackActive] = useState(false);
-  const [sliceAnalysisBusy, setSliceAnalysisBusy] = useState(false);
-  const sliceCancelRef = useRef<(() => void) | null>(null);
-
-  const registerSliceCancel = useCallback((cancel: (() => void) | null) => {
-    sliceCancelRef.current = cancel;
+  const [inlineSliceAnalysisBusy, setInlineSliceAnalysisBusy] = useState(false);
+  const inlineSliceCancelRef = useRef<(() => void) | null>(null);
+  const registerInlineSliceCancel = useCallback((cancel: (() => void) | null) => {
+    inlineSliceCancelRef.current = cancel;
   }, []);
+  const externalSliceHost = sliceCompactHostRef !== undefined;
+  const sliceAnalysisBusy = sliceAnalysisBusyProp ?? inlineSliceAnalysisBusy;
+  const cancelSliceAnalysis = onSliceAnalysisCancel
+    ?? (() => inlineSliceCancelRef.current?.());
 
   const tabLabels: Record<InspectorTabId, string> = {
     preview: t("inspector.tabPreview"),
@@ -180,7 +194,7 @@ export function InspectorTabbedAssetPanel({
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => sliceCancelRef.current?.()}
+                onClick={cancelSliceAnalysis}
               >
                 {t("slicing.cancelAnalysis")}
               </Button>
@@ -246,15 +260,36 @@ export function InspectorTabbedAssetPanel({
           labelledBy={`${tablistId}-slice`}
           hidden={activeTab !== "slice"}
         >
-          <SliceWorkbench
-            rootId={rootId}
-            fileInstanceId={file.fileInstanceId}
-            displayName={file.displayName}
-            librarySelectionRange={librarySelectionRange}
-            onRequestStopLibraryPlayback={onRequestStopLibraryPlayback}
-            onAnalysisBusyChange={setSliceAnalysisBusy}
-            registerAnalysisCancel={registerSliceCancel}
-          />
+          {externalSliceHost && (
+            <div className="mo-inspector-tabbed__slice-toolbar">
+              <Button
+                type="button"
+                variant="secondary"
+                aria-label={t("inspector.expandSliceWorkspaceAria")}
+                disabled={sliceWorkspaceExpanded}
+                onClick={() => onRequestExpandSliceWorkspace?.()}
+              >
+                {t("inspector.expandSliceWorkspace")}
+              </Button>
+            </div>
+          )}
+          {externalSliceHost ? (
+            <div
+              ref={sliceCompactHostRef}
+              className="mo-inspector-tabbed__slice-host"
+              data-testid="slice-workbench-compact-host"
+            />
+          ) : (
+            <SliceWorkbench
+              rootId={rootId}
+              fileInstanceId={file.fileInstanceId}
+              displayName={file.displayName}
+              librarySelectionRange={librarySelectionRange}
+              onRequestStopLibraryPlayback={onRequestStopLibraryPlayback}
+              onAnalysisBusyChange={setInlineSliceAnalysisBusy}
+              registerAnalysisCancel={registerInlineSliceCancel}
+            />
+          )}
         </TabPanel>
         <TabPanel
           id={`${tablistId}-panel-info`}

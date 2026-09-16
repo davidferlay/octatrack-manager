@@ -1,4 +1,31 @@
 .slice-workbench { border: 1px solid var(--color-border-subtle, #343941); border-radius: 8px; padding: 14px; background: #11151b; color: #e5e7eb; font-size: 12px; }
+.slice-workbench--expanded {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 34%);
+  gap: 16px;
+  align-items: start;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: transparent;
+  min-height: 0;
+}
+.slice-workbench--expanded-narrow {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
+}
+.slice-workbench__expanded-center,
+.slice-workbench__expanded-aside {
+  min-width: 0;
+  border: 1px solid var(--color-border-subtle, #343941);
+  border-radius: 8px;
+  padding: 14px;
+  background: #11151b;
+}
+.slice-workbench--expanded-narrow .slice-workbench__expanded-aside {
+  max-height: min(52vh, 520px);
+  overflow: auto;
+}
 .slice-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .slice-heading h4 { margin: 0; font-size: 14px; }
 .slice-heading span, .slice-hint { color: #a5aebb; }

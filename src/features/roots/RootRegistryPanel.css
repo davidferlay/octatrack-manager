@@ -19,6 +19,50 @@
   outline: none;
 }
 
+.root-registry-pane--workspace-hidden {
+  display: none !important;
+}
+
+.root-registry-slice-workspace {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  gap: var(--mo-space-3, 0.75rem);
+}
+
+.root-registry-slice-workspace__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding: 0 0.25rem;
+}
+
+.root-registry-slice-workspace__titles {
+  min-width: 0;
+}
+
+.root-registry-slice-workspace__name {
+  margin: 0;
+  font-weight: var(--mo-font-weight-bold);
+}
+
+.root-registry-slice-workspace__path {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: var(--mo-font-size-xs);
+  color: var(--mo-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.root-registry-slice-workspace__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
 .root-registry-sources-footer {
   margin-top: 0.75rem;
   padding-top: 0.75rem;

@@ -32,6 +32,7 @@ import {
   resolveRenameDrawerPin,
 } from "../workspace/operationsStatus";
 import { InspectorPane, InspectorTabbedAssetPanel } from "../inspector";
+import { SliceWorkbench } from "../slicing/SliceWorkbench";
 import { CatalogBrowseProvider } from "../library/CatalogBrowseContext";
 import {
   type CatalogAssetSelection,
@@ -140,13 +141,43 @@ export function RootRegistryPanel({
   const [centerView, setCenterView] = useState<AppShellCenterView>("list");
   const catalogEpochRef = useRef(0);
   const inspectorPaneRef = useRef<HTMLDivElement>(null);
+  const sliceCancelRef = useRef<(() => void) | null>(null);
+  const [sliceWorkspaceExpanded, setSliceWorkspaceExpanded] = useState(false);
+  const [sliceAnalysisBusy, setSliceAnalysisBusy] = useState(false);
+  const [compactSliceHost, setCompactSliceHost] = useState<HTMLDivElement | null>(null);
+  const [expandedSliceHost, setExpandedSliceHost] = useState<HTMLDivElement | null>(null);
   const narrow = useMediaQuery("(max-width: 840px)");
+
+  const registerSliceAnalysisCancel = useCallback((cancel: (() => void) | null) => {
+    sliceCancelRef.current = cancel;
+  }, []);
+
+  const openSliceWorkspace = useCallback(() => {
+    setSliceWorkspaceExpanded(true);
+    if (narrow) {
+      setCenterView("list");
+    }
+  }, [narrow]);
+
+  const closeSliceWorkspace = useCallback(() => {
+    setSliceWorkspaceExpanded(false);
+    if (narrow) {
+      setCenterView("inspector");
+    }
+  }, [narrow]);
 
   useEffect(() => {
     setLocationSearch("");
     setCenterView("list");
     setNavigationOpen(true);
+    setSliceWorkspaceExpanded(false);
   }, [session?.rootId]);
+
+  useEffect(() => {
+    if (selectedAsset === null) {
+      setSliceWorkspaceExpanded(false);
+    }
+  }, [selectedAsset]);
 
   useEffect(() => {
     if (!narrow) {
@@ -687,23 +718,70 @@ export function RootRegistryPanel({
       }
       main={
         catalogReady ? (
-          <CatalogWorkspaceMain
-            totalFiles={library.audioFiles.length}
-            catalogRefreshing={catalogRefreshing}
-            catalogError={catalogError}
-            onSampleRename={() => openRenameForSelection()}
-            onSampleCopy={() => openCopyForSelection()}
-            sampleRenameDisabled={renameBlocked || writeEnabled !== true}
-            sampleCopyDisabled={copyBlocked}
-            sampleOpsBusy={sessionInteractionBusy}
-          />
+          <>
+            <div
+              className={sliceWorkspaceExpanded ? "root-registry-pane--workspace-hidden" : undefined}
+              hidden={sliceWorkspaceExpanded}
+              aria-hidden={sliceWorkspaceExpanded}
+              inert={sliceWorkspaceExpanded ? true : undefined}
+              data-testid="catalog-workspace-main-host"
+            >
+              <CatalogWorkspaceMain
+                totalFiles={library.audioFiles.length}
+                catalogRefreshing={catalogRefreshing}
+                catalogError={catalogError}
+                onSampleRename={() => openRenameForSelection()}
+                onSampleCopy={() => openCopyForSelection()}
+                sampleRenameDisabled={renameBlocked || writeEnabled !== true}
+                sampleCopyDisabled={copyBlocked}
+                sampleOpsBusy={sessionInteractionBusy}
+              />
+            </div>
+            {sliceWorkspaceExpanded && selectedAsset !== null && selectedLibraryFile !== undefined && (
+              <div
+                className="root-registry-slice-workspace"
+                data-testid="slice-workspace-expanded-shell"
+              >
+                <header className="root-registry-slice-workspace__header">
+                  <div className="root-registry-slice-workspace__titles">
+                    <p className="root-registry-slice-workspace__name">{selectedLibraryFile.displayName}</p>
+                    <code className="root-registry-slice-workspace__path">{selectedLibraryFile.relativePath}</code>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    aria-label={t("inspector.exitSliceWorkspaceAria")}
+                    onClick={closeSliceWorkspace}
+                  >
+                    {t("inspector.exitSliceWorkspace")}
+                  </Button>
+                </header>
+                <div
+                  ref={setExpandedSliceHost}
+                  className="root-registry-slice-workspace__body"
+                  data-testid="slice-workbench-expanded-host"
+                />
+              </div>
+            )}
+          </>
         ) : (
           <p className="root-registry-main-empty">{t("roots.mainEmpty")}</p>
         )
       }
       inspector={
         catalogReady ? (
-          <div ref={inspectorPaneRef} tabIndex={-1} className="root-registry-inspector-host">
+          <div
+            ref={inspectorPaneRef}
+            tabIndex={-1}
+            className={[
+              "root-registry-inspector-host",
+              sliceWorkspaceExpanded ? "root-registry-pane--workspace-hidden" : "",
+            ].filter(Boolean).join(" ")}
+            hidden={sliceWorkspaceExpanded}
+            aria-hidden={sliceWorkspaceExpanded}
+            inert={sliceWorkspaceExpanded ? true : undefined}
+            data-testid="inspector-workspace-host"
+          >
             <InspectorPane
               assetLabel={selectedAsset?.displayName}
               relativePath={selectedAsset?.relativePath}
@@ -724,10 +802,15 @@ export function RootRegistryPanel({
                     copyBlocked={copyBlocked}
                     renameBusy={sessionInteractionBusy}
                     writeEnabled={writeEnabled === true}
+                    sliceWorkspaceExpanded={sliceWorkspaceExpanded}
+                    sliceAnalysisBusy={sliceAnalysisBusy}
+                    onRequestExpandSliceWorkspace={openSliceWorkspace}
+                    onSliceAnalysisCancel={() => sliceCancelRef.current?.()}
                     onRename={() => openRenameForSelection()}
                     onCopy={() => openCopyForSelection()}
                     onCommittedGeometryRangeChange={handleLibraryGeometryRange}
                     onRequestStopLibraryPlayback={requestStopLibraryPlayback}
+                    sliceCompactHostRef={setCompactSliceHost}
                   />
                 </div>
               )}
@@ -751,6 +834,21 @@ export function RootRegistryPanel({
           onBrowseContextChange={setBrowseContext}
         >
           {workspaceShell}
+          {selectedAsset !== null && selectedLibraryFile !== undefined && (
+            <SliceWorkbench
+              key={`${session.rootId}:${selectedAsset.fileInstanceId}`}
+              rootId={session.rootId}
+              fileInstanceId={selectedAsset.fileInstanceId}
+              displayName={selectedLibraryFile.displayName}
+              librarySelectionRange={librarySelectionRange}
+              layout={sliceWorkspaceExpanded ? "expanded" : "compact"}
+              hostElement={sliceWorkspaceExpanded ? expandedSliceHost : compactSliceHost}
+              narrowExpanded={narrow && sliceWorkspaceExpanded}
+              onRequestStopLibraryPlayback={requestStopLibraryPlayback}
+              onAnalysisBusyChange={setSliceAnalysisBusy}
+              registerAnalysisCancel={registerSliceAnalysisCancel}
+            />
+          )}
         </CatalogBrowseProvider>
       ) : (
         workspaceShell

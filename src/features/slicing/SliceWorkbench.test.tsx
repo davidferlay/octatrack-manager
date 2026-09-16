@@ -299,6 +299,41 @@ describe("attack slicing workbench", () => {
     expect(vi.mocked(api.start).mock.calls.length).toBe(startCalls);
   });
 
+  it("renders expanded layout regions without remounting session state", async () => {
+    const api = client();
+    const view = mount(api);
+    await detect();
+    view.rerender(withLocaleProvider(
+      <SliceWorkbench
+        rootId="root-1"
+        fileInstanceId="file-1"
+        displayName="loop.wav"
+        api={api}
+        layout="expanded"
+      />,
+    ));
+    expect(screen.getByTestId("slice-workbench-expanded")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: tJa("slicing.applyCandidates") })).toBeEnabled();
+    expect(api.start).toHaveBeenCalledTimes(1);
+  });
+
+  it("portals into a host element when hostElement is provided", async () => {
+    const api = client();
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    render(withLocaleProvider(
+      <SliceWorkbench
+        rootId="root-1"
+        fileInstanceId="file-1"
+        displayName="loop.wav"
+        api={api}
+        hostElement={host}
+      />,
+    ));
+    expect(host.querySelector("[data-testid='slice-workbench-compact']")).not.toBeNull();
+    host.remove();
+  });
+
   it("ignores a late start failure after analysis was superseded", async () => {
     const api = client();
     let rejectStart!: (error: unknown) => void;
