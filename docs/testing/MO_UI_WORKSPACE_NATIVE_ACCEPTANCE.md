@@ -3,8 +3,11 @@
 **Work ID:** `MO-UI-WORKSPACE-NATIVE-ACCEPTANCE-1`  
 **Base:** GitHub `main` after PR #135 merge (`22344fb386b1f5e17ee7fea524130eb101fd53ab`)  
 **Branch:** `feat/ui-workspace-native-acceptance-1`  
+**Acceptance commit:** `f279c9d0036d5317da5e9b475b637d0682fa810c`  
 **Host OS:** Darwin 25.6.0 (macOS)  
 **Recorded (UTC):** 2026-09-16  
+**Draft PR:** pending `gh auth login` — branch pushed; open Draft from  
+https://github.com/kaz4g/masterocta/compare/main...feat/ui-workspace-native-acceptance-1  
 
 Sanitized record: no operator home paths, no real Octatrack media, no production catalog paths.
 
