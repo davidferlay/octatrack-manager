@@ -6,7 +6,7 @@
 **PR:** [#136](https://github.com/kaz4g/masterocta/pull/136)  
 **Review target SHA (start of FIX-1):** `b386d3bbc970774ca0d0a2e5379637888e371361`  
 **Final PR head:** `e1e586f121b0` (FIX-1 code: `bc78af6`, clippy: `9935ae2`)  
-**PR body / review replies:** [`PR136_BODY.md`](PR136_BODY.md); run `bash scripts/pr136-respond-and-resolve-reviews.sh` after `gh auth login`  
+**PR body / review replies:** [`PR136_BODY.md`](PR136_BODY.md); after `gh auth login` (単独実行), run `bash scripts/pr136-respond-and-resolve-reviews.sh` (GraphQL reply + resolve)  
 **Host OS:** Darwin 25.6.0 (macOS)  
 **Recorded (UTC):** 2026-09-16  
 
