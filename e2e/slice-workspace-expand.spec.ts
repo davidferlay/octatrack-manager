@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { clickCatalogFileRow } from "./catalogFileRow";
 import { uiText } from "./i18n";
+import { showInspectorFromContextBar } from "./narrowWorkspace";
 
 async function seedSliceFixture(page: import("@playwright/test").Page) {
   await page.addInitScript(() => {
@@ -139,8 +140,10 @@ test.describe("slice workspace expand", () => {
     await page.setViewportSize({ width: 840, height: 900 });
     await seedSliceFixture(page);
     await page.goto("/");
+    await page.waitForFunction(() => window.matchMedia("(max-width: 840px)").matches);
     await page.getByRole("button", { name: uiText("ja", "sources.chooseRoot") }).click();
     await clickCatalogFileRow(page, "ja", "LOOP.wav");
+    await showInspectorFromContextBar(page, "ja");
     await page.getByRole("tab", { name: uiText("ja", "inspector.tabSlice") }).click();
     await page.getByRole("button", { name: uiText("ja", "inspector.expandSliceWorkspaceAria") }).click();
 
