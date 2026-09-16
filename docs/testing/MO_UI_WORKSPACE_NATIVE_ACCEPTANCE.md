@@ -5,6 +5,7 @@
 **Branch:** `feat/ui-workspace-native-acceptance-1`  
 **PR:** [#136](https://github.com/kaz4g/masterocta/pull/136) (Draft)  
 **Review target SHA (start of FIX-1):** `b386d3bbc970774ca0d0a2e5379637888e371361`  
+**Final FIX-1 head:** `9935ae2bfb09c7a02426f11a62e9a1bf416d67c3`  
 **Host OS:** Darwin 25.6.0 (macOS)  
 **Recorded (UTC):** 2026-09-16  
 
@@ -106,7 +107,7 @@ node scripts/verify-ui-workspace-range-sha.mjs "<fixture_root>/SET/AUDIO/RANGE.w
 | `cargo test --locked -p masterocta --features test-seams ui_workspace_native_fixture_registers_and_lists_audio` | **PASS** |
 | `bash scripts/prepare-ui-workspace-native-acceptance.sh` | **PASS** (exits 0 only after byte SHA verify) |
 | `pnpm run typecheck` / `test:frontend` / `build` | Run at commit time |
-| GitHub Actions on final FIX-1 head | **Pending** after push |
+| GitHub Actions on final FIX-1 head | [Run 35070977552](https://github.com/kaz4g/masterocta/actions/runs/35070977552) for `9935ae2` — confirm all jobs green before merge prep |
 
 ## Failures / fixes
 
