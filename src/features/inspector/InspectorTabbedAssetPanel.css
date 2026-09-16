@@ -6,6 +6,14 @@
   min-height: 0;
 }
 
+.mo-inspector-tabbed__slice-toolbar {
+  margin-bottom: var(--mo-space-2);
+}
+
+.mo-inspector-tabbed__slice-host {
+  min-width: 0;
+}
+
 .mo-inspector-tabbed__header {
   display: flex;
   flex-direction: column;

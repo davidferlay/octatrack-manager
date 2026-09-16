@@ -49,12 +49,35 @@ function fakeCloneApi(): CloneApi {
   };
 }
 
+const metadataClient = {
+  loadManualAssetMetadata: vi.fn().mockResolvedValue({ tags: [], note: null }),
+  replaceManualAssetMetadata: vi.fn(),
+};
+
+const audioClient = {
+  queryWaveform: vi.fn().mockResolvedValue({
+    analyzerVersion: "waveform:v2",
+    sampleRate: 44100,
+    channels: 2,
+    frameCount: "1000",
+    range: { startFrame: "0", endFrameExclusive: "1000" },
+    framesPerPeak: "1",
+    channelPeaks: [[{ min: -0.5, max: 0.5 }]],
+  }),
+  createPreviewToken: vi.fn(),
+  createRangePreviewToken: vi.fn(),
+  readPreview: vi.fn(),
+  getWaveform: vi.fn(),
+};
+
 function renderWorkspace(api: RootApi) {
   return render(
     <LocaleProvider initialLocaleId="ja">
       <ThemeProvider>
         <RootRegistryPanel
           api={api}
+          audioClient={audioClient}
+          metadataClient={metadataClient}
           changeClient={fakeChangeApi()}
           cloneClient={fakeCloneApi()}
           renameClient={fakeRenameApi()}
@@ -176,5 +199,59 @@ describe("RootRegistryPanel workspace layout", () => {
       expect(screen.getByText(tEn("workspace.navHeading"))).toBeInTheDocument();
     });
     expect(listLibrary).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens expanded slice workspace from the inspector slice tab and returns to catalog", async () => {
+    const listLibrary = vi.fn().mockResolvedValue({
+      sets: [{
+        displayName: "LIVE_SET",
+        relativePath: "LIVE_SET",
+        hasAudioPool: true,
+        projects: [],
+      }],
+      standaloneProjects: [],
+      audioFiles: [{
+        fileInstanceId: "fileinst:v1:pool",
+        assetId: "asset:v1:pool",
+        displayName: "POOL.wav",
+        relativePath: "LIVE_SET/AUDIO/POOL.wav",
+        byteSize: 2048,
+        storageScope: "set_audio_pool",
+      }],
+      usageEdges: [],
+    });
+    const api: RootApi = {
+      registerRoot: vi.fn().mockResolvedValue({
+        rootId: "root-opaque",
+        displayName: "Fixture Root",
+        deviceFingerprint: "0123456789abcdef",
+        mode: "read_only",
+        observedRevision: 1,
+        expiresInSeconds: 3600,
+        capabilities: { read: true, write: false, stableDeviceIdentity: true },
+      }),
+      rootStatus: vi.fn(),
+      enableWrite: vi.fn(),
+      disableWrite: vi.fn(),
+      closeRoot: vi.fn(),
+      listLibrary,
+    };
+
+    renderWorkspace(api);
+    fireEvent.click(screen.getByRole("button", { name: tJa("sources.chooseRoot") }));
+    fireEvent.click(await screen.findByText("POOL.wav"));
+    fireEvent.click(screen.getByRole("tab", { name: tJa("inspector.tabSlice") }));
+    expect(screen.getByRole("button", { name: tJa("slicing.detectAttacks") })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: tJa("inspector.expandSliceWorkspaceAria") }));
+    expect(screen.getByTestId("slice-workspace-expanded-shell")).toBeInTheDocument();
+    expect(screen.getByTestId("catalog-workspace-main-host")).toHaveAttribute("hidden");
+    expect(screen.getByRole("button", { name: tJa("slicing.detectAttacks") })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: tJa("inspector.exitSliceWorkspaceAria") }));
+    await waitFor(() => {
+      expect(screen.queryByTestId("slice-workspace-expanded-shell")).not.toBeInTheDocument();
+    });
+    expect(screen.getByTestId("catalog-workspace-main-host")).not.toHaveAttribute("hidden");
   });
 });

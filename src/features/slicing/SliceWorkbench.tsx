@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   defaultOnsetParameters, sliceApi, type OnsetParameters, type SliceApi,
   type SliceDraft, type SliceEdit, type SliceJob, type SliceMarker,
@@ -11,6 +12,8 @@ import { SliceErrorAlert } from "./SliceErrorAlert";
 import { normalizeSliceError, type SliceErrorState } from "./sliceErrors";
 import "./SliceWorkbench.css";
 
+export type SliceWorkbenchLayout = "compact" | "expanded";
+
 interface Props {
   rootId: string;
   fileInstanceId: string;
@@ -20,6 +23,11 @@ interface Props {
   onRequestStopLibraryPlayback?: () => void;
   onAnalysisBusyChange?: (busy: boolean) => void;
   registerAnalysisCancel?: (cancel: (() => void) | null) => void;
+  layout?: SliceWorkbenchLayout;
+  /** When set, session UI is portaled into this element (single mount, no duplicate sessions). */
+  hostElement?: HTMLElement | null;
+  /** 840px expanded stack: keep waveform controls and editing reachable without AppShell centerView. */
+  narrowExpanded?: boolean;
 }
 const WIDTH = 640;
 const PAGE = 50;
@@ -38,6 +46,9 @@ function SliceSession({
   onRequestStopLibraryPlayback,
   onAnalysisBusyChange,
   registerAnalysisCancel,
+  layout = "compact",
+  hostElement = null,
+  narrowExpanded = false,
 }: Props) {
   const t = useTranslate();
   const [job, setJob] = useState<SliceJob | null>(null);
@@ -308,102 +319,113 @@ function SliceSession({
     error
     ?? (job?.error ? normalizeSliceError(job.error) : null);
 
-  return <section className="slice-workbench" aria-label={t("slicing.ariaFor", { displayName })}>
-    <div className="slice-heading"><h4>{t("slicing.heading")}</h4><span>{t("slicing.localDraft")}</span></div>
-    <p>{t("slicing.intro")}</p>
-    <details><summary>{t("slicing.regionDetails")}</summary>
-      <p>{t("slicing.supportedFormats")}</p>
-      <p>{t("slicing.regionHelp")}</p>
-      <div className="slice-fields">
-        <label>{t("slicing.regionStart")}<input value={regionStart} onChange={e => setRegionStart(e.target.value)} inputMode="numeric" disabled={busy} /></label>
-        <label>{t("slicing.regionEnd")}<input value={regionEnd} onChange={e => setRegionEnd(e.target.value)} inputMode="numeric" disabled={busy} /></label>
-      </div>
-    </details>
-    <div className="slice-actions">
-      <button
-        type="button"
-        disabled={busy || editing || librarySelectionRange === null}
-        onClick={() => void analyzeSelectedLibraryRange()}
-      >
-        {t("slicing.analyzeSelectedRange")}
-      </button>
-      <button disabled={busy || editing} onClick={() => void analyze()}>
-        {busy ? t("slicing.analyzing") : readyId ? t("slicing.analyzeAgain") : t("slicing.detectAttacks")}
-      </button>
-      {(busy || readyId) && (
-        <button disabled={editing} onClick={() => void cancel()}>
-          {busy ? t("slicing.cancelAnalysis") : t("slicing.closeAnalysis")}
+  const preamble = (
+    <>
+      <div className="slice-heading"><h4>{t("slicing.heading")}</h4><span>{t("slicing.localDraft")}</span></div>
+      <p>{t("slicing.intro")}</p>
+      <details><summary>{t("slicing.regionDetails")}</summary>
+        <p>{t("slicing.supportedFormats")}</p>
+        <p>{t("slicing.regionHelp")}</p>
+        <div className="slice-fields">
+          <label>{t("slicing.regionStart")}<input value={regionStart} onChange={e => setRegionStart(e.target.value)} inputMode="numeric" disabled={busy} /></label>
+          <label>{t("slicing.regionEnd")}<input value={regionEnd} onChange={e => setRegionEnd(e.target.value)} inputMode="numeric" disabled={busy} /></label>
+        </div>
+      </details>
+      <div className="slice-actions">
+        <button
+          type="button"
+          disabled={busy || editing || librarySelectionRange === null}
+          onClick={() => void analyzeSelectedLibraryRange()}
+        >
+          {t("slicing.analyzeSelectedRange")}
         </button>
+        <button disabled={busy || editing} onClick={() => void analyze()}>
+          {busy ? t("slicing.analyzing") : readyId ? t("slicing.analyzeAgain") : t("slicing.detectAttacks")}
+        </button>
+        {(busy || readyId) && (
+          <button disabled={editing} onClick={() => void cancel()}>
+            {busy ? t("slicing.cancelAnalysis") : t("slicing.closeAnalysis")}
+          </button>
+        )}
+      </div>
+      {busy && (
+        <p role="status">
+          {job?.phase === "analyzing" ? t("slicing.detectingAttacks") : t("slicing.readingSource")}
+        </p>
       )}
-    </div>
-    {busy && (
-      <p role="status">
-        {job?.phase === "analyzing" ? t("slicing.detectingAttacks") : t("slicing.readingSource")}
-      </p>
-    )}
-    {analysisRegion !== null && (
-      <p className="slice-coordinate" role="status" aria-label={t("slicing.analysisRegionHeading")}>
-        {t("slicing.analysisRegionHeading")}:{" "}
-        {t("slicing.analysisRegionFrames", {
-          start: analysisRegion.startFrame,
-          end: analysisRegion.endExclusive,
+      {analysisRegion !== null && (
+        <p className="slice-coordinate" role="status" aria-label={t("slicing.analysisRegionHeading")}>
+          {t("slicing.analysisRegionHeading")}:{" "}
+          {t("slicing.analysisRegionFrames", {
+            start: analysisRegion.startFrame,
+            end: analysisRegion.endExclusive,
+          })}
+        </p>
+      )}
+      <SliceErrorAlert error={displayedError} t={t} />
+    </>
+  );
+
+  const detectionFieldset = readyId && draft ? (
+    <fieldset disabled={editing} className="slice-fields"><legend>{t("slicing.detectionLegend")}</legend>
+      <label>{t("slicing.sensitivity")} {parameters.sensitivity}<input type="range" min="0" max="100" value={parameters.sensitivity} onChange={e => changeParameter("sensitivity", Number(e.target.value))} /></label>
+      <label>{t("slicing.minimumIntervalMs")}<input type="number" min="10" max="250" value={parameters.minimumIntervalMs} onChange={e => changeParameter("minimumIntervalMs", Number(e.target.value))} /></label>
+      <label>{t("slicing.preRollMs")}<input type="number" min="0" max="10" step="0.1" value={parameters.preRollUs / 1000} onChange={e => changeParameter("preRollUs", Math.round(Number(e.target.value) * 1000))} /></label>
+      <label>{t("slicing.silenceFloorDb")}<input type="number" min="-90" max="-40" value={parameters.silenceFloorDb} onChange={e => changeParameter("silenceFloorDb", Number(e.target.value))} /></label>
+      <label>{t("slicing.snapRadiusMs")}<input type="number" min="0" max="2" step="0.1" value={parameters.snapRadiusUs / 1000} onChange={e => changeParameter("snapRadiusUs", Math.round(Number(e.target.value) * 1000))} /></label>
+    </fieldset>
+  ) : null;
+
+  const waveformBlock = readyId && draft && view ? (
+    <>
+      <div className="slice-actions"><button onClick={() => zoom(true)}>Zoom in</button><button onClick={() => zoom(false)}>Zoom out</button><button aria-label="Pan earlier" onClick={() => pan(-1n)}>←</button><button aria-label="Pan later" onClick={() => pan(1n)}>→</button><button onClick={() => setView(draft.region)}>Full region</button></div>
+      <p className="slice-coordinate">Frames [{view.startFrame}, {view.endExclusive}) · {job?.sampleRate} Hz</p>
+      <svg viewBox="0 0 640 160" className="slice-waveform" aria-label="Slice waveform"
+        onDoubleClick={e => {
+          if (editing) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          if (rect.width) void edit({ kind: "insert", frame: frameAt((e.clientX - rect.left) / rect.width, view) });
+        }}
+        onPointerMove={e => {
+          if (!dragRef.current) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          if (!rect.width) return;
+          const next = { ...dragRef.current, frame: frameAt((e.clientX - rect.left) / rect.width, view) };
+          dragRef.current = next; setDrag(next);
+        }} onPointerUp={endDrag} onPointerCancel={() => { dragRef.current = null; setDrag(null); }}>
+        {waveform?.peaks.map((peaks, ch) => {
+          const height = 160 / waveform.peaks.length, center = height * (ch + 0.5);
+          return <path key={ch} className="slice-peaks" d={peaks.map(([min, max], i) => `M${i * WIDTH / peaks.length},${center - max * height * 0.45}V${center - min * height * 0.45}`).join(" ")} />;
         })}
-      </p>
-    )}
-    <SliceErrorAlert error={displayedError} t={t} />
-    {readyId && draft && <>
-      <fieldset disabled={editing} className="slice-fields"><legend>{t("slicing.detectionLegend")}</legend>
-        <label>{t("slicing.sensitivity")} {parameters.sensitivity}<input type="range" min="0" max="100" value={parameters.sensitivity} onChange={e => changeParameter("sensitivity", Number(e.target.value))} /></label>
-        <label>{t("slicing.minimumIntervalMs")}<input type="number" min="10" max="250" value={parameters.minimumIntervalMs} onChange={e => changeParameter("minimumIntervalMs", Number(e.target.value))} /></label>
-        <label>{t("slicing.preRollMs")}<input type="number" min="0" max="10" step="0.1" value={parameters.preRollUs / 1000} onChange={e => changeParameter("preRollUs", Math.round(Number(e.target.value) * 1000))} /></label>
-        <label>{t("slicing.silenceFloorDb")}<input type="number" min="-90" max="-40" value={parameters.silenceFloorDb} onChange={e => changeParameter("silenceFloorDb", Number(e.target.value))} /></label>
-        <label>{t("slicing.snapRadiusMs")}<input type="number" min="0" max="2" step="0.1" value={parameters.snapRadiusUs / 1000} onChange={e => changeParameter("snapRadiusUs", Math.round(Number(e.target.value) * 1000))} /></label>
-      </fieldset>
-      {view && <>
-        <div className="slice-actions"><button onClick={() => zoom(true)}>Zoom in</button><button onClick={() => zoom(false)}>Zoom out</button><button aria-label="Pan earlier" onClick={() => pan(-1n)}>←</button><button aria-label="Pan later" onClick={() => pan(1n)}>→</button><button onClick={() => setView(draft.region)}>Full region</button></div>
-        <p className="slice-coordinate">Frames [{view.startFrame}, {view.endExclusive}) · {job?.sampleRate} Hz</p>
-        <svg viewBox="0 0 640 160" className="slice-waveform" aria-label="Slice waveform"
-          onDoubleClick={e => {
-            if (editing) return;
-            const rect = e.currentTarget.getBoundingClientRect();
-            if (rect.width) void edit({ kind: "insert", frame: frameAt((e.clientX - rect.left) / rect.width, view) });
-          }}
-          onPointerMove={e => {
-            if (!dragRef.current) return;
-            const rect = e.currentTarget.getBoundingClientRect();
-            if (!rect.width) return;
-            const next = { ...dragRef.current, frame: frameAt((e.clientX - rect.left) / rect.width, view) };
-            dragRef.current = next; setDrag(next);
-          }} onPointerUp={endDrag} onPointerCancel={() => { dragRef.current = null; setDrag(null); }}>
-          {waveform?.peaks.map((peaks, ch) => {
-            const height = 160 / waveform.peaks.length, center = height * (ch + 0.5);
-            return <path key={ch} className="slice-peaks" d={peaks.map(([min, max], i) => `M${i * WIDTH / peaks.length},${center - max * height * 0.45}V${center - min * height * 0.45}`).join(" ")} />;
-          })}
-          {proposal?.candidates.filter(c => inRange(c.suggestedStartFrame, view)).map(c => <line key={c.candidateId} className="slice-candidate" x1={position(c.suggestedStartFrame, view) * WIDTH} x2={position(c.suggestedStartFrame, view) * WIDTH} y1="0" y2="160"><title>{`Candidate at ${c.suggestedStartFrame}${c.warnings.length ? " — review boundary" : ""}`}</title></line>)}
-          {draft.markers.filter(m => inRange(m.startFrame, view)).map((m) => {
-            const value = drag?.id === m.markerId ? drag.frame : m.startFrame;
-            const x = position(value, view) * WIDTH;
-            return <g key={m.markerId} className={`slice-marker ${m.locked ? "is-locked" : ""} ${selected === m.markerId ? "is-selected" : ""}`}
-              role="slider" tabIndex={editing ? -1 : 0} aria-label={`Boundary ${m.startFrame}`} aria-valuetext={`Frame ${value}`} aria-valuemin={0} aria-valuemax={Number(frame(draft.region.endExclusive) - frame(draft.region.startFrame) - 1n)} aria-valuenow={Number(frame(value) - frame(draft.region.startFrame))}
-              onDoubleClick={e => e.stopPropagation()}
-              onPointerDown={e => { if (editing) return; e.preventDefault(); setSelected(m.markerId); dragRef.current = { id: m.markerId, frame: m.startFrame }; setDrag(dragRef.current); e.currentTarget.ownerSVGElement?.setPointerCapture(e.pointerId); }}
-              onKeyDown={e => {
-                if (editing || !["ArrowLeft", "ArrowRight"].includes(e.key)) return;
-                e.preventDefault(); setSelected(m.markerId);
-                const current = dragRef.current?.id === m.markerId ? dragRef.current.frame : m.startFrame;
-                const next = frame(current) + (e.key === "ArrowRight" ? 1n : -1n) * (e.shiftKey ? 10n : 1n);
-                if (next >= frame(draft.region.startFrame) && next < frame(draft.region.endExclusive)) {
-                  dragRef.current = { id: m.markerId, frame: next.toString() }; setDrag(dragRef.current);
-                }
-              }} onKeyUp={e => { if (["ArrowLeft", "ArrowRight"].includes(e.key)) endDrag(); }} onBlur={endDrag}>
-              <line x1={x} x2={x} y1="0" y2="160" /><rect x={x - 5} y="0" width="10" height="160" className="slice-hit-target" />
-            </g>;
-          })}
-        </svg>
-        <p className="slice-hint">Dashed: candidates · orange: draft · blue: fixed. Drag a draft boundary or use ←/→ (Shift: 10 frames). Double-click to insert.</p>
-        <div className="slice-actions"><button disabled={editing} onClick={() => void play(view)}>Play visible region</button><button disabled={!selectedMarker || editing} onClick={() => { if (selectedMarker) void play(selectedMarker); }}>Play selected slice</button><button onClick={stop} disabled={!playing && !previewing}>Stop</button></div>
-        <p className="slice-hint">Preview supports up to 30 seconds per region. Zoom in for longer slices.</p>
-      </>}
+        {proposal?.candidates.filter(c => inRange(c.suggestedStartFrame, view)).map(c => <line key={c.candidateId} className="slice-candidate" x1={position(c.suggestedStartFrame, view) * WIDTH} x2={position(c.suggestedStartFrame, view) * WIDTH} y1="0" y2="160"><title>{`Candidate at ${c.suggestedStartFrame}${c.warnings.length ? " — review boundary" : ""}`}</title></line>)}
+        {draft.markers.filter(m => inRange(m.startFrame, view)).map((m) => {
+          const value = drag?.id === m.markerId ? drag.frame : m.startFrame;
+          const x = position(value, view) * WIDTH;
+          return <g key={m.markerId} className={`slice-marker ${m.locked ? "is-locked" : ""} ${selected === m.markerId ? "is-selected" : ""}`}
+            role="slider" tabIndex={editing ? -1 : 0} aria-label={`Boundary ${m.startFrame}`} aria-valuetext={`Frame ${value}`} aria-valuemin={0} aria-valuemax={Number(frame(draft.region.endExclusive) - frame(draft.region.startFrame) - 1n)} aria-valuenow={Number(frame(value) - frame(draft.region.startFrame))}
+            onDoubleClick={e => e.stopPropagation()}
+            onPointerDown={e => { if (editing) return; e.preventDefault(); setSelected(m.markerId); dragRef.current = { id: m.markerId, frame: m.startFrame }; setDrag(dragRef.current); e.currentTarget.ownerSVGElement?.setPointerCapture(e.pointerId); }}
+            onKeyDown={e => {
+              if (editing || !["ArrowLeft", "ArrowRight"].includes(e.key)) return;
+              e.preventDefault(); setSelected(m.markerId);
+              const current = dragRef.current?.id === m.markerId ? dragRef.current.frame : m.startFrame;
+              const next = frame(current) + (e.key === "ArrowRight" ? 1n : -1n) * (e.shiftKey ? 10n : 1n);
+              if (next >= frame(draft.region.startFrame) && next < frame(draft.region.endExclusive)) {
+                dragRef.current = { id: m.markerId, frame: next.toString() }; setDrag(dragRef.current);
+              }
+            }} onKeyUp={e => { if (["ArrowLeft", "ArrowRight"].includes(e.key)) endDrag(); }} onBlur={endDrag}>
+            <line x1={x} x2={x} y1="0" y2="160" /><rect x={x - 5} y="0" width="10" height="160" className="slice-hit-target" />
+          </g>;
+        })}
+      </svg>
+      <p className="slice-hint">Dashed: candidates · orange: draft · blue: fixed. Drag a draft boundary or use ←/→ (Shift: 10 frames). Double-click to insert.</p>
+      <div className="slice-actions"><button disabled={editing} onClick={() => void play(view)}>Play visible region</button><button disabled={!selectedMarker || editing} onClick={() => { if (selectedMarker) void play(selectedMarker); }}>Play selected slice</button><button onClick={stop} disabled={!playing && !previewing}>Stop</button></div>
+      <p className="slice-hint">Preview supports up to 30 seconds per region. Zoom in for longer slices.</p>
+    </>
+  ) : null;
+
+  const editorBlock = readyId && draft ? (
+    <>
       <p role="status">
         {proposing
           ? t("slicing.updatingCandidates")
@@ -434,8 +456,44 @@ function SliceSession({
         {t("slicing.exportNotice")}
         {job?.sampleRate === 48000 ? t("slicing.reanalyze48000") : ""}
       </p>
-    </>}
-  </section>;
+    </>
+  ) : null;
+
+  const workbenchClass = [
+    "slice-workbench",
+    layout === "expanded" ? "slice-workbench--expanded" : "",
+    layout === "expanded" && narrowExpanded ? "slice-workbench--expanded-narrow" : "",
+  ].filter(Boolean).join(" ");
+
+  let body: ReactNode;
+  if (layout === "expanded") {
+    body = (
+      <section className={workbenchClass} aria-label={t("slicing.ariaFor", { displayName })} data-testid="slice-workbench-expanded">
+        <div className="slice-workbench__expanded-center">
+          {preamble}
+          {detectionFieldset}
+          {waveformBlock}
+        </div>
+        <div className="slice-workbench__expanded-aside">
+          {editorBlock}
+        </div>
+      </section>
+    );
+  } else {
+    body = (
+      <section className={workbenchClass} aria-label={t("slicing.ariaFor", { displayName })} data-testid="slice-workbench-compact">
+        {preamble}
+        {detectionFieldset}
+        {waveformBlock}
+        {editorBlock}
+      </section>
+    );
+  }
+
+  if (hostElement) {
+    return createPortal(body, hostElement);
+  }
+  return body;
 }
 
 function MarkerRow({ marker, disabled, selected, onSelect, edit }: {
