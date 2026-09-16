@@ -146,6 +146,7 @@ test.describe("slice workspace expand", () => {
     await showInspectorFromContextBar(page, "ja");
     await page.getByRole("tab", { name: uiText("ja", "inspector.tabSlice") }).click();
     await page.getByRole("button", { name: uiText("ja", "inspector.expandSliceWorkspaceAria") }).click();
+    await expect(page.getByTestId("slice-workspace-expanded-shell")).toBeVisible();
 
     const exit = page.getByRole("button", { name: uiText("ja", "inspector.exitSliceWorkspaceAria") });
     await expect(exit).toBeVisible();

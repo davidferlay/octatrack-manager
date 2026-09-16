@@ -152,6 +152,20 @@ export function RootRegistryPanel({
     sliceCancelRef.current = cancel;
   }, []);
 
+  const openSliceWorkspace = useCallback(() => {
+    setSliceWorkspaceExpanded(true);
+    if (narrow) {
+      setCenterView("list");
+    }
+  }, [narrow]);
+
+  const closeSliceWorkspace = useCallback(() => {
+    setSliceWorkspaceExpanded(false);
+    if (narrow) {
+      setCenterView("inspector");
+    }
+  }, [narrow]);
+
   useEffect(() => {
     setLocationSearch("");
     setCenterView("list");
@@ -737,7 +751,7 @@ export function RootRegistryPanel({
                     type="button"
                     variant="secondary"
                     aria-label={t("inspector.exitSliceWorkspaceAria")}
-                    onClick={() => setSliceWorkspaceExpanded(false)}
+                    onClick={closeSliceWorkspace}
                   >
                     {t("inspector.exitSliceWorkspace")}
                   </Button>
@@ -790,7 +804,7 @@ export function RootRegistryPanel({
                     writeEnabled={writeEnabled === true}
                     sliceWorkspaceExpanded={sliceWorkspaceExpanded}
                     sliceAnalysisBusy={sliceAnalysisBusy}
-                    onRequestExpandSliceWorkspace={() => setSliceWorkspaceExpanded(true)}
+                    onRequestExpandSliceWorkspace={openSliceWorkspace}
                     onSliceAnalysisCancel={() => sliceCancelRef.current?.()}
                     onRename={() => openRenameForSelection()}
                     onCopy={() => openCopyForSelection()}
