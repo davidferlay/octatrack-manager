@@ -10817,4 +10817,75 @@ mod tests {
         assert_eq!(verified.verification_state, "failed");
         assert_ne!(before, collect_fixture_manifest(fixture._root.path()));
     }
+
+    /// MO-UI-WORKSPACE-NATIVE-ACCEPTANCE-1 — catalog-backed list path (same as `v2_library_list`).
+    #[test]
+    fn ui_workspace_native_fixture_registers_and_lists_audio() {
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let script = repo_root.join("scripts/generate-ui-workspace-native-fixture.mjs");
+        let output = std::process::Command::new("node")
+            .arg(&script)
+            .output()
+            .expect("spawn node generator");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("manifest json");
+        let fixture_root = manifest["fixtureRoot"]
+            .as_str()
+            .expect("fixtureRoot in manifest");
+        let sample_a_sha = manifest["files"]
+            .as_array()
+            .and_then(|files| {
+                files
+                    .iter()
+                    .find(|entry| entry["role"] == "sampleA")
+                    .and_then(|entry| entry["sha256"].as_str())
+            })
+            .expect("sampleA sha256");
+        assert_eq!(
+            sample_a_sha,
+            "43ceb3dc7e42bd89ee1b83da57682cb0b2f846c5b12caf210cbf61ba29e429b1"
+        );
+
+        let (_data_dir, catalog) = catalog();
+        let registry = registry();
+        let session = register_root_sync(&registry, &catalog, fixture_root).unwrap();
+        let root_id = ot_domain::RootId::new(session.root_id).expect("root id");
+        let dto = list_library_dto_sync(&registry, &catalog, &root_id).unwrap();
+        assert!(!dto.sets.is_empty());
+        assert!(dto.sets[0].has_audio_pool);
+        assert!(dto
+            .sets
+            .iter()
+            .flat_map(|set| set.projects.iter())
+            .any(|project| project.display_name == "ACCEPT_PROJ"));
+        assert!(dto
+            .audio_files
+            .iter()
+            .any(|file| file.display_name == "RANGE.wav"));
+        assert!(dto
+            .audio_files
+            .iter()
+            .any(|file| file.display_name == "キック_受入.wav"));
+        assert!(dto
+            .audio_files
+            .iter()
+            .any(|file| file.storage_scope == "set_audio_pool"));
+        let project_local: Vec<_> = dto
+            .audio_files
+            .iter()
+            .filter(|file| {
+                file.storage_scope == "project_local"
+                    && file.relative_path.starts_with("SET/ACCEPT_PROJ")
+            })
+            .collect();
+        assert!(
+            project_local.is_empty(),
+            "ACCEPT_PROJ location should list zero audio files for empty-project acceptance"
+        );
+    }
 }

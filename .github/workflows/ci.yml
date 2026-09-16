@@ -115,14 +115,14 @@ jobs:
       - name: Run Clippy lints
         working-directory: src-tauri
         run: |
-          cargo clippy --workspace --all-targets --exclude masterocta -- -D warnings
-          cargo clippy -p masterocta --all-targets --features test-seams -- -D warnings
+          cargo clippy --locked --workspace --all-targets --exclude masterocta -- -D warnings
+          cargo clippy --locked -p masterocta --all-targets --features test-seams -- -D warnings
 
       - name: Run Rust tests
         working-directory: src-tauri
         run: |
-          cargo test --workspace --exclude masterocta
-          cargo test -p masterocta --features test-seams
+          cargo test --locked --workspace --exclude masterocta
+          cargo test --locked -p masterocta --features test-seams
 
   gate-c-synthetic-smoke:
     name: Gate C Synthetic Smoke
@@ -195,6 +195,9 @@ jobs:
 
       - name: Run frontend unit tests
         run: pnpm run test:frontend
+
+      - name: Run UI native fixture regression tests
+        run: pnpm run test:ui-native-fixture
 
       - name: Run Gate C byte-manifest tests
         run: pnpm run test:gate-c-manifest
