@@ -5,7 +5,7 @@
 | | SHA |
 | --- | --- |
 | #134 merge on `main` | `a3dafcc0beca1b6e9a304f86b355a982d03621cf` |
-| Product head | `94e2927` |
+| Product head | `27b70ba` |
 
 ## Scope
 
@@ -37,7 +37,7 @@ Rust (`cargo fmt/clippy/test`): not run locally in this worktree session; rely o
 ## CI
 
 - First run (E2E 840px fail): https://github.com/kaz4g/masterocta/actions/runs/35053184597
-- Green run after narrow fix: _pending (`94e2927`)_
+- **Green CI:** https://github.com/kaz4g/masterocta/actions/runs/35054133519 (`27b70ba`)
 
 ## Remaining risks / blockers
 
