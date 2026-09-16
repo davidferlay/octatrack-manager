@@ -8,7 +8,7 @@
 | #133 merged to `main` | `3af9e324a5d08c99931e4761fe2506251987ddbe` |
 | Product commit (drawer implementation) | `2090794` |
 | Merge `main` into feature branch | `54273bfcde4ad14ddf08a7f2f8f4b7ff1d273a35` |
-| Final head (post integration-check fixes) | `9221533` |
+| Final head (integration-check complete) | `df9d8f2` (`9221533` product/E2E fixes) |
 
 ## Dependency / base
 
