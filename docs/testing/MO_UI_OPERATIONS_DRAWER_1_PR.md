@@ -8,7 +8,7 @@
 | #133 merged to `main` | `3af9e324a5d08c99931e4761fe2506251987ddbe` |
 | Product commit (drawer implementation) | `2090794` |
 | Merge `main` into feature branch | `54273bfcde4ad14ddf08a7f2f8f4b7ff1d273a35` |
-| Final head (integration-check complete) | `df9d8f2` (`9221533` product/E2E fixes) |
+| Final head (integration-check complete) | `a4db15c` (`9221533` product/E2E; `a4db15c` rename-prepare E2E) |
 
 ## Dependency / base
 
@@ -63,9 +63,10 @@
 | Run | Head | Frontend | E2E | Rust | Gate C macOS | Gate C Ubuntu |
 | --- | --- | --- | --- | --- | --- | --- |
 | [35029101363](https://github.com/kaz4g/masterocta/actions/runs/35029101363) | `54273bf` (merge only) | PASS | **FAIL** (pre–E2E fix) | PASS | PASS | PASS |
-| _(pending)_ | final head after E2E/product fix push | — | — | — | — | — |
+| [35039873397](https://github.com/kaz4g/masterocta/actions/runs/35039873397) | `89f69d6` | PASS | **FAIL** (rename-prepare strict mode) | PASS | PASS | PASS |
+| [35046989565](https://github.com/kaz4g/masterocta/actions/runs/35046989565) | `a4db15c` | PASS | PASS | PASS | PASS | PASS |
 
-Re-run CI on final head after integration-check commit; do not treat the failed E2E run as green.
+Authoritative green run: **35046989565** on head `a4db15c`.
 
 ## Mock vs native
 
@@ -76,7 +77,7 @@ Re-run CI on final head after integration-check commit; do not treat the failed 
 
 - Operator panel **body copy** (Clone / Rename / Copy internals) remains largely English; chrome i18n added (`operations.*`, status bar).
 - Native catalog smoke: **NOT_COMPLETE** (unchanged from #133).
-- Final CI green on head after integration-check fixes required before merge train.
+- Merge train: CI green on `a4db15c`; product merge still **not** authorized in this task (Draft retained).
 
 ## Follow-up — MO-UI-SLICE-WORKSPACE-1
 
