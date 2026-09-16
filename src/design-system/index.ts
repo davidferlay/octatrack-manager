@@ -23,6 +23,7 @@ export {
   type ModalFooterProps,
   type UseModalDismissOptions,
 } from './primitives/Modal'
+export { Drawer, DrawerSection, type DrawerProps, type DrawerSectionProps } from './primitives/Drawer'
 export {
   StatusBadge,
   type StatusBadgeProps,

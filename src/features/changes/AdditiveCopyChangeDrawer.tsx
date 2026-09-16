@@ -14,7 +14,10 @@ import "./AdditiveCopyChangeDrawer.css";
 
 interface AdditiveCopyChangeDrawerProps {
   session: RootSession;
-  selectedAsset: CatalogAssetSelection | null;
+  /** Pinned operation target (list selection may differ while drawer is open). */
+  targetAsset?: CatalogAssetSelection | null;
+  /** @deprecated Use targetAsset. Kept for unit tests. */
+  selectedAsset?: CatalogAssetSelection | null;
   recovery: ChangeRecoveryStatus | null;
   renameRecovery?: RenameRecoveryStatus | null;
   api?: ChangeApi;
@@ -24,6 +27,8 @@ interface AdditiveCopyChangeDrawerProps {
   onRecovered: () => Promise<void> | void;
   onBusyChange?: (busy: boolean) => void;
   onRecoveryChange?: (recovery: ChangeRecoveryStatus) => void;
+  /** Hide duplicate chrome when nested in Operations Drawer. */
+  embeddedInDrawer?: boolean;
 }
 
 function messageFrom(error: unknown): string {
@@ -56,17 +61,20 @@ function preservedRecoveryMessage(prefix: string): string {
 
 export function AdditiveCopyChangeDrawer({
   session,
-  selectedAsset,
+  targetAsset = null,
+  selectedAsset = null,
   recovery,
   renameRecovery = null,
   api = changeApi,
   disabled = false,
+  embeddedInDrawer = false,
   refreshSession,
   onCommitted,
   onRecovered,
   onBusyChange,
   onRecoveryChange,
 }: AdditiveCopyChangeDrawerProps) {
+  const operationAsset = targetAsset ?? selectedAsset;
   const [destination, setDestination] = useState("");
   const [plan, setPlan] = useState<ChangePlan | null>(null);
   const [status, setStatus] = useState<ChangeStatus | null>(null);
@@ -82,7 +90,7 @@ export function AdditiveCopyChangeDrawer({
     setApproved(false);
     setApprovedRecoveryOperationId(null);
     setError(null);
-  }, [session.rootId, selectedAsset?.fileInstanceId]);
+  }, [session.rootId, operationAsset?.fileInstanceId]);
 
   const additiveRecoveryRequired = (recovery?.recoveryRequired ?? true)
     || status?.recoveryRequired === true;
@@ -97,7 +105,7 @@ export function AdditiveCopyChangeDrawer({
   }
 
   async function createPlan() {
-    if (disabled || selectedAsset === null || destination.trim() === "") return;
+    if (disabled || operationAsset === null || destination.trim() === "") return;
     setChangeBusy(true);
     setError(null);
     setStatus(null);
@@ -105,7 +113,7 @@ export function AdditiveCopyChangeDrawer({
     try {
       const created = await api.planAdditiveCopy(
         session.rootId,
-        selectedAsset.fileInstanceId,
+        operationAsset.fileInstanceId,
         destination,
       );
       setPlan(created);
@@ -259,16 +267,21 @@ export function AdditiveCopyChangeDrawer({
   }
 
   return (
-    <section className="mo-change-drawer" aria-labelledby="mo-change-drawer-title">
-      <div className="mo-change-drawer__heading">
-        <div>
-          <p className="mo-change-drawer__eyebrow">Intent → Plan → Apply</p>
-          <h3 id="mo-change-drawer-title">Change Drawer</h3>
+    <section
+      className="mo-change-drawer"
+      aria-labelledby={embeddedInDrawer ? undefined : "mo-change-drawer-title"}
+    >
+      {!embeddedInDrawer && (
+        <div className="mo-change-drawer__heading">
+          <div>
+            <p className="mo-change-drawer__eyebrow">Intent → Plan → Apply</p>
+            <h3 id="mo-change-drawer-title">Change Drawer</h3>
+          </div>
+          <StatusBadge tone={recoveryRequired ? "danger" : writeEnabled ? "warning" : "readonly"}>
+            {recoveryRequired ? "RECOVERY REQUIRED" : writeEnabled ? "EDIT ENABLED" : "READ ONLY"}
+          </StatusBadge>
         </div>
-        <StatusBadge tone={recoveryRequired ? "danger" : writeEnabled ? "warning" : "readonly"}>
-          {recoveryRequired ? "RECOVERY REQUIRED" : writeEnabled ? "EDIT ENABLED" : "READ ONLY"}
-        </StatusBadge>
-      </div>
+      )}
 
       {recovery === null && (
         <p className="mo-change-drawer__blocking" role="alert">
@@ -334,17 +347,19 @@ export function AdditiveCopyChangeDrawer({
         </div>
       )}
 
-      {selectedAsset === null ? (
+      {operationAsset === null ? (
         <p className="mo-change-drawer__empty">
           Select an indexed audio file to prepare an additive copy plan.
         </p>
       ) : (
         <div className="mo-change-drawer__composer">
-          <div className="mo-change-drawer__source">
-            <span>Source</span>
-            <strong>{selectedAsset.displayName}</strong>
-            <code>{selectedAsset.relativePath}</code>
-          </div>
+          {!embeddedInDrawer && (
+            <div className="mo-change-drawer__source">
+              <span>Source</span>
+              <strong>{operationAsset.displayName}</strong>
+              <code>{operationAsset.relativePath}</code>
+            </div>
+          )}
           <label className="mo-change-drawer__destination">
             <span>Destination relative path</span>
             <input

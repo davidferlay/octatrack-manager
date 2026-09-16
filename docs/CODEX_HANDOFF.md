@@ -316,14 +316,19 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ### 6.0 現在の次作業（2026-09-15）
 
-**作業ID:** `MO-UI-LIBRARY-INSPECTOR-MIGRATION-1`（製品 PR。Draft 提出。merge しない）
+**作業ID:** `MO-UI-OPERATIONS-DRAWER-1`（製品 PR。Draft 提出。merge しない）
 
-**基点:** GitHub `main` `bb9b814`（#132 workspace foundation merge 後）。ブランチ
-`feat/ui-library-inspector-migration-1`。中央 `CatalogFileList` 列構成と右 Inspector タブ
-（Preview / Slice / Info / Usage / Notes）。引き継ぎ正本:
+**基点:** stacked on #133 `feat/ui-library-inspector-migration-1`（Inspector migration、未 merge）。
+ブランチ `feat/ui-operations-drawer-1`。Clone / Rename / Copy と Prepared / Recovery を
+Operations Drawer に集約。常設 bottom パネルを撤去。引き継ぎ正本:
+`docs/testing/MO_UI_OPERATIONS_DRAWER_1_PR.md`。
+
+**依存:** #133（E2E 3件は本 PR で Drawer/locale 経路を更新。native 受入は両 PR とも未完了）。
+
+**次工程:** `MO-UI-SLICE-WORKSPACE-1`（Slice 中央/右拡張。本 PR では触らない）。
+
+**履歴 — MO-UI-LIBRARY-INSPECTOR-MIGRATION-1:** Draft #133。引き継ぎ:
 `docs/testing/MO_UI_LIBRARY_INSPECTOR_MIGRATION_1_PR.md`。
-
-**次工程:** `MO-UI-OPERATIONS-DRAWER-1`（Change Drawer 全面再編。今回は触らない）。
 
 **履歴 — M7 range→slice:** `MO-M7-RANGE-TO-SLICE-ANALYSIS-1`（製品 PR。Draft 提出。merge しない）
 

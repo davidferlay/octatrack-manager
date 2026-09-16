@@ -21,3 +21,12 @@ export function catalogFileRowLocator(
     .getByLabel(uiText(locale, "library.audioFilesAria"))
     .locator(".catalog-file-table__row", { hasText: displayName });
 }
+
+/** Rename via catalog sample ops menu (Operations Drawer), not Inspector duplicate. */
+export async function openSampleRenameFromCatalog(page: Page, locale: "ja" | "en") {
+  await page
+    .getByLabel(uiText(locale, "library.audioFilesAria"))
+    .getByRole("group", { name: uiText(locale, "operations.sampleMenuAria") })
+    .getByRole("button", { name: uiText(locale, "inspector.renameAction") })
+    .click();
+}

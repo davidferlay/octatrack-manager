@@ -42,7 +42,11 @@ interface ReviewBinding {
 }
 
 export interface RenameSampleModalProps {
-  open: boolean;
+  /** Modal dialog (default) or embedded body inside Operations Drawer. */
+  presentation?: "modal" | "embedded";
+  open?: boolean;
+  /** Embedded mode visibility (display only; does not reset workflow state). */
+  visible?: boolean;
   session: RootSession;
   selectedAsset: CatalogAssetSelection;
   changeRecovery: ChangeRecoveryStatus | null;
@@ -52,6 +56,7 @@ export interface RenameSampleModalProps {
   refreshSession: () => Promise<RootSession>;
   onPrepared: () => Promise<void> | void;
   onRenameRecoveryChange?: (recovery: RenameRecoveryStatus) => void;
+  onBusyChange?: (busy: boolean) => void;
 }
 
 function formatBytes(byteSize: number): string {
@@ -65,7 +70,9 @@ function basenameFromPath(relativePath: string): string {
 }
 
 export function RenameSampleModal({
-  open,
+  presentation = "modal",
+  open = false,
+  visible = false,
   session,
   selectedAsset,
   changeRecovery,
@@ -75,7 +82,10 @@ export function RenameSampleModal({
   refreshSession,
   onPrepared,
   onRenameRecoveryChange,
+  onBusyChange,
 }: RenameSampleModalProps) {
+  const isEmbedded = presentation === "embedded";
+  const isShown = isEmbedded ? visible : open;
   const currentBasename = basenameFromPath(selectedAsset.relativePath);
   const parentPath = splitRelativePath(selectedAsset.relativePath).parentPath;
   const [newBasename, setNewBasename] = useState(currentBasename);
@@ -88,6 +98,11 @@ export function RenameSampleModal({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const prepareGenerationRef = useRef(0);
+
+  useEffect(() => {
+    onBusyChange?.(busy);
+  }, [busy, onBusyChange]);
 
   const writeEnabled = session.mode === "write_enabled" && session.capabilities.write;
   const additiveRecovery = changeRecovery?.recoveryRequired === true;
@@ -96,6 +111,18 @@ export function RenameSampleModal({
   const canStart = writeEnabled && !additiveRecovery && !renameRecoveryBlocking && !recoveryUnavailable;
 
   useEffect(() => {
+    if (isEmbedded) {
+      setNewBasename(currentBasename);
+      setStage("input");
+      setPlan(null);
+      setBlockedReasons([]);
+      setBinding(null);
+      setProgress([]);
+      setPreparedStatus(null);
+      setError(null);
+      setBusy(false);
+      return;
+    }
     if (!open) return;
     setNewBasename(currentBasename);
     setStage("input");
@@ -107,10 +134,15 @@ export function RenameSampleModal({
     setError(null);
     setBusy(false);
     requestAnimationFrame(() => inputRef.current?.focus());
-  }, [open, session.rootId, selectedAsset.fileInstanceId, currentBasename]);
+  }, [isEmbedded, open, session.rootId, selectedAsset.fileInstanceId, currentBasename]);
+
+  useEffect(() => {
+    if (!isEmbedded || !visible) return;
+    requestAnimationFrame(() => inputRef.current?.focus());
+  }, [isEmbedded, visible]);
 
   function closeModal() {
-    if (busy) return;
+    if (!isEmbedded && busy) return;
     onClose();
   }
 
@@ -122,6 +154,7 @@ export function RenameSampleModal({
     }
     if (!canStart) return;
 
+    const generation = ++prepareGenerationRef.current;
     setBusy(true);
     setError(null);
     setPlan(null);
@@ -155,7 +188,9 @@ export function RenameSampleModal({
       setError(renameErrorMessage(reason));
       setStage("error");
     } finally {
-      setBusy(false);
+      if (prepareGenerationRef.current === generation) {
+        setBusy(false);
+      }
     }
   }
 
@@ -170,6 +205,7 @@ export function RenameSampleModal({
   async function approveAndPrepare() {
     if (plan === null || !bindingStillValid() || !canStart || busy) return;
 
+    const generation = ++prepareGenerationRef.current;
     setBusy(true);
     setError(null);
     setProgress([]);
@@ -246,7 +282,9 @@ export function RenameSampleModal({
         // Keep the primary error when recovery status cannot be refreshed.
       }
     } finally {
-      setBusy(false);
+      if (prepareGenerationRef.current === generation) {
+        setBusy(false);
+      }
     }
   }
 
@@ -261,24 +299,8 @@ export function RenameSampleModal({
   const showApprove = stage === "planned" && plan !== null && bindingStillValid();
   const locked = busy || stage === "authorizing" || stage === "backing_up" || stage === "preparing";
 
-  return (
-    <Modal
-      open={open}
-      onClose={closeModal}
-      locked={locked}
-      closeOnBackdrop={!locked}
-      closeOnEscape={!locked}
-      contentClassName="rename-sample-modal"
-    >
-      <Modal.Header>
-        <div className="rename-sample-modal__heading">
-          <h3 id="rename-sample-title">Review rename</h3>
-          <StatusBadge tone={writeEnabled ? "warning" : "readonly"}>
-            {writeEnabled ? "EDIT ENABLED" : "READ ONLY"}
-          </StatusBadge>
-        </div>
-      </Modal.Header>
-      <Modal.Body aria-labelledby="rename-sample-title">
+  const inner = (
+    <>
         {!writeEnabled && (
           <p className="rename-sample-modal__notice" role="status">
             Edit mode is required before preparing a rename.
@@ -439,52 +461,102 @@ export function RenameSampleModal({
         {error !== null && (
           <p className="rename-sample-modal__alert" role="alert">{error}</p>
         )}
-      </Modal.Body>
-      <Modal.Footer>
-        <div className="rename-sample-modal__footer">
-          {stage === "prepared" ? (
-            <Button variant="modalPrimary" onClick={closeModal}>Close</Button>
-          ) : (
-            <>
-              <Button variant="modal" onClick={closeModal} disabled={locked}>
-                Cancel
-              </Button>
-              {showApprove ? (
-                <Button
-                  variant="modalPrimary"
-                  disabled={locked || !canStart}
-                  onClick={() => void approveAndPrepare()}
-                >
-                  {locked ? <><Spinner fa style={{ marginRight: "0.4rem" }} />Preparing...</> : "Approve & Prepare"}
-                </Button>
-              ) : (
-                <Button
-                  variant="modalPrimary"
-                  disabled={busy || !canStart || !validation.ok}
-                  onClick={() => void reviewRename()}
-                >
-                  {busy ? "Checking..." : "Review Rename"}
-                </Button>
-              )}
-              {(stage === "blocked" || stage === "error") && (
-                <Button
-                  variant="secondary"
-                  disabled={busy || !canStart}
-                  onClick={() => {
-                    setStage("input");
-                    setPlan(null);
-                    setBlockedReasons([]);
-                    setBinding(null);
-                    setError(null);
-                  }}
-                >
-                  Replan
-                </Button>
-              )}
-            </>
+    </>
+  );
+
+  const footer = (
+    <div className="rename-sample-modal__footer">
+      {stage === "prepared" ? (
+        isEmbedded ? null : (
+          <Button variant="modalPrimary" onClick={closeModal}>Close</Button>
+        )
+      ) : (
+        <>
+          {!isEmbedded && (
+            <Button variant="modal" onClick={closeModal} disabled={locked}>
+              Cancel
+            </Button>
           )}
+          {showApprove ? (
+            <Button
+              variant="modalPrimary"
+              disabled={locked || !canStart}
+              onClick={() => void approveAndPrepare()}
+            >
+              {locked ? <><Spinner fa style={{ marginRight: "0.4rem" }} />Preparing...</> : "Approve & Prepare"}
+            </Button>
+          ) : (
+            <Button
+              variant="modalPrimary"
+              disabled={busy || !canStart || !validation.ok}
+              onClick={() => void reviewRename()}
+            >
+              {busy ? "Checking..." : "Review Rename"}
+            </Button>
+          )}
+          {(stage === "blocked" || stage === "error") && (
+            <Button
+              variant="secondary"
+              disabled={busy || !canStart}
+              onClick={() => {
+                setStage("input");
+                setPlan(null);
+                setBlockedReasons([]);
+                setBinding(null);
+                setError(null);
+              }}
+            >
+              Replan
+            </Button>
+          )}
+        </>
+      )}
+    </div>
+  );
+
+  if (isEmbedded) {
+    if (!isShown) {
+      return (
+        <section className="rename-sample-embedded rename-sample-embedded--stored" hidden aria-hidden inert>
+          {inner}
+        </section>
+      );
+    }
+    return (
+      <section className="rename-sample-embedded" aria-labelledby="rename-sample-title">
+        <div className="rename-sample-modal__heading">
+          <h3 id="rename-sample-title">Review rename</h3>
+          <StatusBadge tone={writeEnabled ? "warning" : "readonly"}>
+            {writeEnabled ? "EDIT ENABLED" : "READ ONLY"}
+          </StatusBadge>
         </div>
-      </Modal.Footer>
+        {inner}
+        {footer}
+      </section>
+    );
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={closeModal}
+      locked={locked}
+      closeOnBackdrop={!locked}
+      closeOnEscape={!locked}
+      contentClassName="rename-sample-modal"
+    >
+      <Modal.Header>
+        <div className="rename-sample-modal__heading">
+          <h3 id="rename-sample-title">Review rename</h3>
+          <StatusBadge tone={writeEnabled ? "warning" : "readonly"}>
+            {writeEnabled ? "EDIT ENABLED" : "READ ONLY"}
+          </StatusBadge>
+        </div>
+      </Modal.Header>
+      <Modal.Body aria-labelledby="rename-sample-title">
+        {inner}
+      </Modal.Body>
+      <Modal.Footer>{footer}</Modal.Footer>
     </Modal>
   );
 }

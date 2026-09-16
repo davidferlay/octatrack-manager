@@ -273,6 +273,50 @@ describe("RenameSampleModal", () => {
     expect(screen.queryByRole("button", { name: "Approve & Prepare" })).not.toBeInTheDocument();
   });
 
+  it("reports busy to parent during approve and prepare", async () => {
+    const api = fakeApi();
+    let releaseAuthorize: (() => void) | undefined;
+    vi.mocked(api.authorize).mockImplementation(
+      () => new Promise((resolve) => {
+        releaseAuthorize = () => resolve({
+          schema: "rename-authority:v1",
+          authorityId,
+          planId,
+          operationId,
+          expiresInSeconds: 120,
+        });
+      }),
+    );
+    const onBusyChange = vi.fn();
+
+    render(
+      <RenameSampleModal
+        presentation="embedded"
+        visible
+        session={session(true)}
+        selectedAsset={selectedAsset}
+        changeRecovery={recoveryClear}
+        renameRecovery={renameRecoveryClear}
+        api={api}
+        onClose={vi.fn()}
+        refreshSession={vi.fn().mockResolvedValue(session(true))}
+        onPrepared={vi.fn()}
+        onBusyChange={onBusyChange}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("New file name"), {
+      target: { value: "KICK_DEEP.wav" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Review Rename" }));
+    await screen.findByRole("button", { name: "Approve & Prepare" });
+    fireEvent.click(screen.getByRole("button", { name: "Approve & Prepare" }));
+
+    await waitFor(() => expect(onBusyChange).toHaveBeenCalledWith(true));
+    releaseAuthorize?.();
+    await waitFor(() => expect(onBusyChange).toHaveBeenCalledWith(false));
+  });
+
   it("does not call backup when authorize fails", async () => {
     const api = fakeApi();
     vi.mocked(api.authorize).mockRejectedValue({ code: "ROOT_CHANGED", message: "changed" });

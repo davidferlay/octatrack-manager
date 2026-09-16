@@ -146,9 +146,11 @@ export function CatalogLibraryBrowser({
                 stopPlaybackToken={stopLibraryPlaybackToken}
                 renameRecovery={null}
                 renameBlocked
+                copyBlocked
                 renameBusy={false}
                 writeEnabled={false}
                 onRename={() => undefined}
+                onCopy={() => undefined}
                 onCommittedGeometryRangeChange={handleLibraryGeometryRange}
                 onRequestStopLibraryPlayback={requestStopLibraryPlayback}
               />

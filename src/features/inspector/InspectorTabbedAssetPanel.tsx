@@ -15,7 +15,8 @@ import type {
 } from "../../api";
 import { Button } from "../../design-system";
 import { useTranslate } from "../../i18n";
-import { RenamePreparedNotice } from "../changes";
+import { SampleOperationsMenu } from "../changes";
+import { preparedRenameCount } from "../workspace/operationsStatus";
 import { ManualAssetMetadataEditor } from "../metadata/ManualAssetMetadataEditor";
 import { SliceWorkbench } from "../slicing/SliceWorkbench";
 import { UsageGraphPanel } from "../usage";
@@ -39,9 +40,11 @@ export interface InspectorTabbedAssetPanelProps {
   stopPlaybackToken: number;
   renameRecovery: RenameRecoveryStatus | null;
   renameBlocked: boolean;
+  copyBlocked: boolean;
   renameBusy: boolean;
   writeEnabled: boolean;
   onRename: () => void;
+  onCopy: () => void;
   onCommittedGeometryRangeChange: Parameters<
     typeof WaveformPreview
   >[0]["onCommittedGeometryRangeChange"];
@@ -69,9 +72,11 @@ export function InspectorTabbedAssetPanel({
   stopPlaybackToken,
   renameRecovery,
   renameBlocked,
+  copyBlocked,
   renameBusy,
   writeEnabled,
   onRename,
+  onCopy,
   onCommittedGeometryRangeChange,
   onRequestStopLibraryPlayback,
 }: InspectorTabbedAssetPanelProps) {
@@ -124,26 +129,27 @@ export function InspectorTabbedAssetPanel({
     focusTab(TAB_ORDER[nextIndex]);
   }
 
+  const renameHintId = "mo-inspector-rename-hint";
   const headerActions = (
     <>
-      <RenamePreparedNotice recovery={renameRecovery} />
+      {preparedRenameCount(renameRecovery) > 0 && (
+        <p className="mo-inspector-tabbed__prepared-hint" role="status">
+          {t("operations.preparedHint")}
+        </p>
+      )}
       <div className="mo-inspector-tabbed__rename">
-        <Button
-          variant="secondary"
-          disabled={renameBusy || renameBlocked}
-          onClick={onRename}
-          title={
-            !writeEnabled
-              ? t("inspector.renameNeedsEditTitle")
-              : renameBlocked
-                ? t("inspector.renameBlockedTitle")
-                : t("inspector.renameTitle")
-          }
-        >
-          {t("inspector.renameAction")}
-        </Button>
+        <SampleOperationsMenu
+          renameDisabled={renameBlocked || !writeEnabled}
+          copyDisabled={copyBlocked}
+          renameBusy={renameBusy}
+          renameHintId={renameHintId}
+          onRename={onRename}
+          onCopy={onCopy}
+        />
         {!writeEnabled && (
-          <p className="mo-inspector-tabbed__rename-hint">{t("inspector.renameNeedsEdit")}</p>
+          <p id={renameHintId} className="mo-inspector-tabbed__rename-hint">
+            {t("inspector.renameNeedsEdit")}
+          </p>
         )}
       </div>
     </>

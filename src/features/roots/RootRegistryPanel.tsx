@@ -24,11 +24,13 @@ import { Button } from "../../design-system";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { createTranslate, readStoredLocaleId, useTranslate } from "../../i18n";
 import {
-  AdditiveCopyChangeDrawer,
-  CloneOperatorPanel,
-  RenameOperatorPanel,
-  RenameSampleModal,
+  OperationsDrawerHost,
+  type OperationsDrawerKind,
 } from "../changes";
+import {
+  operationsDrawerKindForStatus,
+  resolveRenameDrawerPin,
+} from "../workspace/operationsStatus";
 import { InspectorPane, InspectorTabbedAssetPanel } from "../inspector";
 import { CatalogBrowseProvider } from "../library/CatalogBrowseContext";
 import {
@@ -93,6 +95,7 @@ export function RootRegistryPanel({
   const [library, setLibrary] = useState<LibrarySnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [changeBusy, setChangeBusy] = useState(false);
+  const [renamePrepareBusy, setRenamePrepareBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [catalogRefreshing, setCatalogRefreshing] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -124,8 +127,11 @@ export function RootRegistryPanel({
   }, []);
   const [recovery, setRecovery] = useState<ChangeRecoveryStatus | null>(null);
   const [renameRecovery, setRenameRecovery] = useState<RenameRecoveryStatus | null>(null);
-  const [renameModalOpen, setRenameModalOpen] = useState(false);
-  const [renameModalAsset, setRenameModalAsset] = useState<CatalogAssetSelection | null>(null);
+  const [operationsOpen, setOperationsOpen] = useState(false);
+  const [operationsKind, setOperationsKind] = useState<OperationsDrawerKind>("clone");
+  const [pinnedAsset, setPinnedAsset] = useState<CatalogAssetSelection | null>(null);
+  const operationsReturnFocusRef = useRef<HTMLElement | null>(null);
+  const userDismissedOperationsRef = useRef(false);
   const [cloneVerification, setCloneVerification] = useState<CloneVerification | null>(null);
   const [sourceEvidenceId, setSourceEvidenceId] = useState<string | null>(null);
   const [browseContext, setBrowseContext] = useState<CatalogBrowseContext | null>(null);
@@ -133,7 +139,6 @@ export function RootRegistryPanel({
   const [navigationOpen, setNavigationOpen] = useState(true);
   const [centerView, setCenterView] = useState<AppShellCenterView>("list");
   const catalogEpochRef = useRef(0);
-  const changeDrawerRef = useRef<HTMLDivElement>(null);
   const inspectorPaneRef = useRef<HTMLDivElement>(null);
   const narrow = useMediaQuery("(max-width: 840px)");
 
@@ -165,17 +170,6 @@ export function RootRegistryPanel({
       setError(`Rename safety status unavailable: ${errorMessage(reason)}`);
     }
   }
-
-  useEffect(() => {
-    if (renameModalAsset === null || selectedAsset === null) return;
-    if (
-      renameModalAsset.fileInstanceId !== selectedAsset.fileInstanceId
-      || renameModalAsset.relativePath !== selectedAsset.relativePath
-    ) {
-      setRenameModalOpen(false);
-      setRenameModalAsset(null);
-    }
-  }, [renameModalAsset, selectedAsset]);
 
   async function registerRoot() {
     setBusy(true);
@@ -227,7 +221,7 @@ export function RootRegistryPanel({
   }
 
   async function closeRoot() {
-    if (session === null) return;
+    if (session === null || changeBusy || renamePrepareBusy) return;
     setBusy(true);
     setError(null);
     try {
@@ -239,8 +233,8 @@ export function RootRegistryPanel({
       setBrowseContext(null);
       setRecovery(null);
       setRenameRecovery(null);
-      setRenameModalOpen(false);
-      setRenameModalAsset(null);
+      setOperationsOpen(false);
+      setPinnedAsset(null);
       setCloneVerification(null);
       setChangeBusy(false);
       setCatalogError(null);
@@ -255,6 +249,8 @@ export function RootRegistryPanel({
   async function enableWrite() {
     if (
       session === null
+      || changeBusy
+      || renamePrepareBusy
       || recovery === null
       || recovery.recoveryRequired
       || renameRecovery === null
@@ -264,8 +260,7 @@ export function RootRegistryPanel({
     }
     setBusy(true);
     setError(null);
-    setRenameModalOpen(false);
-    setRenameModalAsset(null);
+    setOperationsOpen(false);
     try {
       const latestRecovery = await changeClient.recoveryStatus(session.rootId);
       setRecovery(latestRecovery);
@@ -288,12 +283,11 @@ export function RootRegistryPanel({
   }
 
   async function disableWrite() {
-    if (session === null) return;
+    if (session === null || changeBusy || renamePrepareBusy) return;
     if (!(session.mode === "write_enabled" && session.capabilities.write)) return;
     setBusy(true);
     setError(null);
-    setRenameModalOpen(false);
-    setRenameModalAsset(null);
+    setOperationsOpen(false);
     try {
       setSession(await api.disableWrite(session.rootId));
     } catch (reason) {
@@ -377,7 +371,10 @@ export function RootRegistryPanel({
     await refreshAfterWrite("The rename rollback completed, but refresh failed");
   }
 
-  async function adoptCloneRoot(cloneRootId: string) {
+  async function adoptCloneRoot(
+    cloneRootId: string,
+    options?: { preserveCloneDrawer?: boolean },
+  ) {
     catalogEpochRef.current += 1;
     const loadEpoch = catalogEpochRef.current;
     const [latestSession, snapshot] = await Promise.all([
@@ -388,8 +385,15 @@ export function RootRegistryPanel({
     setSession(latestSession);
     setLibrary(snapshot);
     setSelectedAsset(null);
-    setRenameModalOpen(false);
-    setRenameModalAsset(null);
+    setPinnedAsset(null);
+    const keepCloneDrawer = options?.preserveCloneDrawer === true
+      && !userDismissedOperationsRef.current;
+    if (keepCloneDrawer) {
+      setOperationsKind("clone");
+      setOperationsOpen(true);
+    } else {
+      setOperationsOpen(false);
+    }
     setRecovery(await changeClient.recoveryStatus(cloneRootId));
     await refreshRenameRecovery(cloneRootId);
     await refreshCloneVerification(cloneRootId);
@@ -404,7 +408,7 @@ export function RootRegistryPanel({
       if (!managed.sourceRootClosed) {
         throw new Error("Managed clone creation did not close the source root.");
       }
-      await adoptCloneRoot(managed.cloneRootId);
+      await adoptCloneRoot(managed.cloneRootId, { preserveCloneDrawer: true });
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -491,21 +495,89 @@ export function RootRegistryPanel({
     );
   }, [library, selectedAsset]);
   const writeEnabled = session?.mode === "write_enabled" && session.capabilities.write;
+  const sessionInteractionBusy = busy || changeBusy || renamePrepareBusy;
   const writeBlocked = recovery === null
     || recovery.recoveryRequired
     || renameRecovery === null
     || renameRecovery.recoveryRequired;
   const renameBlocked = writeBlocked;
+  const copyBlocked = recovery === null
+    || renameRecovery === null
+    || recovery.recoveryRequired
+    || renameRecovery.recoveryRequired;
 
-  function openRenameModal() {
-    if (selectedAsset === null || renameBlocked) return;
-    setRenameModalAsset(selectedAsset);
-    setRenameModalOpen(true);
+  function openOperations(
+    kind: OperationsDrawerKind,
+    asset?: CatalogAssetSelection,
+    options?: { fromStatusBar?: boolean },
+  ) {
+    userDismissedOperationsRef.current = false;
+    if (kind === "rename") {
+      const decision = resolveRenameDrawerPin({
+        renameRecovery,
+        explicitAsset: asset,
+        selectedAsset,
+        writeEnabled: writeEnabled === true,
+        writeBlocked,
+        operatorOnly: options?.fromStatusBar === true,
+      });
+      if (!decision.open) return;
+      if (!renamePrepareBusy && !changeBusy) {
+        setPinnedAsset(decision.pin);
+      }
+      setOperationsKind("rename");
+      setOperationsOpen(true);
+      return;
+    }
+    if (kind === "copy") {
+      const next = options?.fromStatusBar ? (asset ?? null) : (asset ?? selectedAsset);
+      if (next === null) {
+        if (recovery?.recoveryRequired !== true && recovery !== null) return;
+      } else if (copyBlocked && recovery?.recoveryRequired !== true) {
+        return;
+      } else if (!renamePrepareBusy && !changeBusy) {
+        setPinnedAsset(next);
+      }
+      setOperationsKind("copy");
+      setOperationsOpen(true);
+      return;
+    }
+    setOperationsKind("clone");
+    setOperationsOpen(true);
   }
 
-  function focusChangeDrawer() {
-    changeDrawerRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    changeDrawerRef.current?.focus({ preventScroll: true });
+  function closeOperations() {
+    userDismissedOperationsRef.current = true;
+    setOperationsOpen(false);
+  }
+
+  function openOperationsFromStatus(focusTarget?: HTMLElement | null) {
+    operationsReturnFocusRef.current = focusTarget ?? document.activeElement as HTMLElement | null;
+    const kind = operationsDrawerKindForStatus({
+      recovery,
+      renameRecovery,
+      fallback: operationsKind,
+    });
+    openOperations(kind, undefined, { fromStatusBar: true });
+  }
+
+  function openRenameForSelection(focusTarget?: HTMLElement | null) {
+    if (renamePrepareBusy || changeBusy) return;
+    if (selectedAsset === null) return;
+    operationsReturnFocusRef.current = focusTarget ?? document.activeElement as HTMLElement | null;
+    openOperations("rename", selectedAsset);
+  }
+
+  function openCopyForSelection(focusTarget?: HTMLElement | null) {
+    if (renamePrepareBusy || changeBusy) return;
+    if (selectedAsset === null) return;
+    operationsReturnFocusRef.current = focusTarget ?? document.activeElement as HTMLElement | null;
+    openOperations("copy", selectedAsset);
+  }
+
+  function openCloneOperations(focusTarget?: HTMLElement | null) {
+    operationsReturnFocusRef.current = focusTarget ?? document.activeElement as HTMLElement | null;
+    openOperations("clone");
   }
 
   function showInspectorPane() {
@@ -520,7 +592,7 @@ export function RootRegistryPanel({
       session={session}
       writeEnabled={writeEnabled === true}
       writeBlocked={writeBlocked}
-      busy={busy || changeBusy}
+      busy={sessionInteractionBusy}
       search={locationSearch}
       onSearchChange={setLocationSearch}
       searchDisabled={!catalogReady}
@@ -531,6 +603,7 @@ export function RootRegistryPanel({
       onEnableWrite={() => void enableWrite()}
       onDisableWrite={() => void disableWrite()}
       catalogReady={catalogReady}
+      onOpenClone={() => openCloneOperations()}
     />
   );
 
@@ -564,28 +637,27 @@ export function RootRegistryPanel({
     <WorkspaceStatusBar
       connected={session !== null}
       busy={busy}
-      changeBusy={changeBusy}
+      changeBusy={changeBusy || renamePrepareBusy}
       error={error}
       recovery={recovery}
       renameRecovery={renameRecovery}
-      onFocusChangeDrawer={focusChangeDrawer}
+      onOpenOperations={openOperationsFromStatus}
       onShowInspector={showInspectorPane}
       inspectorHidden={narrow && centerView === "list"}
     />
   );
 
-  const cloneFooter = catalogReady && session !== null ? (
-    <CloneOperatorPanel
-      session={session}
-      cloneVerification={cloneVerification}
-      busy={busy || changeBusy}
-      sourceEvidenceRecorded={sourceEvidenceId !== null}
-      onCreateManagedClone={handleCreateManagedClone}
-      onRecordSourceEvidence={handleRecordSourceEvidence}
-      onRegisterExternalClone={handleRegisterExternalClone}
-      onVerifyExternal={handleVerifyExternalClone}
-      onReverify={handleReverifyClone}
-    />
+  const sourcesFooter = session !== null ? (
+    <div className="root-registry-sources-footer">
+      <Button
+        variant="secondary"
+        disabled={sessionInteractionBusy}
+        aria-label={t("operations.openCloneAria")}
+        onClick={() => openCloneOperations()}
+      >
+        {t("operations.openClone")}
+      </Button>
+    </div>
   ) : null;
 
   const workspaceShell = (
@@ -608,7 +680,7 @@ export function RootRegistryPanel({
       onCenterViewChange={setCenterView}
       sources={
         catalogReady ? (
-          <CatalogWorkspaceNav footer={cloneFooter} />
+          <CatalogWorkspaceNav footer={sourcesFooter} />
         ) : (
           <p className="root-registry-nav-empty">{t("roots.mainEmpty")}</p>
         )
@@ -619,6 +691,11 @@ export function RootRegistryPanel({
             totalFiles={library.audioFiles.length}
             catalogRefreshing={catalogRefreshing}
             catalogError={catalogError}
+            onSampleRename={() => openRenameForSelection()}
+            onSampleCopy={() => openCopyForSelection()}
+            sampleRenameDisabled={renameBlocked || writeEnabled !== true}
+            sampleCopyDisabled={copyBlocked}
+            sampleOpsBusy={sessionInteractionBusy}
           />
         ) : (
           <p className="root-registry-main-empty">{t("roots.mainEmpty")}</p>
@@ -644,9 +721,11 @@ export function RootRegistryPanel({
                     stopPlaybackToken={stopLibraryPlaybackToken}
                     renameRecovery={renameRecovery}
                     renameBlocked={renameBlocked}
-                    renameBusy={busy || changeBusy}
+                    copyBlocked={copyBlocked}
+                    renameBusy={sessionInteractionBusy}
                     writeEnabled={writeEnabled === true}
-                    onRename={openRenameModal}
+                    onRename={() => openRenameForSelection()}
+                    onCopy={() => openCopyForSelection()}
                     onCommittedGeometryRangeChange={handleLibraryGeometryRange}
                     onRequestStopLibraryPlayback={requestStopLibraryPlayback}
                   />
@@ -657,40 +736,6 @@ export function RootRegistryPanel({
         ) : undefined
       }
       statusBar={statusBar}
-      changeDrawer={
-        catalogReady ? (
-          <div ref={changeDrawerRef} tabIndex={-1}>
-            <RenameOperatorPanel
-              session={session}
-              changeRecovery={recovery}
-              renameRecovery={renameRecovery}
-              cloneVerification={cloneVerification}
-              api={renameClient}
-              changeClient={changeClient}
-              disabled={busy}
-              refreshSession={refreshSessionBeforeApply}
-              onApplied={refreshAfterRenameApplied}
-              onRecovered={refreshAfterRenameRecovery}
-              onBusyChange={setChangeBusy}
-              onRenameRecoveryChange={setRenameRecovery}
-              onRecoveryChange={setRecovery}
-            />
-            <AdditiveCopyChangeDrawer
-              session={session}
-              selectedAsset={selectedAsset}
-              recovery={recovery}
-              renameRecovery={renameRecovery}
-              api={changeClient}
-              disabled={busy}
-              refreshSession={refreshSessionBeforeApply}
-              onCommitted={refreshAfterCommit}
-              onRecovered={refreshAfterRecovery}
-              onBusyChange={setChangeBusy}
-              onRecoveryChange={setRecovery}
-            />
-          </div>
-        ) : undefined
-      }
     />
   );
 
@@ -710,23 +755,40 @@ export function RootRegistryPanel({
       ) : (
         workspaceShell
       )}
-    {catalogReady && renameModalOpen && renameModalAsset !== null && session !== null && (
-      <RenameSampleModal
-        open={renameModalOpen}
-        session={session}
-        selectedAsset={renameModalAsset}
-        changeRecovery={recovery}
-        renameRecovery={renameRecovery}
-        api={renameClient}
-        onClose={() => {
-          setRenameModalOpen(false);
-          setRenameModalAsset(null);
-        }}
-        refreshSession={refreshSessionBeforeApply}
-        onPrepared={refreshAfterRenamePrepared}
-        onRenameRecoveryChange={setRenameRecovery}
-      />
-    )}
+      {session !== null && (
+        <OperationsDrawerHost
+          open={operationsOpen}
+          kind={operationsKind}
+          onClose={closeOperations}
+          returnFocusRef={operationsReturnFocusRef}
+          session={session}
+          pinnedAsset={pinnedAsset}
+          recovery={recovery}
+          renameRecovery={renameRecovery}
+          cloneVerification={cloneVerification}
+          sourceEvidenceRecorded={sourceEvidenceId !== null}
+          busy={sessionInteractionBusy}
+          renameClient={renameClient}
+          changeClient={changeClient}
+          cloneHandlers={{
+            onCreateManagedClone: handleCreateManagedClone,
+            onRecordSourceEvidence: handleRecordSourceEvidence,
+            onRegisterExternalClone: handleRegisterExternalClone,
+            onVerifyExternal: handleVerifyExternalClone,
+            onReverify: handleReverifyClone,
+          }}
+          refreshSession={refreshSessionBeforeApply}
+          onRenamePrepared={refreshAfterRenamePrepared}
+          onRenameApplied={refreshAfterRenameApplied}
+          onRenameRecovered={refreshAfterRenameRecovery}
+          onCopyCommitted={refreshAfterCommit}
+          onCopyRecovered={refreshAfterRecovery}
+          onBusyChange={setChangeBusy}
+          onRenamePrepareBusyChange={setRenamePrepareBusy}
+          onRenameRecoveryChange={setRenameRecovery}
+          onRecoveryChange={setRecovery}
+        />
+      )}
     </>
   );
 }
