@@ -1,28 +1,31 @@
 #!/usr/bin/env node
 /**
  * Synthetic Octatrack Set for MO-UI-WORKSPACE-NATIVE-ACCEPTANCE-1.
- * RANGE.wav matches scripts/generate-range-slice-native-fixture.mjs (M7 contract).
- *
- * Usage: node scripts/generate-ui-workspace-native-fixture.mjs <octatrack-root>
+ * Creates a managed temp fixture root; does not accept arbitrary output paths.
  */
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  cleanupOwnedFixtureRoot,
+  createManagedFixtureRoot,
+  validateEmptyFixtureRoot,
+  writeFileExclusive,
+} from "./ui-workspace-fixture-safe.mjs";
+import { M7_RANGE_SHA256 } from "./verify-ui-workspace-range-sha.mjs";
 
 const RATE = 44_100;
 const CHANNELS = 1;
 const BITS = 16;
 const PEAK = 0.8;
 
-/** Sample A — 6 s (M7 RANGE.wav). */
 const A_DURATION_S = 6;
 const A_FRAME_COUNT = RATE * A_DURATION_S;
 export const ATTACK_FRAMES_A = [22_050, 66_150, 110_250, 198_450];
 export const RANGE_A = { start: 44_100, endExclusive: 132_300 };
 export const RANGE_B = { start: 176_400, endExclusive: 220_500 };
 
-/** Sample B — 4 s, distinct attacks. */
 const B_DURATION_S = 4;
 const B_FRAME_COUNT = RATE * B_DURATION_S;
 const ATTACK_FRAMES_B = [8_820, 52_920, 132_300];
@@ -84,11 +87,15 @@ function buildWavBuffer(pcmFloat) {
   return { file, frameCount: pcmFloat.length };
 }
 
-async function writeWav(root, relativePath, pcmFloat) {
+/**
+ * @param {string} root canonical fixture root
+ * @param {string} relativePath
+ * @param {Float32Array} pcmFloat
+ */
+function writeWav(root, relativePath, pcmFloat) {
   const wavPath = join(root, relativePath);
-  await mkdir(dirname(wavPath), { recursive: true });
   const { file, frameCount } = buildWavBuffer(pcmFloat);
-  await writeFile(wavPath, file);
+  writeFileExclusive(wavPath, file);
   const sha256 = createHash("sha256").update(file).digest("hex");
   return {
     pathRelative: relativePath.replace(/\\/g, "/"),
@@ -101,97 +108,140 @@ async function writeWav(root, relativePath, pcmFloat) {
   };
 }
 
-async function writeSilentWav(root, relativePath, durationS) {
+function writeSilentWav(root, relativePath, durationS) {
   const frameCount = RATE * durationS;
   return writeWav(root, relativePath, new Float32Array(frameCount));
 }
 
-async function main() {
-  const root = process.argv[2];
-  if (!root) {
-    console.error("Usage: node scripts/generate-ui-workspace-native-fixture.mjs <octatrack-root>");
-    process.exit(1);
+/**
+ * @param {{ fixtureRoot?: string, managed?: boolean }} options
+ */
+export async function generateUiWorkspaceNativeFixture(options = {}) {
+  let ownedRoot = null;
+  let fixtureRoot;
+  if (options.fixtureRoot) {
+    fixtureRoot = validateEmptyFixtureRoot(options.fixtureRoot);
+  } else {
+    fixtureRoot = createManagedFixtureRoot();
+    ownedRoot = fixtureRoot;
   }
 
-  const scriptDir = dirname(fileURLToPath(import.meta.url));
-  const repoRoot = join(scriptDir, "..");
-  const projectFixture = join(
-    repoRoot,
-    "src-tauri/tests/fixtures/real_device_os_1_40/project.work",
-  );
-  const projectDir = join(root, "SET", "ACCEPT_PROJ");
-  await mkdir(projectDir, { recursive: true });
-  await copyFile(projectFixture, join(projectDir, "project.work"));
-  const projectWorkBytes = await readFile(join(projectDir, "project.work"));
-  const projectWorkSha = createHash("sha256").update(projectWorkBytes).digest("hex");
+  try {
+    const scriptDir = dirname(fileURLToPath(import.meta.url));
+    const repoRoot = join(scriptDir, "..");
+    const projectFixture = join(
+      repoRoot,
+      "src-tauri/tests/fixtures/real_device_os_1_40/project.work",
+    );
+    const projectDir = join(fixtureRoot, "SET", "ACCEPT_PROJ");
+    writeFileExclusive(
+      join(projectDir, "project.work"),
+      readFileSync(projectFixture),
+    );
+    const projectWorkSha = createHash("sha256")
+      .update(readFileSync(join(projectDir, "project.work")))
+      .digest("hex");
 
-  await mkdir(join(root, "SET", "AUDIO", "EMPTY_SLOT"), { recursive: true });
+    const files = [];
 
-  const files = [];
-
-  files.push(
-    await writeWav(
-      root,
+    const sampleA = writeWav(
+      fixtureRoot,
       "SET/AUDIO/RANGE.wav",
       buildPcmWithAttacks(A_FRAME_COUNT, ATTACK_FRAMES_A),
-    ),
-  );
-  const rangeMeta = files[files.length - 1];
-  rangeMeta.role = "sampleA";
-  rangeMeta.attackFrames = ATTACK_FRAMES_A;
-  rangeMeta.rangeA = RANGE_A;
-  rangeMeta.rangeB = RANGE_B;
+    );
+    sampleA.role = "sampleA";
+    sampleA.attackFrames = ATTACK_FRAMES_A;
+    sampleA.rangeA = RANGE_A;
+    sampleA.rangeB = RANGE_B;
+    files.push(sampleA);
 
-  const sampleB = await writeWav(
-    root,
-    "SET/AUDIO/ALT_FOUR_SEC.wav",
-    buildPcmWithAttacks(B_FRAME_COUNT, ATTACK_FRAMES_B),
-  );
-  sampleB.role = "sampleB";
-  sampleB.attackFrames = ATTACK_FRAMES_B;
-  files.push(sampleB);
+    const sampleB = writeWav(
+      fixtureRoot,
+      "SET/AUDIO/ALT_FOUR_SEC.wav",
+      buildPcmWithAttacks(B_FRAME_COUNT, ATTACK_FRAMES_B),
+    );
+    sampleB.role = "sampleB";
+    sampleB.attackFrames = ATTACK_FRAMES_B;
+    files.push(sampleB);
 
-  const ja = await writeSilentWav(root, "SET/AUDIO/キック_受入.wav", 1);
-  ja.role = "japaneseName";
-  files.push(ja);
+    const ja = writeSilentWav(fixtureRoot, "SET/AUDIO/キック_受入.wav", 1);
+    ja.role = "japaneseName";
+    files.push(ja);
 
-  const longName =
-    "SET/AUDIO/very_long_disposable_name_for_layout_overflow_acceptance_check.wav";
-  const long = await writeSilentWav(root, longName, 1);
-  long.role = "longName";
-  files.push(long);
+    const longName =
+      "SET/AUDIO/very_long_disposable_name_for_layout_overflow_acceptance_check.wav";
+    const long = writeSilentWav(fixtureRoot, longName, 1);
+    long.role = "longName";
+    files.push(long);
 
-  const noSearch = await writeSilentWav(root, "SET/AUDIO/zz_no_search_hit.wav", 1);
-  noSearch.role = "searchZeroHint";
-  files.push(noSearch);
+    const noSearch = writeSilentWav(fixtureRoot, "SET/AUDIO/zz_no_search_hit.wav", 1);
+    noSearch.role = "searchZeroHint";
+    files.push(noSearch);
 
-  for (const [name, role] of [
-    ["ops_clone_src.wav", "opsClone"],
-    ["ops_rename_src.wav", "opsRename"],
-    ["ops_copy_src.wav", "opsCopy"],
-  ]) {
-    const entry = await writeSilentWav(root, `SET/AUDIO/${name}`, 1);
-    entry.role = role;
-    files.push(entry);
+    for (const [name, role] of [
+      ["ops_clone_src.wav", "opsClone"],
+      ["ops_rename_src.wav", "opsRename"],
+      ["ops_copy_src.wav", "opsCopy"],
+    ]) {
+      const entry = writeSilentWav(fixtureRoot, `SET/AUDIO/${name}`, 1);
+      entry.role = role;
+      files.push(entry);
+    }
+
+    if (sampleA.sha256 !== M7_RANGE_SHA256) {
+      throw new Error(
+        `internal RANGE.wav SHA-256 drift: expected ${M7_RANGE_SHA256}, got ${sampleA.sha256}`,
+      );
+    }
+
+    return {
+      fixtureRoot,
+      ownedRoot,
+      generator: "generate-ui-workspace-native-fixture.mjs",
+      setLayout: "SET/AUDIO/ (Set = directory containing AUDIO/)",
+      project: {
+        pathRelative: "SET/ACCEPT_PROJ/project.work",
+        sha256: projectWorkSha,
+        sourceFixture: "src-tauri/tests/fixtures/real_device_os_1_40/project.work",
+      },
+      acceptanceLocations: {
+        emptyList: {
+          catalogKind: "project",
+          relativePath: "SET/ACCEPT_PROJ",
+          displayName: "ACCEPT_PROJ",
+          note: "Project location with zero indexed audio files (only project.work).",
+        },
+        searchZero: {
+          catalogKind: "set_audio_pool",
+          parentPath: "SET",
+          exampleQuery: "xyzzy_nomatch",
+          note: "Audio pool contains files; query with no matches yields zero hits.",
+        },
+      },
+      files,
+    };
+  } catch (error) {
+    if (ownedRoot) {
+      cleanupOwnedFixtureRoot(ownedRoot);
+    }
+    throw error;
   }
+}
 
-  const manifest = {
-    generator: "generate-ui-workspace-native-fixture.mjs",
-    setLayout: "SET/AUDIO/ (Set = directory containing AUDIO/)",
-    project: {
-      pathRelative: "SET/ACCEPT_PROJ/project.work",
-      sha256: projectWorkSha,
-      sourceFixture: "src-tauri/tests/fixtures/real_device_os_1_40/project.work",
-    },
-    emptyLocation: "SET/AUDIO/EMPTY_SLOT/",
-    searchNote: "Query that matches no file (e.g. xyzzy) yields zero hits; EMPTY_SLOT has no WAV.",
-    files,
-  };
-
+async function main() {
+  const manifest = await generateUiWorkspaceNativeFixture();
   console.log(JSON.stringify(manifest, null, 2));
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+function isMainModule() {
+  const selfPath = fileURLToPath(import.meta.url);
+  const invoked = process.argv[1] ? resolve(process.argv[1]) : "";
+  return selfPath === invoked;
+}
+
+if (isMainModule()) {
+  main().catch((err) => {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  });
+}

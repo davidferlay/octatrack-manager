@@ -1,114 +1,117 @@
 # MO-UI-WORKSPACE-NATIVE-ACCEPTANCE-1
 
-**Work ID:** `MO-UI-WORKSPACE-NATIVE-ACCEPTANCE-1`  
+**Work ID:** `MO-UI-WORKSPACE-NATIVE-ACCEPTANCE-1` (+ fix pass `MO-UI-WORKSPACE-NATIVE-ACCEPTANCE-FIX-1`)  
 **Base:** GitHub `main` after PR #135 merge (`22344fb386b1f5e17ee7fea524130eb101fd53ab`)  
 **Branch:** `feat/ui-workspace-native-acceptance-1`  
-**Acceptance commit:** `f279c9d0036d5317da5e9b475b637d0682fa810c`  
+**PR:** [#136](https://github.com/kaz4g/masterocta/pull/136) (Draft)  
+**Review target SHA (start of FIX-1):** `b386d3bbc970774ca0d0a2e5379637888e371361`  
 **Host OS:** Darwin 25.6.0 (macOS)  
 **Recorded (UTC):** 2026-09-16  
-**Draft PR:** pending `gh auth login` — branch pushed; open Draft from  
-https://github.com/kaz4g/masterocta/compare/main...feat/ui-workspace-native-acceptance-1  
 
 Sanitized record: no operator home paths, no real Octatrack media, no production catalog paths.
 
 ## Scope
 
-Real Tauri **development** build (`pnpm run tauri:dev`) on #132–#135 integrated UI. Synthetic fixture only.
-Mock IPC / Playwright success is **not** native acceptance. **Merge:** not performed. **Public distribution:** not authorized.
+Real Tauri **development** build on #132–#135 integrated UI. Synthetic fixture only.
+Mock IPC / Playwright success is **not** native acceptance. **Merge / public release:** not authorized.
 
-## Preconditions
+## Review FIX-1 (8 items)
 
-| Check | Result | Kind |
-| --- | --- | --- |
-| #135 merged (`MO-UI-SLICE-WORKSPACE-1`) | **PASS** | recorded |
-| Worktree at `origin/main` `22344fb` | **PASS** | git |
-| Isolated HOME procedure documented | **PASS** | script |
-| Mock/E2E substituted for native UI | **PASS (negative)** | policy |
+| # | Topic | Reproduce (before) | Fix | Verification |
+| --- | --- | --- | --- | --- |
+| 1 | P1 fixture output safety | CLI accepted arbitrary paths; overwrote via mkdir/write | Managed temp root only; `validateEmptyFixtureRoot`; exclusive `wx` writes; no delete-then-write; cleanup owned root on failure | `scripts/generate-ui-workspace-native-fixture.test.mjs` (8 cases) |
+| 2 | P2 catalog path / isolation | Doc implied HOME= alone; path partly wrong | Trace `lib.rs` → `open_shared_catalog`; document **code-derived** path vs **observed** path; launcher child only | `prepare-ui-workspace-native-acceptance.sh` + this doc; runtime catalog file **NOT_RUN** |
+| 3 | P2 Node/pnpm launcher | Parent `export HOME`; PATH glob `node/*/bin` | `launch-native-acceptance-tauri.sh` preserves parent PATH; resolves node/pnpm/cargo via `command -v`; respects RUSTUP_HOME/CARGO_HOME | Manual review + prepare output |
+| 4 | P2 RANGE SHA256 | Manifest JSON only | `verify-ui-workspace-range-sha.mjs` hashes file bytes; prepare exits non-zero on mismatch | Node tests + prepare integration |
+| 5 | P2 catalog list path | Test used live scan snapshot only | `list_library_dto_sync` (same as `v2_library_list`) after register | `cargo test --locked ui_workspace_native_fixture_registers_and_lists_audio` |
+| 6 | P2 CI hook | `test:ui-native-fixture` not in CI | Added to `.github/workflows/ci.yml` frontend job + root `pnpm test` | CI on final head (see below) |
+| 7 | P2 empty UI location | `EMPTY_SLOT` not a catalog location | `ACCEPT_PROJ` project location (selectable, zero audio files); search-zero separate (`xyzzy_nomatch` in pool) | Manifest `acceptanceLocations` + Rust assertion on zero `project_local` under ACCEPT_PROJ |
+| 8 | P1 Cargo `--locked` | Scripts/docs omitted `--locked` | `package.json` `test:rust`, CI rust job use `--locked` | Local `cargo test --locked` PASS |
 
 ## Isolation
 
 | Item | Value |
 | --- | --- |
-| Generator | `scripts/generate-ui-workspace-native-fixture.mjs` |
+| Generator | `scripts/generate-ui-workspace-native-fixture.mjs` (managed root; no CLI output path) |
 | Prep | `scripts/prepare-ui-workspace-native-acceptance.sh` |
-| App data | `export HOME=<isolated>` → `Library/Application Support/jp.d3nousan.masterocta/…` |
-| Toolchain | `REAL_HOME` + `RUSTUP_HOME` / `CARGO_HOME` / `PATH` (not isolated) |
-| `tauri:dev` note | `package.json` prepends `$HOME/.cargo/bin`; with isolated `HOME`, ensure `CARGO_HOME/bin` stays on `PATH` |
+| Launcher | `scripts/launch-native-acceptance-tauri.sh <isolated_home> [repo_root]` |
+| Bundle ID | `jp.d3nousan.masterocta` ([`tauri.conf.json`](../../src-tauri/tauri.conf.json)) |
+| **Code-derived** data dir (macOS, isolated HOME) | `$HOME/Library/Application Support/jp.d3nousan.masterocta` |
+| **Code-derived** catalog DB | `…/MasterOCTa/catalog.sqlite3` ([`catalog_runtime.rs`](../../src-tauri/src/catalog_runtime.rs)) |
+| **Observed** catalog path after register | **NOT_RUN** (operator: `test -f` on path under `isolated_home` only) |
+
+Setting `HOME` alone is **not** recorded as isolation proof.
 
 ## Fixture (deterministic)
 
-Set layout: `SET/AUDIO/` + project `SET/ACCEPT_PROJ/project.work` (copy of reviewed `real_device_os_1_40` fixture, SHA-256 `742b8228026b0d25b6de72e915adcec428b954f3be769e4f4e177cdfab7c7ae6`).
+Regenerate: `bash scripts/prepare-ui-workspace-native-acceptance.sh` (creates managed set root + verifies RANGE SHA).
 
-| Role | Path | Frames | SHA-256 (file) |
-| --- | --- | --- | --- |
-| sampleA (M7 RANGE) | `SET/AUDIO/RANGE.wav` | 264600 | `43ceb3dc7e42bd89ee1b83da57682cb0b2f846c5b12caf210cbf61ba29e429b1` |
-| sampleB | `SET/AUDIO/ALT_FOUR_SEC.wav` | 176400 | `6c593d608fe6d94bc780703e73458857ec01831895574dd1019b31dc5606aec0` |
-| japaneseName | `SET/AUDIO/キック_受入.wav` | 44100 | `3fa20276d8a4131431490ed129d0b05fafa4e9c82d4339b5cf635512103d6615` |
-| longName | `SET/AUDIO/very_long_disposable_name_for_layout_overflow_acceptance_check.wav` | 44100 | `3fa20276d8a4131431490ed129d0b05fafa4e9c82d4339b5cf635512103d6615` |
-| opsClone/Rename/Copy | `SET/AUDIO/ops_*.wav` | 44100 each | `3fa20276d8a4131431490ed129d0b05fafa4e9c82d4339b5cf635512103d6615` |
-| empty location | `SET/AUDIO/EMPTY_SLOT/` | — | (no WAV) |
-
-**Range contract (sample A):** half-open absolute PCM frames. Range A `[44100, 132300)` → expect onsets 66150 & 110250 in band; 22050 & 198450 out of band. Range B `[176400, 220500)` → `ANALYSIS_REGION_MISMATCH` when draft from A exists (ROI branch not implemented).
-
-WAV bytes are not committed; regenerate via scripts above.
-
-## Automated observations (non-GUI)
-
-| Step | Result | Notes |
+| Role | Path | SHA-256 (file) |
 | --- | --- | --- |
-| `node --test scripts/generate-ui-workspace-native-fixture.test.mjs` | **PASS** | sampleA SHA matches M7 |
-| `v2_api::tests::ui_workspace_native_fixture_registers_and_lists_audio` | **PASS** | real register + scan IPC stack |
-| `pnpm run typecheck` / `test:frontend` (610) / `build` | **PASS** | worktree head |
-| `cargo fmt --check` / `clippy -D warnings` (workspace) | **PASS** | after acceptance commit |
-| `pnpm run tauri:dev` + isolated `HOME` (~120 s window) | **PASS (partial)** | `cargo run` started `masterocta`; no Rust panic in log; session ended by timeout (Vite EPIPE) — not full UI exercise |
-| Playwright / `__E2E_ROOT_PATH__` used for native claim | **PASS (negative)** | not used |
+| sampleA (M7 RANGE) | `SET/AUDIO/RANGE.wav` | `43ceb3dc7e42bd89ee1b83da57682cb0b2f846c5b12caf210cbf61ba29e429b1` |
+| sampleB | `SET/AUDIO/ALT_FOUR_SEC.wav` | `6c593d608fe6d94bc780703e73458857ec01831895574dd1019b31dc5606aec0` |
+| japaneseName | `SET/AUDIO/キック_受入.wav` | `3fa20276d8a4131431490ed129d0b05fafa4e9c82d4339b5cf635512103d6615` |
+| longName | `SET/AUDIO/very_long_disposable_name_for_layout_overflow_acceptance_check.wav` | (same as 1 s silent fixture) |
+| searchZeroHint | `SET/AUDIO/zz_no_search_hit.wav` | use query `xyzzy_nomatch` in Audio Pool |
+| empty list location | **Project** `SET/ACCEPT_PROJ` (catalog location; zero audio files) | — |
+
+**Range contract (sample A):** half-open absolute PCM. Range A `[44100, 132300)`; Range B `[176400, 220500)` → `ANALYSIS_REGION_MISMATCH` when draft from A exists.
+
+WAV bytes are not committed.
+
+## Evidence classes (do not conflate)
+
+| Class | Status |
+| --- | --- |
+| Fixture generation + byte SHA verify | **PASS** (automated) |
+| Rust catalog-backed `v2_library_list` DTO test | **PASS** (automated; not WebView IPC) |
+| Tauri dev startup smoke | **NOT_RUN** in FIX-1 pass (prior timeout ≠ success; not re-run as PASS) |
+| WebView native IPC + operator UI | **NOT_RUN** |
+| Operator hearing / post-UI WAV SHA | **NOT_RUN** |
+| Runtime catalog path observation | **NOT_RUN** |
 
 ## Operator native acceptance (#132–#135 + M7 UI)
 
-| Area | Result | Kind |
-| --- | --- | --- |
-| #132 Location → list → Inspector (real catalog) | **NOT_RUN** | folder picker + operator |
-| #133 Tabs, Notes save/reload, locale without reset | **NOT_RUN** | operator |
-| #133 Search zero / empty location smoke | **NOT_RUN** | operator (fixture ready) |
-| #134 Clone / Rename / Copy drawer flows + writes | **NOT_RUN** | operator + write grant |
-| #134 Drawer close retains input; Prepare busy guards | **NOT_RUN** | operator |
-| #134 Prepared restart via status bar | **NOT_RUN** | operator |
-| #134 Recovery Required → recovery UI | **NOT_RUN** | no safe synthetic recovery fixture (by design) |
-| #135 Expand ↔ compact slice workspace | **NOT_RUN** | operator |
-| M7 A–D (range preview hearing, analyze, draft, mismatch) | **NOT_RUN** | picker + hearing + UI |
-| Draft restart persistence | **NOT_RUN** | operator |
-| Display 1280/840 ja/en + screenshots | **NOT_RUN** | operator |
-| Operator panel body English | **NOTE** | recorded; out of scope for this task |
-
-**Overall native product acceptance:** **NOT_COMPLETE** until operator rows above are exercised on real `tauri:dev` with this fixture. Automated catalog + dev startup evidence does **not** close the matrix.
-
-## Session vs restart persistence (expected contract)
-
-| State | After tab/expand toggle (design) | After quit + re-register (design) |
-| --- | --- | --- |
-| Slice draft / markers / analysis region | keep same session | reload if persisted in catalog (verify operator) |
-| Waveform zoom/pan (Library) | keep per #133 handoff | not required to persist across restart |
-| List search/page/location | keep per #132/#135 handoff | not required across restart |
-
-## Failures / fixes
-
-| Issue | Action |
+| Area | Result |
 | --- | --- |
-| UI integration defects in this pass | **None observed** in automated scope |
-| Regression tests added | fixture node test + Rust catalog smoke test |
+| Location → list → Inspector | **NOT_RUN** |
+| Tabs / Notes / locale | **NOT_RUN** |
+| Empty **project** list vs search-zero in pool | **NOT_RUN** (fixture ready) |
+| Operations Drawer / writes | **NOT_RUN** |
+| Slice expand / restart / hearing | **NOT_RUN** |
+| Recovery Required UI | **NOT_RUN** |
+| Display / screenshots | **NOT_RUN** |
 
-## Verification commands (reference)
+**Overall native product acceptance:** **NOT_COMPLETE**
+
+## Operator commands (next)
 
 ```bash
 cd .worktrees/ui-workspace-native-acceptance-1
 bash scripts/prepare-ui-workspace-native-acceptance.sh
-pnpm run test:ui-native-fixture
-CI=true pnpm run typecheck && CI=true pnpm run test:frontend && CI=true pnpm run build
-cd src-tauri && cargo test ui_workspace_native_fixture_registers_and_lists_audio
+# Use printed isolated_home and fixture_root; confirm range_sha256_ok line.
+
+REAL_HOME="${REAL_HOME:-$HOME}" \
+  ./scripts/launch-native-acceptance-tauri.sh "<isolated_home>" "$(pwd)"
+# Register printed fixture_root (read-only). After rescan, verify catalog file under isolated_home only.
+
+node scripts/verify-ui-workspace-range-sha.mjs "<fixture_root>/SET/AUDIO/RANGE.wav"
 ```
+
+## Local verification (FIX-1)
+
+| Check | Result |
+| --- | --- |
+| `pnpm run test:ui-native-fixture` | **PASS** (8 tests) |
+| `cargo test --locked -p masterocta --features test-seams ui_workspace_native_fixture_registers_and_lists_audio` | **PASS** |
+| `bash scripts/prepare-ui-workspace-native-acceptance.sh` | **PASS** (exits 0 only after byte SHA verify) |
+| `pnpm run typecheck` / `test:frontend` / `build` | Run at commit time |
+| GitHub Actions on final FIX-1 head | **Pending** after push |
+
+## Failures / fixes
+
+No UI product defects found in FIX-1 scope; changes are fixture safety, verification, catalog test path, CI, and docs.
 
 ## Next
 
-- Operator: complete NOT_RUN matrix; append sanitized results to this file.
-- `.ot` output / export design: proceed only after native UI acceptance **PASS** (or explicit waiver).
-- Operator panel i18n: separate task (see `docs/I18N.md`).
+Complete operator NOT_RUN matrix before `.ot` output design. Operator panel i18n remains a separate task.

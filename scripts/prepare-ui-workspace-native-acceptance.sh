@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Isolated HOME + synthetic Set for MO-UI-WORKSPACE-NATIVE-ACCEPTANCE-1.
+# Isolated HOME + managed synthetic Set for MO-UI-WORKSPACE-NATIVE-ACCEPTANCE-1.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -7,44 +7,54 @@ COMMIT="$(git -C "$ROOT_DIR" rev-parse HEAD)"
 SHORT="$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 ISOLATED_HOME="${MASTEROCTA_NATIVE_ACCEPTANCE_HOME:-/tmp/masterocta-ui-native-${SHORT}-${STAMP}}"
-FIXTURE_ROOT="${ISOLATED_HOME}/fixture-octatrack-root"
 
 mkdir -p "${ISOLATED_HOME}"
 
 echo "work_id=MO-UI-WORKSPACE-NATIVE-ACCEPTANCE-1"
 echo "commit=${COMMIT}"
 echo "isolated_home=${ISOLATED_HOME}"
-echo "fixture_root=${FIXTURE_ROOT}"
 
-MANIFEST="$(node "${ROOT_DIR}/scripts/generate-ui-workspace-native-fixture.mjs" "${FIXTURE_ROOT}")"
-echo "${MANIFEST}" > "${ISOLATED_HOME}/fixture-manifest.json"
-echo "${MANIFEST}"
+MANIFEST_JSON="$(node "${ROOT_DIR}/scripts/generate-ui-workspace-native-fixture.mjs")"
+echo "${MANIFEST_JSON}" > "${ISOLATED_HOME}/fixture-manifest.json"
 
-# Post-generate integrity: sample A SHA must match M7 manifest when generator unchanged.
-RANGE_SHA="$(echo "${MANIFEST}" | node -e "
+FIXTURE_ROOT="$(printf '%s' "${MANIFEST_JSON}" | node -e "
   let s=''; process.stdin.on('data',d=>s+=d); process.stdin.on('end',()=>{
     const m=JSON.parse(s);
-    const r=m.files.find(f=>f.role==='sampleA');
-    console.log(r.sha256);
+    process.stdout.write(m.fixtureRoot);
   });
 ")"
-echo "sampleA_sha256=${RANGE_SHA}"
+RANGE_WAV="${FIXTURE_ROOT}/SET/AUDIO/RANGE.wav"
+
+if ! node "${ROOT_DIR}/scripts/verify-ui-workspace-range-sha.mjs" "${RANGE_WAV}"; then
+  echo "fixture_integrity=FAIL" >&2
+  exit 1
+fi
+
+echo "fixture_root=${FIXTURE_ROOT}"
+echo "${MANIFEST_JSON}"
+
+BUNDLE_ID="jp.d3nousan.masterocta"
+EXPECTED_DATA_DIR="${ISOLATED_HOME}/Library/Application Support/${BUNDLE_ID}"
+EXPECTED_CATALOG="${EXPECTED_DATA_DIR}/MasterOCTa/catalog.sqlite3"
 
 cat <<EOF
 
-Operator — app data only uses isolated HOME; keep Rust/Node on real user home:
-  REAL_HOME="\${REAL_HOME:-\$HOME}"
-  export HOME="${ISOLATED_HOME}"
-  export RUSTUP_HOME="\${REAL_HOME}/.rustup"
-  export CARGO_HOME="\${REAL_HOME}/.cargo"
-  export PATH="\${CARGO_HOME}/bin:\${REAL_HOME}/.nvm/versions/node/*/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-  cd "${ROOT_DIR}" && git rev-parse HEAD
-  pnpm run tauri:dev
+Catalog path (code-derived expectation — not proof of runtime isolation):
+  bundle_identifier=${BUNDLE_ID}
+  tauri_data_dir=\${HOME}/Library/Application Support/${BUNDLE_ID}
+  catalog_sqlite=${EXPECTED_CATALOG}
+
+Isolation verification (operator — after register + rescan in isolated session):
+  test -f "${EXPECTED_CATALOG}"
+  Do not treat HOME= alone as sufficient; confirm catalog appears only under isolated_home above.
+
+Launch (child process — parent shell HOME/PATH unchanged):
+  REAL_HOME="\${REAL_HOME:-\$HOME}" \\
+    ${ROOT_DIR}/scripts/launch-native-acceptance-tauri.sh $(printf '%q' "${ISOLATED_HOME}") $(printf '%q' "${ROOT_DIR}")
 
 Register folder (read-only): ${FIXTURE_ROOT}
-Catalog after register: \${HOME}/Library/Application Support/jp.d3nousan.masterocta/MasterOCTa/catalog.sqlite3
 
-Verify fixture WAVs unchanged after acceptance:
-  shasum -a 256 "${FIXTURE_ROOT}/SET/AUDIO/RANGE.wav"
+Post-acceptance WAV integrity (separate from generation check):
+  node ${ROOT_DIR}/scripts/verify-ui-workspace-range-sha.mjs $(printf '%q' "${RANGE_WAV}")
 
 EOF

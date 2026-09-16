@@ -316,16 +316,15 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ### 6.0 現在の次作業（2026-09-16）
 
-**作業ID:** `MO-UI-WORKSPACE-NATIVE-ACCEPTANCE-1`（受入記録 + fixture/自動 smoke。Draft PR。merge しない）
+**作業ID:** `MO-UI-WORKSPACE-NATIVE-ACCEPTANCE-FIX-1`（PR #136 レビュー8件。Draft 維持。merge しない）
 
-**基点:** GitHub `main` `22344fb`（#135 merge 後）。ブランチ
-`feat/ui-workspace-native-acceptance-1`。worktree
-`.worktrees/ui-workspace-native-acceptance-1`。引き継ぎ正本:
+**基点:** ブランチ `feat/ui-workspace-native-acceptance-1` / PR #136。引き継ぎ:
 `docs/testing/MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md`。
 
-**結果:** 合成 fixture + 隔離 HOME 手順 + Rust catalog smoke + dev 起動 smoke は **PASS**。
-#132–#135 / M7 の **オペレーター native UI 行列は NOT_RUN**（mock で代替 PASS しない）。
-**`.ot` 出力設計:** native UI 受入 **NOT_COMPLETE** のため、出力設計へはオペレーター完了または明示 waiver 後。
+**FIX-1:** 管理 temp の fixture 安全生成、RANGE 実バイト SHA 検証、catalog 経路 DTO テスト、
+`launch-native-acceptance-tauri.sh`、CI `test:ui-native-fixture`、`cargo --locked`。
+**オペレーター native UI / 隔離観測 / 聴感は NOT_RUN**。総合 native 受入 **NOT_COMPLETE**。
+**`.ot` 出力設計:** オペレーター完了または明示 waiver 後。
 
 **履歴 — MO-UI-SLICE-WORKSPACE-1:** **MERGED** #135（`22344fb`）。引き継ぎ:
 `docs/testing/MO_UI_SLICE_WORKSPACE_1_PR.md`。
