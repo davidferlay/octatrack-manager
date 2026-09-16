@@ -5,7 +5,7 @@
 | | SHA |
 | --- | --- |
 | #134 merge on `main` | `a3dafcc0beca1b6e9a304f86b355a982d03621cf` |
-| Product head (fill after push) | _pending_ |
+| Product head | `27ce5c6` |
 
 ## Scope
 
