@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { clickCatalogFileRow } from "./catalogFileRow";
+import { clickCatalogFileRow, openSampleRenameFromCatalog } from "./catalogFileRow";
 import { uiText } from "./i18n";
 import { expectEditEnabledInContextBar } from "./narrowWorkspace";
 
@@ -203,12 +203,13 @@ test.describe("Rename prepare workflow", () => {
     await page.getByRole("button", { name: uiText("ja", "sources.editMode") }).click();
     await expectEditEnabledInContextBar(page, "ja");
     await clickCatalogFileRow(page, "ja", "KICK.wav");
-    await page.getByRole("button", { name: uiText("ja", "inspector.renameAction") }).click();
-    await page.getByLabel("New file name").fill("KICK_DEEP.wav");
-    await page.getByRole("button", { name: "Review Rename" }).click();
-    await expect(page.getByText("1 reference will be updated")).toBeVisible();
-    await page.getByRole("button", { name: "Approve & Prepare" }).click();
-    await expect(page.getByText("Rename prepared")).toBeVisible();
+    await openSampleRenameFromCatalog(page, "ja");
+    const renameDrawer = page.getByRole("dialog");
+    await renameDrawer.getByLabel("New file name").fill("KICK_DEEP.wav");
+    await renameDrawer.getByRole("button", { name: "Review Rename" }).click();
+    await expect(renameDrawer.getByText("1 reference will be updated")).toBeVisible();
+    await renameDrawer.getByRole("button", { name: "Approve & Prepare" }).click();
+    await expect(renameDrawer.getByText("Rename prepared")).toBeVisible();
     await expect(page.getByText(/No Octatrack media changes have been applied/i)).toBeVisible();
 
     const invokeCalls = await page.evaluate(() => (window as any).__E2E_INVOKE_CALLS__ ?? []);
@@ -326,10 +327,11 @@ test.describe("Rename prepare workflow", () => {
     await page.getByRole("button", { name: uiText("ja", "sources.editMode") }).click();
     await expectEditEnabledInContextBar(page, "ja");
     await clickCatalogFileRow(page, "ja", "KICK.wav");
-    await page.getByRole("button", { name: uiText("ja", "inspector.renameAction") }).click();
-    await page.getByLabel("New file name").fill("KICK_DEEP.wav");
-    await page.getByRole("button", { name: "Review Rename" }).click();
-    await expect(page.getByText("Rename blocked")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Approve & Prepare" })).toHaveCount(0);
+    await openSampleRenameFromCatalog(page, "ja");
+    const renameDrawer = page.getByRole("dialog");
+    await renameDrawer.getByLabel("New file name").fill("KICK_DEEP.wav");
+    await renameDrawer.getByRole("button", { name: "Review Rename" }).click();
+    await expect(renameDrawer.getByText("Rename blocked")).toBeVisible();
+    await expect(renameDrawer.getByRole("button", { name: "Approve & Prepare" })).toHaveCount(0);
   });
 });
