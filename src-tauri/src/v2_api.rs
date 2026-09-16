@@ -10817,4 +10817,60 @@ mod tests {
         assert_eq!(verified.verification_state, "failed");
         assert_ne!(before, collect_fixture_manifest(fixture._root.path()));
     }
+
+    /// MO-UI-WORKSPACE-NATIVE-ACCEPTANCE-1 — automated catalog smoke (real IPC stack, no GUI).
+    #[test]
+    fn ui_workspace_native_fixture_registers_and_lists_audio() {
+        let media_root = TempDir::new().unwrap();
+        let repo_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let script = repo_root.join("scripts/generate-ui-workspace-native-fixture.mjs");
+        let output = std::process::Command::new("node")
+            .arg(&script)
+            .arg(media_root.path())
+            .output()
+            .expect("spawn node generator");
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let manifest: serde_json::Value =
+            serde_json::from_slice(&output.stdout).expect("manifest json");
+        let sample_a_sha = manifest["files"]
+            .as_array()
+            .and_then(|files| {
+                files
+                    .iter()
+                    .find(|entry| entry["role"] == "sampleA")
+                    .and_then(|entry| entry["sha256"].as_str())
+            })
+            .expect("sampleA sha256");
+        assert_eq!(
+            sample_a_sha,
+            "43ceb3dc7e42bd89ee1b83da57682cb0b2f846c5b12caf210cbf61ba29e429b1"
+        );
+
+        let (_data_dir, catalog) = catalog();
+        let registry = registry();
+        let session =
+            register_root_sync(&registry, &catalog, media_root.path().to_str().unwrap()).unwrap();
+        let root_id = ot_domain::RootId::new(session.root_id).expect("root id");
+        let (_, snapshot) = scan_library_sync(&registry, &catalog, &root_id).unwrap();
+        assert!(!snapshot.sets.is_empty());
+        assert!(snapshot.sets[0].has_audio_pool);
+        let relative_paths: Vec<&str> = snapshot
+            .file_instances
+            .iter()
+            .map(|file| file.relative_path.as_str())
+            .collect();
+        assert!(relative_paths
+            .iter()
+            .any(|path| path.ends_with("RANGE.wav")));
+        assert!(relative_paths.iter().any(|path| path.contains("キック")));
+        assert!(snapshot
+            .sets
+            .iter()
+            .flat_map(|set| set.projects.iter())
+            .any(|project| project.display_name == "ACCEPT_PROJ"));
+    }
 }

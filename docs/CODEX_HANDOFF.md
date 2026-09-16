@@ -316,16 +316,19 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ### 6.0 現在の次作業（2026-09-16）
 
-**作業ID:** `MO-UI-SLICE-WORKSPACE-1`（製品 PR。Draft 提出。merge しない）
+**作業ID:** `MO-UI-WORKSPACE-NATIVE-ACCEPTANCE-1`（受入記録 + fixture/自動 smoke。Draft PR。merge しない）
 
-**基点:** #134 merged `a3dafcc`（Operations Drawer on `main`）。ブランチ
-`feat/ui-slice-workspace-1`。Inspector スライスタブから中央＋右の拡張編集。
-`RootRegistryPanel` が単一 `SliceWorkbench` セッションを portal で compact/expanded
-ホストへ出す（二重マウント禁止）。引き継ぎ正本:
+**基点:** GitHub `main` `22344fb`（#135 merge 後）。ブランチ
+`feat/ui-workspace-native-acceptance-1`。worktree
+`.worktrees/ui-workspace-native-acceptance-1`。引き継ぎ正本:
+`docs/testing/MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md`。
+
+**結果:** 合成 fixture + 隔離 HOME 手順 + Rust catalog smoke + dev 起動 smoke は **PASS**。
+#132–#135 / M7 の **オペレーター native UI 行列は NOT_RUN**（mock で代替 PASS しない）。
+**`.ot` 出力設計:** native UI 受入 **NOT_COMPLETE** のため、出力設計へはオペレーター完了または明示 waiver 後。
+
+**履歴 — MO-UI-SLICE-WORKSPACE-1:** **MERGED** #135（`22344fb`）。引き継ぎ:
 `docs/testing/MO_UI_SLICE_WORKSPACE_1_PR.md`。
-
-**Native:** 前工程 Operations Drawer min-smoke は本環境 **NOT_RUN**（mock/E2E のみ）。
-本 UI も E2E 中心。Tauri 実機は記録に従い未完了扱いにしない。
 
 **履歴 — MO-UI-OPERATIONS-DRAWER-1:** **MERGED** #134（head `3ad18a2`）。引き継ぎ:
 `docs/testing/MO_UI_OPERATIONS_DRAWER_1_PR.md`。
