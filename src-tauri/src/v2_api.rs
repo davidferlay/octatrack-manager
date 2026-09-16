@@ -10863,13 +10863,14 @@ mod tests {
             .iter()
             .flat_map(|set| set.projects.iter())
             .any(|project| project.display_name == "ACCEPT_PROJ"));
-        let display_names: Vec<&str> = dto
+        assert!(dto
             .audio_files
             .iter()
-            .map(|file| file.display_name.as_str())
-            .collect();
-        assert!(display_names.iter().any(|name| *name == "RANGE.wav"));
-        assert!(display_names.iter().any(|name| name.contains("キック")));
+            .any(|file| file.display_name == "RANGE.wav"));
+        assert!(dto
+            .audio_files
+            .iter()
+            .any(|file| file.display_name == "キック_受入.wav"));
         assert!(dto
             .audio_files
             .iter()
