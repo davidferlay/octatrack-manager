@@ -5,7 +5,7 @@
 **Branch:** `feat/ui-workspace-native-acceptance-1`  
 **PR:** [#136](https://github.com/kaz4g/masterocta/pull/136) (Draft)  
 **Review target SHA (start of FIX-1):** `b386d3bbc970774ca0d0a2e5379637888e371361`  
-**Final PR head:** `8bf77be770eb793f721fca33e9fa033b13e9ff12` (FIX-1 code: `bc78af6`, clippy: `9935ae2`)  
+**Final PR head:** `f7fe55192b1b52a6a296bf096c744f9cc48b4c52` (FIX-1 code: `bc78af6`, clippy: `9935ae2`)  
 **Host OS:** Darwin 25.6.0 (macOS)  
 **Recorded (UTC):** 2026-09-16  
 
@@ -107,7 +107,7 @@ node scripts/verify-ui-workspace-range-sha.mjs "<fixture_root>/SET/AUDIO/RANGE.w
 | `cargo test --locked -p masterocta --features test-seams ui_workspace_native_fixture_registers_and_lists_audio` | **PASS** |
 | `bash scripts/prepare-ui-workspace-native-acceptance.sh` | **PASS** (exits 0 only after byte SHA verify) |
 | `pnpm run typecheck` / `test:frontend` / `build` | Run at commit time |
-| GitHub Actions on final PR head | **PASS** — [Run 35071882227](https://github.com/kaz4g/masterocta/actions/runs/35071882227) (`8bf77be`: Frontend Checks incl. `test:ui-native-fixture`, Rust `--locked`, E2E, Gate C) |
+| GitHub Actions on final PR head | **PASS** — [Run 35072520250](https://github.com/kaz4g/masterocta/actions/runs/35072520250) (`f7fe551`: Frontend Checks incl. `test:ui-native-fixture`, Rust `--locked`, E2E, Gate C) |
 
 ## Failures / fixes
 
