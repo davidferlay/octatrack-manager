@@ -10,7 +10,7 @@
 | Merge `main` into feature branch | `54273bfcde4ad14ddf08a7f2f8f4b7ff1d273a35` |
 | Integration-check green | `a4db15c` |
 | Review-fix start (Codex review on `ded1db52`) | `bdf39e8` |
-| **Final head (MO-UI-OPERATIONS-DRAWER-REVIEW-FIX-1)** | _(branch tip after push)_ |
+| **Final head (MO-UI-OPERATIONS-DRAWER-REVIEW-FIX-1)** | `1dfd8ee` |
 
 ## Dependency / base
 
@@ -82,7 +82,8 @@
 | [35039873397](https://github.com/kaz4g/masterocta/actions/runs/35039873397) | `89f69d6` | PASS | **FAIL** (rename-prepare strict mode) | PASS | PASS | PASS |
 | [35046989565](https://github.com/kaz4g/masterocta/actions/runs/35046989565) | `a4db15c` | PASS | PASS | PASS | PASS | PASS |
 
-Authoritative green run: **35046989565** on head `a4db15c`.
+Authoritative green run (integration-check): **35046989565** on `a4db15c`.  
+Review-fix green run: **[35049328479](https://github.com/kaz4g/masterocta/actions/runs/35049328479)** on `1dfd8ee` (all jobs PASS).
 
 ## Mock vs native
 
