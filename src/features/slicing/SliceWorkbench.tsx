@@ -6,7 +6,7 @@ import {
   type SliceProposal, type SliceRange, type SliceWaveform,
 } from "../../api/slices";
 import { useTranslate } from "../../i18n";
-import { durationSeconds } from "../waveform/frameMath";
+import { formatPreviewFrameTimeSeconds } from "../waveform/frameMath";
 import type { LibraryCommittedGeometryRange } from "../waveform/WaveformPreview";
 import { frame, frameAt, inRange, position, previewChannels } from "./frames";
 import { SliceErrorAlert } from "./SliceErrorAlert";
@@ -34,17 +34,6 @@ interface Props {
 }
 const WIDTH = 640;
 const PAGE = 50;
-
-function formatPreviewFrameTimeSeconds(frameValue: string, sampleRate: number): string {
-  const sec = durationSeconds(frameValue, sampleRate);
-  if (!Number.isFinite(sec) || sec < 0) return "—";
-  if (sec >= 60) {
-    const minutes = Math.floor(sec / 60);
-    const seconds = sec - minutes * 60;
-    return `${minutes}:${seconds.toFixed(3).padStart(6, "0")}`;
-  }
-  return `${sec.toFixed(3)} s`;
-}
 
 // A new file/root unmounts the session, cancelling every pending response and sound.
 export function SliceWorkbench(props: Props) {

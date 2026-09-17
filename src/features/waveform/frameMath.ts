@@ -29,6 +29,23 @@ export function durationLabelForFrame(frameCount: string, sampleRate: number): s
   return `${minutes}:${remaining.toString().padStart(2, "0")}`;
 }
 
+/** Display-only time at an absolute PCM frame (Slice preview selection labels). */
+export function formatPreviewFrameTimeSeconds(frameValue: string, sampleRate: number): string {
+  const sec = durationSeconds(frameValue, sampleRate);
+  if (!Number.isFinite(sec) || sec < 0) return "—";
+  const totalRounded = Math.round(sec * 1000) / 1000;
+  if (totalRounded >= 60) {
+    let minutes = Math.floor(totalRounded / 60);
+    let seconds = Math.round((totalRounded - minutes * 60) * 1000) / 1000;
+    if (seconds >= 60) {
+      minutes += 1;
+      seconds = 0;
+    }
+    return `${minutes}:${seconds.toFixed(3).padStart(6, "0")}`;
+  }
+  return `${totalRounded.toFixed(3)} s`;
+}
+
 /** Library preview policy, matching ot-audio `create_preview_range`. */
 export const LIBRARY_PREVIEW_MAX_SECONDS = 60;
 export const LIBRARY_PREVIEW_MAX_BYTES = 32 * 1024 * 1024;
