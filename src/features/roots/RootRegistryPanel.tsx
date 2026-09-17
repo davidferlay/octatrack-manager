@@ -115,6 +115,7 @@ export function RootRegistryPanel({
   const {
     selectionGeneration: geometrySelectionGeneration,
     effectiveRange: librarySelectionRange,
+    effectiveSampleRate: librarySourceSampleRate,
     notifyCommittedGeometryRange,
   } = useLibraryGeometrySelection(geometryTarget);
   const handleLibraryGeometryRange = useCallback(
@@ -796,6 +797,7 @@ export function RootRegistryPanel({
                     metadataClient={metadataClient}
                     geometrySelectionGeneration={geometrySelectionGeneration}
                     librarySelectionRange={librarySelectionRange}
+                    librarySourceSampleRate={librarySourceSampleRate}
                     stopPlaybackToken={stopLibraryPlaybackToken}
                     renameRecovery={renameRecovery}
                     renameBlocked={renameBlocked}
@@ -841,6 +843,7 @@ export function RootRegistryPanel({
               fileInstanceId={selectedAsset.fileInstanceId}
               displayName={selectedLibraryFile.displayName}
               librarySelectionRange={librarySelectionRange}
+              librarySourceSampleRate={librarySourceSampleRate}
               layout={sliceWorkspaceExpanded ? "expanded" : "compact"}
               hostElement={sliceWorkspaceExpanded ? expandedSliceHost : compactSliceHost}
               narrowExpanded={narrow && sliceWorkspaceExpanded}

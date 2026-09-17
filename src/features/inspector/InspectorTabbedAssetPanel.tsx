@@ -37,6 +37,7 @@ export interface InspectorTabbedAssetPanelProps {
   metadataClient?: MetadataApi;
   geometrySelectionGeneration: number;
   librarySelectionRange: LibraryCommittedGeometryRange | null;
+  librarySourceSampleRate?: number | null;
   stopPlaybackToken: number;
   renameRecovery: RenameRecoveryStatus | null;
   renameBlocked: boolean;
@@ -75,6 +76,7 @@ export function InspectorTabbedAssetPanel({
   metadataClient,
   geometrySelectionGeneration,
   librarySelectionRange,
+  librarySourceSampleRate = null,
   stopPlaybackToken,
   renameRecovery,
   renameBlocked,
@@ -285,6 +287,7 @@ export function InspectorTabbedAssetPanel({
               fileInstanceId={file.fileInstanceId}
               displayName={file.displayName}
               librarySelectionRange={librarySelectionRange}
+              librarySourceSampleRate={librarySourceSampleRate}
               onRequestStopLibraryPlayback={onRequestStopLibraryPlayback}
               onAnalysisBusyChange={setInlineSliceAnalysisBusy}
               registerAnalysisCancel={registerInlineSliceCancel}

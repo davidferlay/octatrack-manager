@@ -258,9 +258,14 @@ export const enMessages = {
   'slicing.supportedFormats':
     '16/24-bit PCM WAV or AIFF · mono/stereo · 44.1/48 kHz · source ≤64 MiB · region ≤10 min.',
   'slicing.regionHelp':
-    'Leave both fields empty to use the saved region or the full file. Coordinates are source PCM frames; the end is exclusive.',
+    'Manual analysis only (separate from the Library preview selection). Leave both fields empty to use the saved region or the full file. Coordinates are source PCM frames; the end is exclusive.',
   'slicing.regionStart': 'Region start',
   'slicing.regionEnd': 'Region end',
+  'slicing.previewSelectionHeading': 'Library preview selection',
+  'slicing.previewSelectionNone':
+    'No preview range committed. Set start/end on the Preview tab, then use Analyze selected range.',
+  'slicing.previewSelectionSeconds':
+    'Time at {startSeconds} → {endSeconds} ({sampleRate} Hz)',
   'slicing.analyzeSelectedRange': 'Analyze selected range',
   'slicing.detectAttacks': 'Detect attacks',
   'slicing.analyzeAgain': 'Analyze again',

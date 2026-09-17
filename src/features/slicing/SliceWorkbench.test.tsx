@@ -70,6 +70,7 @@ function mount(
   api: SliceApi,
   extra: {
     librarySelectionRange?: { startFrame: string; endFrameExclusive: string } | null;
+    librarySourceSampleRate?: number | null;
     onRequestStopLibraryPlayback?: () => void;
     withLocaleToggle?: boolean;
   } = {},
@@ -81,6 +82,7 @@ function mount(
       displayName="loop.wav"
       api={api}
       librarySelectionRange={extra.librarySelectionRange ?? null}
+      librarySourceSampleRate={extra.librarySourceSampleRate ?? null}
       onRequestStopLibraryPlayback={extra.onRequestStopLibraryPlayback}
     />
   );
@@ -195,6 +197,49 @@ describe("attack slicing workbench", () => {
       startFrame: "22050",
       endExclusive: "44100",
     }));
+  });
+
+  it("shows M7 Range A preview selection and sends the same frames on analyze", async () => {
+    const api = client();
+    mount(api, {
+      librarySelectionRange: { startFrame: "44100", endFrameExclusive: "132300" },
+      librarySourceSampleRate: 44100,
+    });
+    expect(screen.getByText(tJa("slicing.analysisRegionFrames", {
+      start: "44100",
+      end: "132300",
+    }))).toBeInTheDocument();
+    expect(screen.getByLabelText(tJa("slicing.regionStart"))).toHaveValue("");
+    expect(screen.getByLabelText(tJa("slicing.regionEnd"))).toHaveValue("");
+    fireEvent.click(screen.getByRole("button", { name: tJa("slicing.analyzeSelectedRange") }));
+    await waitFor(() => expect(api.start).toHaveBeenCalledWith("root-1", "file-1", {
+      startFrame: "44100",
+      endExclusive: "132300",
+    }));
+  });
+
+  it("shows preview selection none when library range is unset", () => {
+    const api = client();
+    mount(api);
+    expect(screen.getByText(tJa("slicing.previewSelectionNone"))).toBeInTheDocument();
+  });
+
+  it("keeps preview selection visible across locale toggle without starting analysis", () => {
+    const api = client();
+    mount(api, {
+      librarySelectionRange: { startFrame: "44100", endFrameExclusive: "132300" },
+      withLocaleToggle: true,
+    });
+    expect(screen.getByText(tJa("slicing.analysisRegionFrames", {
+      start: "44100",
+      end: "132300",
+    }))).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Toggle locale" }));
+    expect(api.start).not.toHaveBeenCalled();
+    expect(screen.getByText(tEn("slicing.analysisRegionFrames", {
+      start: "44100",
+      end: "132300",
+    }))).toBeInTheDocument();
   });
   it("does not start analysis when the library selection changes without a button press", async () => {
     const api = client();

@@ -264,9 +264,14 @@ export const jaMessages: Record<MessageKey, string> = {
   'slicing.supportedFormats':
     '16/24-bit PCM WAV または AIFF · mono/stereo · 44.1/48 kHz · ソース ≤64 MiB · 範囲 ≤10 分',
   'slicing.regionHelp':
-    '両方空欄の場合は保存済み範囲またはファイル全体を使います。座標はソース PCM フレームで、終了は exclusive です。',
+    '手動解析用です（プレビュータブの選択範囲とは別）。両方空欄の場合は保存済み範囲またはファイル全体を使います。座標はソース PCM フレームで、終了は exclusive です。',
   'slicing.regionStart': '範囲開始',
   'slicing.regionEnd': '範囲終了',
+  'slicing.previewSelectionHeading': 'プレビューの選択範囲',
+  'slicing.previewSelectionNone':
+    'プレビュー範囲が未確定です。プレビュータブで開始・終了を指定してから「この範囲を解析」を使ってください。',
+  'slicing.previewSelectionSeconds':
+    '時刻 {startSeconds} → {endSeconds}（{sampleRate} Hz）',
   'slicing.analyzeSelectedRange': 'この範囲を解析',
   'slicing.detectAttacks': 'アタックを検出',
   'slicing.analyzeAgain': '再解析',

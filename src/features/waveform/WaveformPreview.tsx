@@ -507,6 +507,7 @@ export function WaveformPreview({
       fileInstanceId,
       selectionGeneration: geometrySelectionGeneration,
       range: committedGeometryRange,
+      sampleRate: fileMetadata?.sampleRate ?? null,
     });
   }, [
     committedGeometryRange,
@@ -515,6 +516,7 @@ export function WaveformPreview({
     assetId,
     fileInstanceId,
     geometrySelectionGeneration,
+    fileMetadata?.sampleRate,
   ]);
 
   useEffect(() => {

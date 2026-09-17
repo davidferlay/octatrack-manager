@@ -3,6 +3,7 @@ import {
   defaultLibraryPreviewEndFrame,
   durationLabelForFrame,
   durationSeconds,
+  formatPreviewFrameTimeSeconds,
   frame,
   frameFitsJsNumber,
   maxLibraryPreviewFrames,
@@ -28,6 +29,13 @@ describe("frameMath", () => {
       9007199254740992 / 44100,
       5,
     );
+  });
+
+  it("formats preview frame times without invalid 60.000 seconds in the minute field", () => {
+    const nearTwoMinutes = formatPreviewFrameTimeSeconds("5291999", 44100);
+    expect(nearTwoMinutes).toBe("2:00.000");
+    expect(nearTwoMinutes).not.toMatch(/:60\.000$/);
+    expect(formatPreviewFrameTimeSeconds("44100", 44100)).toBe("1.000 s");
   });
 
   it("labels duration only when frames fit the JS safe integer range", () => {
