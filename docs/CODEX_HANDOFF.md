@@ -314,17 +314,17 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ## 6. 次のCodex作業
 
-### 6.0 現在の次作業（2026-09-16）
+### 6.0 現在の次作業（2026-09-17）
 
-**作業ID:** `MO-UI-WORKSPACE-NATIVE-ACCEPTANCE-FIX-1`（PR #136 レビュー8件。Draft 維持。merge しない）
+**作業ID:** `MO-UI-SLICE-RANGE-HANDOFF-FIX-1`（Slice タブでプレビュー選択範囲を表示し、
+**この範囲を解析** の表示と送信を同一 `librarySelectionRange` に揃える。Draft PR。merge しない）
 
-**基点:** ブランチ `feat/ui-workspace-native-acceptance-1` / PR #136。引き継ぎ:
+**記録:** `docs/testing/MO_UI_SLICE_RANGE_HANDOFF_FIX_1.md`  
+**原因:** 範囲は既に props で渡っていたが、手入力欄（別系統）だけが空に見えていた。  
+**Native 受入:** Vitest のみ **PASS**；実 Tauri 再確認は **NOT_RUN**。
+
+**履歴 — MO-UI-WORKSPACE-NATIVE-ACCEPTANCE-FIX-1:** **MERGED** #136。引き継ぎ:
 `docs/testing/MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md`。
-
-**FIX-1:** 管理 temp の fixture 安全生成、RANGE 実バイト SHA 検証、catalog 経路 DTO テスト、
-`launch-native-acceptance-tauri.sh`、CI `test:ui-native-fixture`、`cargo --locked`。
-**オペレーター native UI / 隔離観測 / 聴感は NOT_RUN**。総合 native 受入 **NOT_COMPLETE**。
-**`.ot` 出力設計:** オペレーター完了または明示 waiver 後。
 
 **履歴 — MO-UI-SLICE-WORKSPACE-1:** **MERGED** #135（`22344fb`）。引き継ぎ:
 `docs/testing/MO_UI_SLICE_WORKSPACE_1_PR.md`。

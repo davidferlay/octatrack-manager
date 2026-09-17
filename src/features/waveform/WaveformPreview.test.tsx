@@ -1021,6 +1021,42 @@ describe("WaveformPreview", () => {
     }));
   });
 
+  it("includes sample rate in geometry notifications when fileInstanceId is bound", async () => {
+    const onRange = vi.fn();
+    const client = api();
+    vi.mocked(client.queryWaveform).mockImplementation((_rootId, _assetId, query) =>
+      Promise.resolve(resolveWaveformQuery(query, { frameCount: "264600" })),
+    );
+    render(
+      <WaveformPreview
+        queryDebounceMs={0}
+        api={client}
+        rootId="root-opaque"
+        assetId="asset:v1:opaque"
+        fileInstanceId="file-1"
+        geometrySelectionGeneration={2}
+        displayName="kick.wav"
+        onCommittedGeometryRangeChange={onRange}
+      />,
+    );
+    await screen.findByRole("img", { name: tJa("waveform.plotAria") });
+    fireEvent.change(screen.getByLabelText(tJa("waveform.startFrame")), {
+      target: { value: "44100" },
+    });
+    fireEvent.change(screen.getByLabelText(tJa("waveform.endFrame")), {
+      target: { value: "132300" },
+    });
+    await waitFor(() => expect(onRange).toHaveBeenLastCalledWith(
+      { startFrame: "44100", endFrameExclusive: "132300" },
+      expect.objectContaining({
+        fileInstanceId: "file-1",
+        selectionGeneration: 2,
+        sampleRate: 44100,
+        range: { startFrame: "44100", endFrameExclusive: "132300" },
+      }),
+    ));
+  });
+
   it("does not stretch stale peaks after the viewport changes", async () => {
     const client = api();
     let resolveOld: ((value: AudioWaveformWindow) => void) | undefined;

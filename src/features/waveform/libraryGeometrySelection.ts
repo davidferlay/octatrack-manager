@@ -10,11 +10,14 @@ export interface LibraryGeometrySelectionTarget {
 export interface LibraryGeometryBinding extends LibraryGeometrySelectionTarget {
   selectionGeneration: number;
   range: LibraryCommittedGeometryRange | null;
+  /** Sample rate from the waveform that committed this range (for display only). */
+  sampleRate: number | null;
 }
 
 export interface LibraryGeometryNotification extends LibraryGeometrySelectionTarget {
   selectionGeneration: number;
   range: LibraryCommittedGeometryRange | null;
+  sampleRate?: number | null;
 }
 
 export function targetsMatch(
@@ -39,12 +42,18 @@ export function applyGeometryNotification(
   if (expected === null) return null;
   if (!targetsMatch(notification, expected)) return stored;
   if (notification.selectionGeneration !== expectedGeneration) return stored;
+  const rate = notification.sampleRate;
+  const sampleRate =
+    rate !== undefined && rate !== null && Number.isFinite(rate) && rate > 0
+      ? Math.trunc(rate)
+      : null;
   return {
     rootId: notification.rootId,
     fileInstanceId: notification.fileInstanceId,
     assetId: notification.assetId,
     selectionGeneration: notification.selectionGeneration,
     range: notification.range,
+    sampleRate,
   };
 }
 
@@ -57,6 +66,17 @@ export function selectEffectiveLibraryRange(
   if (!targetsMatch(stored, expected)) return null;
   if (stored.selectionGeneration !== expectedGeneration) return null;
   return stored.range;
+}
+
+export function selectEffectiveLibrarySampleRate(
+  stored: LibraryGeometryBinding | null,
+  expected: LibraryGeometrySelectionTarget | null,
+  expectedGeneration: number,
+): number | null {
+  if (stored === null || expected === null) return null;
+  if (!targetsMatch(stored, expected)) return null;
+  if (stored.selectionGeneration !== expectedGeneration) return null;
+  return stored.sampleRate;
 }
 
 export function useLibraryGeometrySelection(
@@ -93,9 +113,15 @@ export function useLibraryGeometrySelection(
     [stored, target, selectionGeneration],
   );
 
+  const effectiveSampleRate = useMemo(
+    () => selectEffectiveLibrarySampleRate(stored, target, selectionGeneration),
+    [stored, target, selectionGeneration],
+  );
+
   return {
     selectionGeneration,
     effectiveRange,
+    effectiveSampleRate,
     notifyCommittedGeometryRange,
   };
 }

@@ -32,6 +32,7 @@ export type MessageParams = {
   'waveform.viewportFrames': { start: string; end: string }
   'slicing.ariaFor': { displayName: string }
   'slicing.analysisRegionFrames': { start: string; end: string }
+  'slicing.previewSelectionSeconds': { startSeconds: string; endSeconds: string; sampleRate: number }
   'slicing.candidatesSummary': { count: number; suppressed: number }
   'slicing.reviewBoundaries': { count: number }
   'slicing.draftSummary': { count: number; revision: number }

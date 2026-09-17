@@ -41,6 +41,8 @@
 .slice-fields label, .slice-actions label { display: grid; gap: 5px; }
 .slice-fields legend { padding-top: 10px; font-weight: 600; }
 .slice-coordinate { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.slice-preview-selection { margin: 10px 0; padding: 8px 10px; border: 1px solid var(--color-border-subtle, #343941); border-radius: 6px; background: #0c0f14; }
+.slice-preview-selection__heading { margin: 0 0 6px; font-weight: 600; }
 .slice-waveform { display: block; width: 100%; min-height: 130px; background: #090d12; border: 1px solid #343941; touch-action: none; }
 .slice-peaks { fill: none; stroke: #7a8e9e; stroke-width: 1; }
 .slice-candidate { stroke: #d5d9de; stroke-dasharray: 3 4; opacity: 0.65; pointer-events: none; }

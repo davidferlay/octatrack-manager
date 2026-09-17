@@ -6,6 +6,7 @@ import {
   type SliceProposal, type SliceRange, type SliceWaveform,
 } from "../../api/slices";
 import { useTranslate } from "../../i18n";
+import { durationSeconds } from "../waveform/frameMath";
 import type { LibraryCommittedGeometryRange } from "../waveform/WaveformPreview";
 import { frame, frameAt, inRange, position, previewChannels } from "./frames";
 import { SliceErrorAlert } from "./SliceErrorAlert";
@@ -20,6 +21,8 @@ interface Props {
   displayName: string;
   api?: SliceApi;
   librarySelectionRange?: LibraryCommittedGeometryRange | null;
+  /** Sample rate from the Library preview that committed the selection (display only). */
+  librarySourceSampleRate?: number | null;
   onRequestStopLibraryPlayback?: () => void;
   onAnalysisBusyChange?: (busy: boolean) => void;
   registerAnalysisCancel?: (cancel: (() => void) | null) => void;
@@ -32,6 +35,17 @@ interface Props {
 const WIDTH = 640;
 const PAGE = 50;
 
+function formatPreviewFrameTimeSeconds(frameValue: string, sampleRate: number): string {
+  const sec = durationSeconds(frameValue, sampleRate);
+  if (!Number.isFinite(sec) || sec < 0) return "—";
+  if (sec >= 60) {
+    const minutes = Math.floor(sec / 60);
+    const seconds = sec - minutes * 60;
+    return `${minutes}:${seconds.toFixed(3).padStart(6, "0")}`;
+  }
+  return `${sec.toFixed(3)} s`;
+}
+
 // A new file/root unmounts the session, cancelling every pending response and sound.
 export function SliceWorkbench(props: Props) {
   return <SliceSession key={`${props.rootId}:${props.fileInstanceId}`} {...props} />;
@@ -43,6 +57,7 @@ function SliceSession({
   displayName,
   api = sliceApi,
   librarySelectionRange = null,
+  librarySourceSampleRate = null,
   onRequestStopLibraryPlayback,
   onAnalysisBusyChange,
   registerAnalysisCancel,
@@ -319,6 +334,14 @@ function SliceSession({
     error
     ?? (job?.error ? normalizeSliceError(job.error) : null);
 
+  const previewSampleRate =
+    librarySourceSampleRate !== null
+    && librarySourceSampleRate !== undefined
+    && Number.isFinite(librarySourceSampleRate)
+    && librarySourceSampleRate > 0
+      ? Math.trunc(librarySourceSampleRate)
+      : null;
+
   const preamble = (
     <>
       <div className="slice-heading"><h4>{t("slicing.heading")}</h4><span>{t("slicing.localDraft")}</span></div>
@@ -331,6 +354,40 @@ function SliceSession({
           <label>{t("slicing.regionEnd")}<input value={regionEnd} onChange={e => setRegionEnd(e.target.value)} inputMode="numeric" disabled={busy} /></label>
         </div>
       </details>
+      <div
+        className="slice-preview-selection"
+        role="status"
+        aria-label={t("slicing.previewSelectionHeading")}
+      >
+        <p className="slice-preview-selection__heading">{t("slicing.previewSelectionHeading")}</p>
+        {librarySelectionRange === null ? (
+          <p className="slice-coordinate">{t("slicing.previewSelectionNone")}</p>
+        ) : (
+          <>
+            <p className="slice-coordinate">
+              {t("slicing.analysisRegionFrames", {
+                start: librarySelectionRange.startFrame,
+                end: librarySelectionRange.endFrameExclusive,
+              })}
+            </p>
+            {previewSampleRate !== null && (
+              <p className="slice-coordinate">
+                {t("slicing.previewSelectionSeconds", {
+                  startSeconds: formatPreviewFrameTimeSeconds(
+                    librarySelectionRange.startFrame,
+                    previewSampleRate,
+                  ),
+                  endSeconds: formatPreviewFrameTimeSeconds(
+                    librarySelectionRange.endFrameExclusive,
+                    previewSampleRate,
+                  ),
+                  sampleRate: previewSampleRate,
+                })}
+              </p>
+            )}
+          </>
+        )}
+      </div>
       <div className="slice-actions">
         <button
           type="button"

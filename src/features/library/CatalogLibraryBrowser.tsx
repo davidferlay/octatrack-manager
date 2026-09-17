@@ -73,6 +73,7 @@ export function CatalogLibraryBrowser({
   const {
     selectionGeneration: geometrySelectionGeneration,
     effectiveRange: librarySelectionRange,
+    effectiveSampleRate: librarySourceSampleRate,
     notifyCommittedGeometryRange,
   } = useLibraryGeometrySelection(geometryTarget);
   const handleLibraryGeometryRange = useCallback(
@@ -143,6 +144,7 @@ export function CatalogLibraryBrowser({
                 metadataClient={metadataClient}
                 geometrySelectionGeneration={geometrySelectionGeneration}
                 librarySelectionRange={librarySelectionRange}
+                librarySourceSampleRate={librarySourceSampleRate}
                 stopPlaybackToken={stopLibraryPlaybackToken}
                 renameRecovery={null}
                 renameBlocked

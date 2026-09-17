@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyGeometryNotification,
   selectEffectiveLibraryRange,
+  selectEffectiveLibrarySampleRate,
   type LibraryGeometryBinding,
   type LibraryGeometryNotification,
 } from "./libraryGeometrySelection";
@@ -55,6 +56,17 @@ describe("libraryGeometrySelection", () => {
   it("clears effective range when root identity changes", () => {
     const stored = applyGeometryNotification(null, notify(targetA, 1, rangeA), targetA, 1);
     expect(selectEffectiveLibraryRange(stored, { ...targetA, rootId: "root-2" }, 1)).toBeNull();
+  });
+
+  it("stores sample rate with the committed range for display handoff", () => {
+    const stored = applyGeometryNotification(
+      null,
+      { ...notify(targetA, 1, rangeA), sampleRate: 44100 },
+      targetA,
+      1,
+    );
+    expect(selectEffectiveLibrarySampleRate(stored, targetA, 1)).toBe(44100);
+    expect(selectEffectiveLibraryRange(stored, targetA, 1)).toEqual(rangeA);
   });
 
   it("does not resurrect old range on A→B→A when generation advanced", () => {
