@@ -5,19 +5,13 @@
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .mo-inspector-tabbed__slice-toolbar {
   flex-shrink: 0;
   margin-bottom: 0;
-}
-
-.mo-inspector-tabbed__slice-host {
-  min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  scrollbar-gutter: stable;
 }
 
 .mo-inspector-tabbed__header {
@@ -117,17 +111,27 @@
 .mo-inspector-tabbed__panels {
   flex: 1 1 0;
   min-width: 0;
-  min-height: 12rem;
+  min-height: 0;
   overflow: auto;
   scrollbar-gutter: stable;
 }
 
 .mo-inspector-tabbed__panel {
   min-width: 0;
+  height: auto;
 }
 
 .mo-inspector-tabbed__panel--hidden {
   display: none;
+}
+
+.mo-inspector-tabbed__slice-host {
+  min-width: 0;
+  min-height: 8rem;
+  height: auto;
+  flex: 0 0 auto;
+  overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .mo-inspector-sample-info {

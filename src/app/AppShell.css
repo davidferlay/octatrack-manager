@@ -108,9 +108,10 @@
 .mo-app-shell--workspace {
   width: 100%;
   max-width: 100%;
-  height: calc(100dvh - 13rem);
+  /* Home header + scan sit above the shell in Tauri/browser; leave headroom. */
+  height: clamp(24rem, calc(100dvh - 18rem), calc(100dvh - 8rem));
   max-height: calc(100dvh - 8rem);
-  min-height: min(24rem, calc(100dvh - 8rem));
+  min-height: 24rem;
   overflow-x: hidden;
 }
 
@@ -120,7 +121,7 @@
   flex-shrink: 0;
 }
 
-.mo-app-shell--workspace .mo-app-shell__body {
+.mo-app-shell--workspace .mo-app-shell__body.mo-app-shell__outer-split {
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
@@ -138,15 +139,22 @@
 .mo-app-shell--workspace .mo-app-shell__inspector {
   display: flex;
   flex-direction: column;
-  flex: 1 1 0;
+  align-self: stretch;
+  min-height: 0;
   overflow: hidden;
 }
 
-.mo-app-shell--workspace .mo-app-shell__inspector .root-registry-inspector-host,
+.mo-app-shell--workspace .mo-app-shell__inspector .root-registry-inspector-host {
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
+}
+
 .mo-app-shell--workspace .mo-app-shell__inspector .mo-inspector-pane {
   flex: 1 1 0;
   min-height: 0;
   height: auto;
+  gap: 0;
 }
 
 .mo-app-shell--workspace .mo-app-shell__sources {
@@ -160,11 +168,35 @@
   flex-direction: column;
 }
 
-.mo-app-shell--workspace .mo-app-shell__inner-split {
+.mo-app-shell--workspace .mo-app-shell__inner-split.mo-split-pane {
   flex: 1 1 0;
   width: 100%;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
+}
+
+/* Sources | (main + inspector): keep secondary from min-content widening the row.
+ * Primary width is SplitPane's inline percent — do not reset flex-basis to auto. */
+.mo-app-shell--workspace .mo-app-shell__outer-split.mo-split-pane > .mo-split-pane__secondary {
+  width: 0;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.mo-app-shell--workspace .mo-app-shell__outer-split.mo-split-pane > .mo-split-pane__primary {
+  min-width: 0;
+}
+
+.mo-app-shell--workspace .mo-app-shell__outer-split .mo-split-pane__divider {
+  position: relative;
+  z-index: 2;
+}
+
+.mo-app-shell--workspace .mo-app-shell__sources .catalog-location-nav--tree {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 /* Prevent tab content min-width from widening the main/inspector split row. */
@@ -175,7 +207,27 @@
 }
 
 .mo-app-shell--workspace .mo-app-shell__inner-split.mo-split-pane > .mo-split-pane__primary {
-  flex: 0 0 auto;
   min-width: 0;
+}
+
+/* Expanded slice workspace: reclaim inspector column width without unmounting inspector chrome. */
+.mo-app-shell--workspace
+  .mo-app-shell__inner-split.mo-split-pane:has(.root-registry-slice-workspace)
+  > .mo-split-pane__divider {
+  display: none;
+  pointer-events: none;
+}
+
+.mo-app-shell--workspace
+  .mo-app-shell__inner-split.mo-split-pane:has(.root-registry-slice-workspace)
+  > .mo-split-pane__secondary {
+  display: none;
+}
+
+.mo-app-shell--workspace
+  .mo-app-shell__inner-split.mo-split-pane:has(.root-registry-slice-workspace)
+  > .mo-split-pane__primary {
+  width: 100% !important;
   max-width: 100%;
+  flex: 1 1 auto;
 }

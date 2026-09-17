@@ -130,7 +130,13 @@ function SplitPanePrimary({
   return (
     <div
       className={merged}
-      style={{ width: `${primarySize}%`, ...style }}
+      style={{
+        flex: `0 0 ${primarySize}%`,
+        width: `${primarySize}%`,
+        maxWidth: `${primarySize}%`,
+        minWidth: 0,
+        ...style,
+      }}
       {...rest}
     >
       {children}

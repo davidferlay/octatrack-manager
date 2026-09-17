@@ -2,15 +2,16 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 import { clickCatalogFileRow } from "./catalogFileRow";
 import { uiText } from "./i18n";
 import { LOCALE_STORAGE_KEY } from "../src/i18n/registry";
+import { showInspectorFromContextBar } from "./narrowWorkspace";
 
 type LayoutBox = { x: number; y: number; width: number; height: number };
 
-async function installJaLocale(page: Page) {
+async function installLocale(page: Page, localeId: "ja" | "en") {
   await page.addInitScript(
-    ([storageKey, localeId]) => {
-      localStorage.setItem(storageKey, localeId);
+    ([storageKey, locale]) => {
+      localStorage.setItem(storageKey, locale);
     },
-    [LOCALE_STORAGE_KEY, "ja"] as const,
+    [LOCALE_STORAGE_KEY, localeId] as const,
   );
 }
 
@@ -146,13 +147,68 @@ async function captureWorkspaceChrome(page: Page) {
   };
 }
 
-async function openInspectorSample(page: Page, displayName: string) {
-  await installJaLocale(page);
+async function dragSourcesDivider(page: Page, deltaX: number) {
+  const divider = page.getByTestId("app-shell-divider");
+  const dividerBox = await boxOf(divider);
+  const startX = dividerBox.x + dividerBox.width / 2;
+  const y = dividerBox.y + dividerBox.height / 2;
+  await page.mouse.move(startX, y);
+  await page.mouse.down();
+  await page.mouse.move(startX + deltaX, y, { steps: 10 });
+  await page.mouse.up();
+}
+
+async function expandedSliceGridColumns(page: Page): Promise<number> {
+  return page.getByTestId("slice-workbench-expanded").evaluate((el) => {
+    const columns = getComputedStyle(el).gridTemplateColumns.trim();
+    if (columns === "none" || columns === "") return 0;
+    return columns.split(/\s+/).length;
+  });
+}
+
+/** Scroll workspace and inspector panels so bottom controls are reachable (short viewport / Home chrome). */
+async function expectReachableInInspectorPanels(page: Page, control: Locator) {
+  await page.locator(".mo-app-shell--workspace").scrollIntoViewIfNeeded();
+  const tabbed = page.locator(".mo-inspector-tabbed");
+  const panels = page.locator(".mo-inspector-tabbed__panels");
+  await tabbed.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await panels.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
+  await control.scrollIntoViewIfNeeded();
+  await expect(control).toBeVisible();
+  const tagName = await control.evaluate((el) => el.tagName.toLowerCase());
+  if (tagName === "input" || tagName === "textarea") {
+    await control.fill("204800");
+    await expect(control).toHaveValue("204800");
+    return;
+  }
+  await expect(async () => {
+    await tabbed.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    await panels.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    await control.scrollIntoViewIfNeeded();
+    await control.click({ trial: true });
+  }).toPass({ timeout: 8000 });
+}
+
+async function openInspectorSample(
+  page: Page,
+  displayName: string,
+  locale: "ja" | "en" = "ja",
+  viewport: { width: number; height: number } = { width: 1280, height: 900 },
+) {
+  await installLocale(page, locale);
   await seedLayoutFixture(page, displayName);
-  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.setViewportSize(viewport);
   await page.goto("/");
-  await page.getByRole("button", { name: uiText("ja", "sources.chooseRoot") }).click();
-  await clickCatalogFileRow(page, "ja", displayName);
+  await page.getByRole("button", { name: uiText(locale, "sources.chooseRoot") }).click();
+  await clickCatalogFileRow(page, locale, displayName);
   await expect(page.locator(".mo-app-shell--workspace")).toBeVisible();
 }
 
@@ -197,8 +253,64 @@ test.describe("inspector layout stability", () => {
 
     await page.getByRole("tab", { name: uiText("ja", "inspector.tabPreview") }).click();
     await expect(page.getByLabel(uiText("ja", "waveform.startFrame"))).toHaveValue("1000");
+
+    const plot = page.locator(".waveform-preview-plot");
+    const plotBox = await plot.boundingBox();
+    expect(plotBox, "preview plot should be visible").not.toBeNull();
+    expect(plotBox!.height, "preview plot height").toBeGreaterThanOrEqual(80);
+    expect(plotBox!.height, "preview plot must not fill the inspector").toBeLessThanOrEqual(200);
+
     await page.screenshot({
       path: "docs/testing/screenshots/mo-ui-inspector-layout-stability-1/after-1280-tab-cycle.png",
+      fullPage: false,
+    });
+  });
+
+  test("1280x600: short viewport reaches tab bottom controls without shifting chrome", async ({ page }) => {
+    const displayName = "VERY_LONG_SAMPLE_NAME_FOR_LAYOUT_STABILITY_CHECK.wav";
+    await openInspectorSample(page, displayName, "ja", { width: 1280, height: 600 });
+    await page.evaluate(() => {
+      const shell = document.querySelector(".mo-app-shell--workspace");
+      if (shell !== null) {
+        const top = shell.getBoundingClientRect().top + window.scrollY;
+        window.scrollTo({ top: Math.max(0, top - 8) });
+      }
+    });
+
+    const baseline = await captureWorkspaceChrome(page);
+    await expect(page.locator(".mo-inspector-tabbed__tablist")).toBeVisible();
+
+    await page.getByRole("tab", { name: uiText("ja", "inspector.tabPreview") }).click();
+    const endFrame = page.getByLabel(uiText("ja", "waveform.endFrame"));
+    await expectReachableInInspectorPanels(page, endFrame);
+    const previewPlot = page.locator(".waveform-preview-plot");
+    const previewPlotBox = await previewPlot.boundingBox();
+    expect(previewPlotBox!.height).toBeGreaterThanOrEqual(80);
+    expect(previewPlotBox!.height).toBeLessThanOrEqual(200);
+
+    await page.getByRole("tab", { name: uiText("ja", "inspector.tabSlice") }).click();
+    await expect(page.getByTestId("slice-workbench-compact-host")).toBeVisible();
+    const panels = page.locator(".mo-inspector-tabbed__panels");
+    const scrollBefore = await panels.evaluate((el) => el.scrollTop);
+    await panels.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    expect(await panels.evaluate((el) => el.scrollTop)).toBeGreaterThanOrEqual(scrollBefore);
+
+    await page.getByRole("tab", { name: uiText("ja", "inspector.tabNotes") }).click();
+    const noteField = page.getByLabel(uiText("ja", "metadata.noteLabel"));
+    await expectReachableInInspectorPanels(page, noteField);
+
+    const afterTabs = await captureWorkspaceChrome(page);
+    expectBoxesStable(baseline.inspector, afterTabs.inspector, "inspector short viewport");
+    expectBoxesStable(baseline.status, afterTabs.status, "status short viewport");
+    expect(Math.abs(baseline.tablist.x - afterTabs.tablist.x), "tablist x").toBeLessThanOrEqual(1);
+    expect(Math.abs(baseline.tablist.width - afterTabs.tablist.width), "tablist width").toBeLessThanOrEqual(1);
+    expect(Math.abs(baseline.sourcesDividerX - afterTabs.sourcesDividerX)).toBeLessThanOrEqual(1);
+    expect(Math.abs(baseline.mainInspectorDividerX - afterTabs.mainInspectorDividerX)).toBeLessThanOrEqual(1);
+
+    await page.screenshot({
+      path: "docs/testing/screenshots/mo-ui-layout-containment-fix-2/after-1280x600-tab-reach.png",
       fullPage: false,
     });
   });
@@ -221,15 +333,94 @@ test.describe("inspector layout stability", () => {
     expectBoxesStable(beforeExpand.inspector, afterCollapse.inspector, "inspector after collapse");
   });
 
-  test("840px: narrow stack keeps workspace shell class", async ({ page }) => {
+  test("900px: wide sources stack expanded slice; widening restores two columns", async ({ page }) => {
+    await openInspectorSample(page, "LOOP.wav", "ja", { width: 900, height: 900 });
+    await page.getByRole("tab", { name: uiText("ja", "inspector.tabSlice") }).click();
+
+    await dragSourcesDivider(page, 140);
+    const expand = page.getByRole("button", { name: uiText("ja", "inspector.expandSliceWorkspaceAria") });
+    await expand.scrollIntoViewIfNeeded();
+    await expand.click();
+    await expect(page.getByTestId("slice-workbench-expanded")).toBeVisible();
+
+    const hostWidth = await page.getByTestId("slice-workbench-expanded-host").evaluate((el) => el.clientWidth);
+    expect(hostWidth).toBeLessThan(640);
+    expect(await expandedSliceGridColumns(page)).toBe(1);
+
+    const expandedEditor = page.getByTestId("slice-workbench-expanded");
+    await expandedEditor.getByRole("button", { name: uiText("ja", "slicing.detectAttacks") }).click();
+    const apply = expandedEditor.getByRole("button", { name: uiText("ja", "slicing.applyCandidates") });
+    await apply.scrollIntoViewIfNeeded();
+    await expect(apply).toBeEnabled();
+    await expect(apply).toBeVisible();
+
+    const exit = page.getByRole("button", { name: uiText("ja", "inspector.exitSliceWorkspaceAria") });
+    await exit.scrollIntoViewIfNeeded();
+    await expect(exit).toBeVisible();
+
+    await exit.click();
+    await dragSourcesDivider(page, -120);
+    await expand.scrollIntoViewIfNeeded();
+    await expand.click();
+    await expect(page.getByTestId("slice-workbench-expanded")).toBeVisible();
+
+    const hostWidthWide = await page.getByTestId("slice-workbench-expanded-host").evaluate((el) => el.clientWidth);
+    if (hostWidthWide >= 640) {
+      expect(await expandedSliceGridColumns(page)).toBeGreaterThanOrEqual(2);
+    }
+
+    await page.screenshot({
+      path: "docs/testing/screenshots/mo-ui-layout-containment-fix-2/after-900-expanded-slice-stack.png",
+      fullPage: false,
+    });
+  });
+
+  test("840px: narrow stack, expand roundtrip keeps preview range", async ({ page }) => {
     await openInspectorSample(page, "LOOP.wav");
     await page.setViewportSize({ width: 840, height: 900 });
     await page.waitForFunction(() => window.matchMedia("(max-width: 840px)").matches);
     await expect(page.locator(".mo-app-shell--narrow")).toBeVisible();
     await expect(page.locator(".mo-app-shell--workspace")).toBeVisible();
+
+    await page.getByRole("button", { name: uiText("ja", "workspace.showList"), exact: true }).click();
+    await page.getByRole("button", { name: uiText("ja", "workspace.showInspector"), exact: true }).click();
+    await page.getByRole("tab", { name: uiText("ja", "inspector.tabPreview") }).click();
+    await page.getByLabel(uiText("ja", "waveform.startFrame")).fill("1000");
+
+    await page.getByRole("tab", { name: uiText("ja", "inspector.tabSlice") }).click();
+    const expand = page.getByRole("button", { name: uiText("ja", "inspector.expandSliceWorkspaceAria") });
+    await expand.scrollIntoViewIfNeeded();
+    await expand.click();
+    await expect(page.getByTestId("slice-workspace-expanded-shell")).toBeVisible();
+
+    await page.getByRole("button", { name: uiText("ja", "inspector.exitSliceWorkspaceAria") }).click();
+    await showInspectorFromContextBar(page, "ja");
+    await page.getByRole("tab", { name: uiText("ja", "inspector.tabPreview") }).click();
+    await expect(page.getByLabel(uiText("ja", "waveform.startFrame"))).toHaveValue("1000");
+
     await page.screenshot({
       path: "docs/testing/screenshots/mo-ui-inspector-layout-stability-1/after-840-narrow.png",
       fullPage: false,
     });
+  });
+
+  test("1280px en: long filename wraps and preview plot height stays bounded", async ({ page }) => {
+    const displayName = "very_long_disposable_name_for_layout_overflow_acceptance_check.wav";
+    await openInspectorSample(page, displayName, "en", { width: 1280, height: 720 });
+    await page.getByRole("tab", { name: uiText("en", "inspector.tabPreview") }).click();
+    const plotBox = await page.locator(".waveform-preview-plot").boundingBox();
+    expect(plotBox!.height).toBeGreaterThanOrEqual(80);
+    expect(plotBox!.height).toBeLessThanOrEqual(200);
+    await expect(page.locator(".mo-inspector-tabbed__path")).toBeVisible();
+  });
+
+  test("1280px: sources divider resizes the sources column", async ({ page }) => {
+    await openInspectorSample(page, "LOOP.wav");
+    const sources = page.locator(".mo-app-shell__sources");
+    const before = await boxOf(sources);
+    await dragSourcesDivider(page, 90);
+
+    const after = await boxOf(sources);
+    expect(after.width, "sources width after drag").toBeGreaterThan(before.width + 24);
   });
 });

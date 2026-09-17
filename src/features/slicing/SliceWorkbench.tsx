@@ -29,7 +29,7 @@ interface Props {
   layout?: SliceWorkbenchLayout;
   /** When set, session UI is portaled into this element (single mount, no duplicate sessions). */
   hostElement?: HTMLElement | null;
-  /** 840px expanded stack: keep waveform controls and editing reachable without AppShell centerView. */
+  /** @deprecated Layout uses slice-expanded container queries; kept for test compatibility. */
   narrowExpanded?: boolean;
 }
 const WIDTH = 640;
@@ -426,7 +426,7 @@ function SliceSession({
     <>
       <div className="slice-actions"><button onClick={() => zoom(true)}>Zoom in</button><button onClick={() => zoom(false)}>Zoom out</button><button aria-label="Pan earlier" onClick={() => pan(-1n)}>←</button><button aria-label="Pan later" onClick={() => pan(1n)}>→</button><button onClick={() => setView(draft.region)}>Full region</button></div>
       <p className="slice-coordinate">Frames [{view.startFrame}, {view.endExclusive}) · {job?.sampleRate} Hz</p>
-      <svg viewBox="0 0 640 160" className="slice-waveform" aria-label="Slice waveform"
+      <svg viewBox="0 0 640 160" preserveAspectRatio="xMidYMid meet" width="100%" height="160" className="slice-waveform" aria-label="Slice waveform"
         onDoubleClick={e => {
           if (editing) return;
           const rect = e.currentTarget.getBoundingClientRect();
@@ -505,10 +505,10 @@ function SliceSession({
     </>
   ) : null;
 
+  void narrowExpanded;
   const workbenchClass = [
     "slice-workbench",
     layout === "expanded" ? "slice-workbench--expanded" : "",
-    layout === "expanded" && narrowExpanded ? "slice-workbench--expanded-narrow" : "",
   ].filter(Boolean).join(" ");
 
   let body: ReactNode;

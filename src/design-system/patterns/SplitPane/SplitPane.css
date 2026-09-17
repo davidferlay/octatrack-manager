@@ -23,6 +23,7 @@
 
 .mo-split-pane__primary {
   flex: 0 0 auto;
+  max-width: 100%;
 }
 
 .mo-split-pane__secondary {
@@ -35,11 +36,18 @@
 
 /* Shared resize handle (AppShell + Audio Pool SplitPane). */
 .panel-divider {
+  position: relative;
   width: 4px;
   background-color: rgba(255, 255, 255, 0.08);
   cursor: ew-resize;
   flex-shrink: 0;
   transition: background-color 0.2s ease;
+}
+
+.panel-divider::before {
+  content: "";
+  position: absolute;
+  inset: 0 -5px;
 }
 
 .panel-divider:hover {

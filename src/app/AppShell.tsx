@@ -20,7 +20,7 @@ export interface AppShellProps extends HTMLAttributes<HTMLElement> {
   changeDrawer?: ReactNode
   /** Controlled Sources pane width %. Omit for uncontrolled resize. */
   sourcesSize?: number
-  /** Uncontrolled initial Sources width % (default 20). */
+  /** Uncontrolled initial Sources width % (default 16). */
   defaultSourcesSize?: number
   onSourcesSizeChange?: (percent: number) => void
   /** Controlled main/inspector split (% width of main). Default 62. */
@@ -51,7 +51,7 @@ export function AppShell({
   statusBar,
   changeDrawer,
   sourcesSize,
-  defaultSourcesSize = 20,
+  defaultSourcesSize = 16,
   onSourcesSizeChange,
   mainSize,
   defaultMainSize = 62,
@@ -100,12 +100,12 @@ export function AppShell({
         </div>
       )}
       <SplitPane
-        className="mo-app-shell__body"
+        className="mo-app-shell__body mo-app-shell__outer-split"
         primarySize={sourcesSize}
         defaultPrimarySize={defaultSourcesSize}
         onPrimarySizeChange={onSourcesSizeChange}
-        minPrimary={18}
-        maxPrimary={showInspector ? 36 : 42}
+        minPrimary={12}
+        maxPrimary={showInspector ? 42 : 50}
         primaryVisible={navOpen}
       >
         <SplitPane.Primary
@@ -122,7 +122,6 @@ export function AppShell({
           {showInspector ? (
             <SplitPane
               className={[
-                'mo-app-shell__body',
                 'mo-app-shell__inner-split',
                 innerStackMode === 'list-only' ? 'mo-app-shell__inner-split--list-only' : '',
                 innerStackMode === 'inspector-only'

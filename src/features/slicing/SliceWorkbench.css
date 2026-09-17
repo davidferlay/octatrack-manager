@@ -1,7 +1,19 @@
-.slice-workbench { border: 1px solid var(--color-border-subtle, #343941); border-radius: 8px; padding: 14px; background: #11151b; color: #e5e7eb; font-size: 12px; min-width: 0; }
+.slice-workbench {
+  border: 1px solid var(--color-border-subtle, #343941);
+  border-radius: 8px;
+  padding: 14px;
+  background: #11151b;
+  color: #e5e7eb;
+  font-size: 12px;
+  min-width: 0;
+  height: auto;
+  flex: 0 0 auto;
+}
+/* Default stacked layout; two columns when the expanded host is wide enough (see slice-expanded container). */
 .slice-workbench--expanded {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 34%);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto;
   gap: 16px;
   align-items: start;
   border: 0;
@@ -10,9 +22,12 @@
   background: transparent;
   min-height: 0;
 }
-.slice-workbench--expanded-narrow {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto auto;
+
+@container slice-expanded (min-width: 40rem) {
+  .slice-workbench--expanded {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 34%);
+    grid-template-rows: unset;
+  }
 }
 .slice-workbench__expanded-center,
 .slice-workbench__expanded-aside {
@@ -22,9 +37,15 @@
   padding: 14px;
   background: #11151b;
 }
-.slice-workbench--expanded-narrow .slice-workbench__expanded-aside {
+.slice-workbench--expanded .slice-workbench__expanded-aside {
   max-height: min(52vh, 520px);
   overflow: auto;
+}
+
+@container slice-expanded (min-width: 40rem) {
+  .slice-workbench--expanded .slice-workbench__expanded-aside {
+    max-height: none;
+  }
 }
 .slice-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .slice-heading h4 { margin: 0; font-size: 14px; }
@@ -43,7 +64,17 @@
 .slice-coordinate { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .slice-preview-selection { margin: 10px 0; padding: 8px 10px; border: 1px solid var(--color-border-subtle, #343941); border-radius: 6px; background: #0c0f14; }
 .slice-preview-selection__heading { margin: 0 0 6px; font-weight: 600; }
-.slice-waveform { display: block; width: 100%; min-height: 130px; background: #090d12; border: 1px solid #343941; touch-action: none; }
+.slice-waveform {
+  display: block;
+  width: 100%;
+  height: 10rem;
+  max-height: 10rem;
+  min-height: 10rem;
+  flex: 0 0 auto;
+  background: #090d12;
+  border: 1px solid #343941;
+  touch-action: none;
+}
 .slice-peaks { fill: none; stroke: #7a8e9e; stroke-width: 1; }
 .slice-candidate { stroke: #d5d9de; stroke-dasharray: 3 4; opacity: 0.65; pointer-events: none; }
 .slice-marker { stroke: #f2a33c; stroke-width: 1.5; cursor: ew-resize; }

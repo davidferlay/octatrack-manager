@@ -244,12 +244,12 @@ jobs:
 
       - name: Install Playwright browsers
         if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install chromium --with-deps
+        run: pnpm exec playwright install chromium webkit --with-deps
 
       # The cached browser still needs its system libraries on a fresh runner.
       - name: Install Playwright system dependencies
         if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
+        run: pnpm exec playwright install-deps chromium webkit
 
       - name: Run E2E tests
         run: pnpm run test:e2e

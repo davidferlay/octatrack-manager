@@ -778,11 +778,7 @@ export function RootRegistryPanel({
           <div
             ref={inspectorPaneRef}
             tabIndex={-1}
-            className={[
-              "root-registry-inspector-host",
-              sliceWorkspaceExpanded ? "root-registry-pane--workspace-hidden" : "",
-            ].filter(Boolean).join(" ")}
-            hidden={sliceWorkspaceExpanded}
+            className="root-registry-inspector-host"
             aria-hidden={sliceWorkspaceExpanded}
             inert={sliceWorkspaceExpanded ? true : undefined}
             data-testid="inspector-workspace-host"
