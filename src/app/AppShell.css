@@ -103,3 +103,79 @@
 .mo-app-shell--narrow .mo-app-shell__narrow-controls {
   display: flex;
 }
+
+/* Catalog workspace: lock shell height; scroll inside panes (not the split chrome). */
+.mo-app-shell--workspace {
+  width: 100%;
+  max-width: 100%;
+  height: calc(100dvh - 13rem);
+  max-height: calc(100dvh - 8rem);
+  min-height: min(24rem, calc(100dvh - 8rem));
+  overflow-x: hidden;
+}
+
+.mo-app-shell--workspace .mo-app-shell__context,
+.mo-app-shell--workspace .mo-app-shell__status,
+.mo-app-shell--workspace .mo-app-shell__change-drawer {
+  flex-shrink: 0;
+}
+
+.mo-app-shell--workspace .mo-app-shell__body {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mo-app-shell--workspace .mo-split-pane {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.mo-app-shell--workspace .mo-app-shell__sources,
+.mo-app-shell--workspace .mo-app-shell__main,
+.mo-app-shell--workspace .mo-app-shell__inspector {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  overflow: hidden;
+}
+
+.mo-app-shell--workspace .mo-app-shell__inspector .root-registry-inspector-host,
+.mo-app-shell--workspace .mo-app-shell__inspector .mo-inspector-pane {
+  flex: 1 1 0;
+  min-height: 0;
+  height: auto;
+}
+
+.mo-app-shell--workspace .mo-app-shell__sources {
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.mo-app-shell--workspace .mo-app-shell__main {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mo-app-shell--workspace .mo-app-shell__inner-split {
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Prevent tab content min-width from widening the main/inspector split row. */
+.mo-app-shell--workspace .mo-app-shell__inner-split.mo-split-pane > .mo-split-pane__secondary {
+  width: 0;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.mo-app-shell--workspace .mo-app-shell__inner-split.mo-split-pane > .mo-split-pane__primary {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+}

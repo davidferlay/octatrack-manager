@@ -15,8 +15,20 @@
 .root-registry-inspector-host {
   display: flex;
   flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 0;
+  height: 100%;
   outline: none;
+}
+
+.mo-app-shell--workspace .root-registry-main-host,
+.mo-app-shell--workspace .root-registry-slice-workspace {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .root-registry-pane--workspace-hidden {

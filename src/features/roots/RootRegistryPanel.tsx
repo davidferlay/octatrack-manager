@@ -694,6 +694,7 @@ export function RootRegistryPanel({
 
   const workspaceShell = (
     <AppShell
+      className={catalogReady ? "mo-app-shell--workspace" : undefined}
       contextBar={(
         <>
           {topBar}
@@ -721,7 +722,10 @@ export function RootRegistryPanel({
         catalogReady ? (
           <>
             <div
-              className={sliceWorkspaceExpanded ? "root-registry-pane--workspace-hidden" : undefined}
+              className={[
+                "root-registry-main-host",
+                sliceWorkspaceExpanded ? "root-registry-pane--workspace-hidden" : "",
+              ].filter(Boolean).join(" ")}
               hidden={sliceWorkspaceExpanded}
               aria-hidden={sliceWorkspaceExpanded}
               inert={sliceWorkspaceExpanded ? true : undefined}

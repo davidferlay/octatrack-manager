@@ -1,4 +1,4 @@
-.slice-workbench { border: 1px solid var(--color-border-subtle, #343941); border-radius: 8px; padding: 14px; background: #11151b; color: #e5e7eb; font-size: 12px; }
+.slice-workbench { border: 1px solid var(--color-border-subtle, #343941); border-radius: 8px; padding: 14px; background: #11151b; color: #e5e7eb; font-size: 12px; min-width: 0; }
 .slice-workbench--expanded {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(260px, 34%);
@@ -35,9 +35,9 @@
 .slice-workbench button { border: 1px solid #454e5c; background: #202833; color: #e5e7eb; border-radius: 4px; padding: 6px 8px; cursor: pointer; font: inherit; }
 .slice-workbench button:hover:not(:disabled) { border-color: #f2a33c; }
 .slice-workbench button:disabled { opacity: 0.45; cursor: default; }
-.slice-workbench input:not([type="checkbox"]):not([type="range"]) { box-sizing: border-box; width: 100%; min-width: 70px; background: #161c24; color: #eef2f8; border: 1px solid #454e5c; border-radius: 3px; padding: 5px; font: inherit; }
+.slice-workbench input:not([type="checkbox"]):not([type="range"]) { box-sizing: border-box; width: 100%; min-width: 0; background: #161c24; color: #eef2f8; border: 1px solid #454e5c; border-radius: 3px; padding: 5px; font: inherit; }
 .slice-workbench input[type="range"] { width: 100%; accent-color: #f2a33c; }
-.slice-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; padding: 10px 0; border: 0; }
+.slice-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(120px, 100%), 1fr)); gap: 10px; padding: 10px 0; border: 0; }
 .slice-fields label, .slice-actions label { display: grid; gap: 5px; }
 .slice-fields legend { padding-top: 10px; font-weight: 600; }
 .slice-coordinate { overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
@@ -53,7 +53,7 @@
 .slice-hit-target { fill: transparent; stroke: none; }
 .slice-error { color: #ff9c9c; }
 .slice-notice { color: #e8bf7e; }
-.slice-table { overflow-x: auto; margin: 10px 0; }
+.slice-table { overflow-x: auto; margin: 10px 0; min-width: 0; }
 .slice-table table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .slice-table th, .slice-table td { text-align: left; padding: 5px 3px; border-bottom: 1px solid #2b3440; }
 .slice-table tr.is-selected { background: #28333f; }
