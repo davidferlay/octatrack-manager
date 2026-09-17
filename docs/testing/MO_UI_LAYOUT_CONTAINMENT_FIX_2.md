@@ -72,4 +72,9 @@ Playwright WebKit PASS ≠ Tauri WebKit layout parity.
 
 ## Final SHA
 
-(Update after push.)
+| | SHA |
+| --- | --- |
+| Start (committed layout stability) | `6af77d95fe77f56050bf59862ca7f74ce94b6eae` |
+| Final (MO-UI-LAYOUT-CONTAINMENT-FIX-2) | `5f6a0cef2294073c5b179eb3dbb882b17483e800` |
+
+PR: https://github.com/kaz4g/masterocta/pull/138
