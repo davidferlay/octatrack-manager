@@ -85,9 +85,6 @@
   border-bottom: 1px solid var(--mo-border);
   padding-bottom: var(--mo-space-1);
   flex-shrink: 0;
-  position: relative;
-  z-index: 1;
-  background: color-mix(in srgb, var(--mo-surface-1) 40%, var(--mo-canvas));
 }
 
 .mo-inspector-tabbed__tab {
@@ -120,7 +117,7 @@
 .mo-inspector-tabbed__panels {
   flex: 1 1 0;
   min-width: 0;
-  min-height: 0;
+  min-height: 12rem;
   overflow: auto;
   scrollbar-gutter: stable;
 }
