@@ -33,8 +33,9 @@ Base: `origin/main` @ `c2bf80c77bb7658ef2687032bf3d363f3788f79e` (#138)
 
 ## E2E notes (known gaps)
 
-1. **Initial viewport ≤840px (Playwright preview):** synthetic catalog row often never appears within 60s; at 841px catalog loads. Follow-up: reproduce in Tauri and bisect catalog mount vs. narrow chrome.
-2. **Mid-test `setViewportSize` after React mount:** `#root` becomes empty (no `pageerror`). Avoid resize in specs; use fixed `test.use({ viewport })` or separate contexts. Split-restore roundtrip test remains `fixme` until resize stability is understood.
+1. **Initial viewport ≤840px (Playwright preview):** synthetic catalog row often never appears within 60s; bootstrap at **1280px**, select a sample, then set `window.__E2E_FORCE_NARROW_WORKSPACE__` and dispatch `mo-e2e-narrow-change` (see `e2e/narrowWorkspace.ts`). Do **not** set the force flag before the catalog row is visible — it breaks registration/catalog mount.
+2. **Mid-test `setViewportSize` after React mount:** `#root` can become empty; prefer the force-narrow hook over post-mount resize. Split-restore roundtrip layout specs may stay `fixme` until resize stability is understood.
+3. **Sources Drawer:** `CatalogWorkspaceNav` must render **inside** `CatalogBrowseProvider` (narrow overlay drawer is a sibling of `workspaceShell` within the provider). Rendering it outside the provider crashes React (`useCatalogBrowseContext`).
 
 ## Files (high level)
 

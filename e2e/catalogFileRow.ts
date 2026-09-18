@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { uiText } from "./i18n";
 
 export async function clickCatalogFileRow(
@@ -6,10 +6,9 @@ export async function clickCatalogFileRow(
   locale: "ja" | "en",
   displayName: string,
 ) {
-  await page
-    .getByLabel(uiText(locale, "library.audioFilesAria"))
-    .locator(".catalog-file-table__row", { hasText: displayName })
-    .click();
+  const row = catalogFileRowLocator(page, locale, displayName);
+  await expect(row).toBeVisible({ timeout: 60000 });
+  await row.click();
 }
 
 export function catalogFileRowLocator(

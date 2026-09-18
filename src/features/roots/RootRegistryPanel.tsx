@@ -148,7 +148,19 @@ export function RootRegistryPanel({
   const [sliceAnalysisBusy, setSliceAnalysisBusy] = useState(false);
   const [compactSliceHost, setCompactSliceHost] = useState<HTMLDivElement | null>(null);
   const [expandedSliceHost, setExpandedSliceHost] = useState<HTMLDivElement | null>(null);
+  const [e2eLayoutEpoch, setE2eLayoutEpoch] = useState(0);
   const layoutMatchesNarrow = useMediaQuery("(max-width: 840px)");
+
+  useEffect(() => {
+    const syncE2eLayout = () => setE2eLayoutEpoch((value) => value + 1);
+    window.addEventListener("mo-e2e-narrow-change", syncE2eLayout);
+    return () => window.removeEventListener("mo-e2e-narrow-change", syncE2eLayout);
+  }, []);
+  void e2eLayoutEpoch;
+  const e2eForceNarrowWorkspace =
+    typeof window !== "undefined"
+    && (window as Window & { __E2E_FORCE_NARROW_WORKSPACE__?: boolean }).__E2E_FORCE_NARROW_WORKSPACE__ === true;
+  const narrowActive = layoutMatchesNarrow || e2eForceNarrowWorkspace;
 
   const registerSliceAnalysisCancel = useCallback((cancel: (() => void) | null) => {
     sliceCancelRef.current = cancel;
@@ -156,17 +168,17 @@ export function RootRegistryPanel({
 
   const openSliceWorkspace = useCallback(() => {
     setSliceWorkspaceExpanded(true);
-    if (layoutMatchesNarrow) {
+    if (narrowActive) {
       setCenterView("list");
     }
-  }, [layoutMatchesNarrow]);
+  }, [narrowActive]);
 
   const closeSliceWorkspace = useCallback(() => {
     setSliceWorkspaceExpanded(false);
-    if (layoutMatchesNarrow) {
+    if (narrowActive) {
       setCenterView("inspector");
     }
-  }, [layoutMatchesNarrow]);
+  }, [narrowActive]);
 
   useEffect(() => {
     setLocationSearch("");
@@ -515,17 +527,17 @@ export function RootRegistryPanel({
   }
 
   const catalogReady = session !== null && library !== null;
-  const narrowWorkspace = catalogReady && layoutMatchesNarrow;
+  const narrowWorkspace = catalogReady && narrowActive;
 
   useEffect(() => {
-    if (!layoutMatchesNarrow) {
+    if (!narrowActive) {
       setNavigationOpen(true);
       return;
     }
     if (catalogReady) {
       setNavigationOpen(false);
     }
-  }, [layoutMatchesNarrow, catalogReady]);
+  }, [narrowActive, catalogReady]);
   const selectedLibraryFile = useMemo(() => {
     if (library === null || selectedAsset === null) return undefined;
     return library.audioFiles.find(
@@ -853,6 +865,20 @@ export function RootRegistryPanel({
           onBrowseContextChange={setBrowseContext}
         >
           {workspaceShell}
+          {narrowWorkspace && (
+            <Drawer
+              open={navigationOpen}
+              onClose={() => setNavigationOpen(false)}
+              title={t("sources.title")}
+              closeAriaLabel={t("workspace.sourcesDrawerCloseAria")}
+              returnFocusRef={navToggleRef}
+              overlayClassName="mo-drawer-overlay--sources-nav"
+              panelClassName="mo-drawer-panel--sources-nav"
+              bodyClassName="mo-drawer-panel__body--sources-nav"
+            >
+              <CatalogWorkspaceNav footer={sourcesFooter} />
+            </Drawer>
+          )}
           {selectedAsset !== null && selectedLibraryFile !== undefined && (
             <SliceWorkbench
               key={`${session.rootId}:${selectedAsset.fileInstanceId}`}
@@ -872,20 +898,6 @@ export function RootRegistryPanel({
         </CatalogBrowseProvider>
       ) : (
         workspaceShell
-      )}
-      {narrowWorkspace && (
-        <Drawer
-          open={navigationOpen}
-          onClose={() => setNavigationOpen(false)}
-          title={t("sources.title")}
-          closeAriaLabel={t("workspace.sourcesDrawerCloseAria")}
-          returnFocusRef={navToggleRef}
-          overlayClassName="mo-drawer-overlay--sources-nav"
-          panelClassName="mo-drawer-panel--sources-nav"
-          bodyClassName="mo-drawer-panel__body--sources-nav"
-        >
-          <CatalogWorkspaceNav footer={sourcesFooter} />
-        </Drawer>
       )}
       {session !== null && (
         <OperationsDrawerHost

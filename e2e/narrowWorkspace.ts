@@ -1,12 +1,39 @@
 import { expect, type Page } from "@playwright/test";
+import { clickCatalogFileRow } from "./catalogFileRow";
 import { uiText } from "./i18n";
+
+const LIBRARY_BOOTSTRAP_WIDTH = 1280;
+
+export async function enableE2eNarrowWorkspace(page: Page) {
+  await page.evaluate(() => {
+    (window as Window & { __E2E_FORCE_NARROW_WORKSPACE__?: boolean }).__E2E_FORCE_NARROW_WORKSPACE__ = true;
+    window.dispatchEvent(new Event("mo-e2e-narrow-change"));
+    window.dispatchEvent(new Event("resize"));
+  });
+}
+
+/** Register root and select a sample, then enter narrow inspector layout (1280 bootstrap). */
+export async function bootstrapCatalogSampleForNarrowInspector(
+  page: Page,
+  locale: "ja" | "en",
+  displayName: string,
+  viewportHeight = 900,
+) {
+  await page.setViewportSize({ width: LIBRARY_BOOTSTRAP_WIDTH, height: viewportHeight });
+  await page.goto("/");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: uiText(locale, "sources.chooseRoot") }).click();
+  await clickCatalogFileRow(page, locale, displayName);
+  await enableE2eNarrowWorkspace(page);
+  await expectNarrowShellClass(page);
+  await showInspectorFromContextBar(page, locale);
+}
 
 /** Narrow layout: inspector toggle in the context bar (not the status bar). */
 export async function showInspectorFromContextBar(
   page: Page,
   locale: "ja" | "en",
 ): Promise<void> {
-  await page.waitForFunction(() => window.matchMedia("(max-width: 840px)").matches);
   const toggle = page.getByTestId("app-shell-context").getByRole("button", {
     name: uiText(locale, "workspace.showInspector"),
     exact: true,
@@ -19,7 +46,6 @@ export async function showListFromContextBar(
   page: Page,
   locale: "ja" | "en",
 ): Promise<void> {
-  await page.waitForFunction(() => window.matchMedia("(max-width: 840px)").matches);
   const toggle = page.getByTestId("app-shell-context").getByRole("button", {
     name: uiText(locale, "workspace.showList"),
     exact: true,
