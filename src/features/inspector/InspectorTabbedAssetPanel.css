@@ -21,11 +21,15 @@
 }
 
 .mo-app-shell--workspace .mo-inspector-tabbed__header {
-  flex-shrink: 1;
+  flex-shrink: 0;
   min-height: 0;
-  max-height: 5.5rem;
-  overflow: auto;
-  scrollbar-gutter: stable;
+  overflow: visible;
+}
+
+@supports (scrollbar-gutter: stable) {
+  .mo-app-shell--workspace .mo-inspector-tabbed__header {
+    scrollbar-gutter: stable;
+  }
 }
 
 .mo-app-shell--workspace .mo-inspector-tabbed__panels {

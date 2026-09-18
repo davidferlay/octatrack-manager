@@ -28,7 +28,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `pnpm run dev -- --port ${port} --strictPort`,
+    command: `pnpm exec vite --port ${port} --strictPort`,
     url: baseURL,
     reuseExistingServer,
     timeout: 120000,
