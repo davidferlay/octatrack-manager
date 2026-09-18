@@ -6,9 +6,11 @@
 **Base (start):** `origin/main` @ `2fee043dbcaa65177cc561c1f49b88917a820d75` (merge PR #139)
 **Follow-up start SHA:** `23b17564f26dc192cdcb695a0f43adb25662be83`
 **Product change SHA:** `3986a929b4d52d9449be2f43bb679160b342522c`
-**Verify target SHA:** `3986a929b4d52d9449be2f43bb679160b342522c`
+**Verify target SHA:** `9907d42231141c2bd14fdd055ac904a2aeb6bd1e`
 
 CI on start SHA `23b1756`: run [35398820632](https://github.com/kaz4g/masterocta/actions/runs/35398820632) — Rust / Frontend / E2E / Gate C ubuntu+macos **PASS**. That run does **not** cover this follow-up.
+
+CI on verify SHA `9907d42`: run [35401675643](https://github.com/kaz4g/masterocta/actions/runs/35401675643) — Rust / Frontend / E2E / Gate C ubuntu+macos **PASS**.
 
 ## Summary
 
@@ -84,7 +86,7 @@ Additional 840px library/slice/zoom specs use **840×900** real viewport (no for
 | Playwright `workspace-layout` + `inspector-layout-stability` (Chromium) | PASS (20) |
 | Playwright same specs (`webkit-layout`) | PASS (20) |
 | `cargo fmt --check` / `clippy -D warnings` / `cargo test --workspace --locked` | PASS (local `~/.cargo/bin/cargo`) |
-| Follow-up CI | **pending** after push |
+| Follow-up CI on `9907d42` [35401675643](https://github.com/kaz4g/masterocta/actions/runs/35401675643) | PASS (Rust, Frontend, E2E, Gate C ubuntu+macos) |
 
 ## Native Tauri acceptance
 
