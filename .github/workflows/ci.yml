@@ -208,6 +208,9 @@ jobs:
       - name: Run initial-contracts runner tests
         run: node --test scripts/run-initial-contracts.test.mjs
 
+      - name: Check workspace CSS fallback
+        run: pnpm run test:workspace-css
+
       - name: Build frontend
         run: pnpm run build
 

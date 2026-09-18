@@ -37,6 +37,8 @@ export interface AppShellProps extends HTMLAttributes<HTMLElement> {
   narrowControls?: ReactNode
   /** When true, stack main/inspector by centerView (840px layout). Owned by caller. */
   narrowLayout?: boolean
+  /** When true, reclaim inspector column width without unmounting inspector. */
+  sliceWorkspaceExpanded?: boolean
 }
 
 /**
@@ -64,6 +66,7 @@ export function AppShell({
   onCenterViewChange,
   narrowControls,
   narrowLayout = false,
+  sliceWorkspaceExpanded = false,
   className,
   ...rest
 }: AppShellProps) {
@@ -127,6 +130,7 @@ export function AppShell({
                 innerStackMode === 'inspector-only'
                   ? 'mo-app-shell__inner-split--inspector-only'
                   : '',
+                sliceWorkspaceExpanded ? 'mo-app-shell__inner-split--slice-expanded' : '',
               ].filter(Boolean).join(' ')}
               primarySize={mainSize}
               defaultPrimarySize={defaultMainSize}

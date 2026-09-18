@@ -104,23 +104,55 @@
   display: flex;
 }
 
-/* Catalog workspace: lock shell height; scroll inside panes (not the split chrome). */
+/* Catalog workspace: lock shell height; scroll inside panes (not the split chrome).
+ * Unguarded properties must parse on Safari 11 / macOS 10.13 (vh + calc only).
+ * min() / max() / clamp() / dvh stay in later @supports so one unknown token
+ * cannot drop the whole height assignment. */
 .mo-app-shell--workspace {
   width: 100%;
   max-width: 100%;
-  /* Home header + scan sit above the shell in Tauri/browser; leave headroom. */
-  height: clamp(12rem, calc(100dvh - 18rem), calc(100dvh - 8rem));
-  max-height: calc(100dvh - 8rem);
-  min-height: min(24rem, calc(100dvh - 10rem));
+  height: calc(100vh - 18rem);
+  max-height: calc(100vh - 8rem);
+  min-height: 12rem;
   overflow-x: hidden;
+}
+
+@supports (height: 100dvh) {
+  .mo-app-shell--workspace {
+    height: calc(100dvh - 18rem);
+    max-height: calc(100dvh - 8rem);
+  }
+}
+
+@supports (height: clamp(12rem, 20rem, 40rem)) {
+  .mo-app-shell--workspace {
+    height: clamp(12rem, calc(100vh - 18rem), calc(100vh - 8rem));
+  }
+}
+
+@supports (height: clamp(12rem, calc(100dvh - 18rem), 40rem)) {
+  .mo-app-shell--workspace {
+    height: clamp(12rem, calc(100dvh - 18rem), calc(100dvh - 8rem));
+  }
 }
 
 .mo-app-shell--workspace .mo-app-shell__context {
   flex-shrink: 1;
   min-height: 0;
-  max-height: min(14rem, 38vh);
+  max-height: 14rem;
   overflow: auto;
-  scrollbar-gutter: stable;
+}
+
+@supports (max-height: min(14rem, 38vh)) {
+  .mo-app-shell--workspace .mo-app-shell__context {
+    max-height: min(14rem, 38vh);
+  }
+}
+
+@supports (scrollbar-gutter: stable) {
+  .mo-app-shell--workspace .mo-app-shell__context {
+    scrollbar-gutter: stable;
+  }
 }
 
 .mo-app-shell--workspace .mo-app-shell__status,
@@ -217,22 +249,23 @@
   min-width: 0;
 }
 
-/* Expanded slice workspace: reclaim inspector column width without unmounting inspector chrome. */
+/* Expanded slice workspace: reclaim inspector column width without unmounting inspector chrome.
+ * Class is required so :has() is not the only switch (Safari 11 has no :has). */
 .mo-app-shell--workspace
-  .mo-app-shell__inner-split.mo-split-pane:has(.root-registry-slice-workspace)
+  .mo-app-shell__inner-split--slice-expanded.mo-split-pane
   > .mo-split-pane__divider {
   display: none;
   pointer-events: none;
 }
 
 .mo-app-shell--workspace
-  .mo-app-shell__inner-split.mo-split-pane:has(.root-registry-slice-workspace)
+  .mo-app-shell__inner-split--slice-expanded.mo-split-pane
   > .mo-split-pane__secondary {
   display: none;
 }
 
 .mo-app-shell--workspace
-  .mo-app-shell__inner-split.mo-split-pane:has(.root-registry-slice-workspace)
+  .mo-app-shell__inner-split--slice-expanded.mo-split-pane
   > .mo-split-pane__primary {
   width: 100% !important;
   max-width: none !important;

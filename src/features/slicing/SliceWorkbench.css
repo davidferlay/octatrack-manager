@@ -23,6 +23,8 @@
   min-height: 0;
 }
 
+/* Two columns only when container queries apply. Without @container, stay stacked. */
+
 @container slice-expanded (min-width: 40rem) {
   .slice-workbench--expanded {
     grid-template-columns: minmax(0, 1fr) minmax(16rem, 34%);

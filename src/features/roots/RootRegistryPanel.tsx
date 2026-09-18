@@ -695,6 +695,7 @@ export function RootRegistryPanel({
   const workspaceShell = (
     <AppShell
       className={catalogReady ? "mo-app-shell--workspace" : undefined}
+      sliceWorkspaceExpanded={sliceWorkspaceExpanded}
       contextBar={(
         <>
           {topBar}

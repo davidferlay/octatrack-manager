@@ -190,6 +190,12 @@ async function dragInnerMainInspectorDivider(page: Page, deltaX: number) {
   await page.mouse.up();
 }
 
+async function attachLayoutScreenshot(page: Page, name: string) {
+  const path = test.info().outputPath(name);
+  await page.screenshot({ path, fullPage: false });
+  await test.info().attach(name, { path, contentType: "image/png" });
+}
+
 async function expectTabbedScrollEscape(page: Page) {
   const overflowY = await page.locator(".mo-inspector-tabbed").evaluate((el) => getComputedStyle(el).overflowY);
   expect(["auto", "scroll"], "tabbed overflow escape").toContain(overflowY);
@@ -359,10 +365,7 @@ test.describe("inspector layout stability", () => {
     expect(plotBox!.height, "preview plot height").toBeGreaterThanOrEqual(80);
     expect(plotBox!.height, "preview plot must not fill the inspector").toBeLessThanOrEqual(200);
 
-    await page.screenshot({
-      path: "docs/testing/screenshots/mo-ui-inspector-layout-stability-1/after-1280-tab-cycle.png",
-      fullPage: false,
-    });
+    await attachLayoutScreenshot(page, "after-1280-tab-cycle.png");
   });
 
   test("1280x600: short viewport reaches tab bottom controls without shifting chrome", async ({ page }) => {
@@ -378,6 +381,8 @@ test.describe("inspector layout stability", () => {
 
     const baseline = await captureWorkspaceChrome(page);
     await expect(page.locator(".mo-inspector-tabbed__tablist")).toBeVisible();
+    const workspaceHeight = await page.locator(".mo-app-shell--workspace").evaluate((el) => el.getBoundingClientRect().height);
+    expect(workspaceHeight, "workspace must keep a usable height").toBeGreaterThan(160);
 
     await page.getByRole("tab", { name: uiText("ja", "inspector.tabPreview") }).click();
     const endFrame = page.getByLabel(uiText("ja", "waveform.endFrame"));
@@ -411,10 +416,7 @@ test.describe("inspector layout stability", () => {
     expect(Math.abs(baseline.sourcesDividerX - afterTabs.sourcesDividerX)).toBeLessThanOrEqual(1);
     expect(Math.abs(baseline.mainInspectorDividerX - afterTabs.mainInspectorDividerX)).toBeLessThanOrEqual(1);
 
-    await page.screenshot({
-      path: "docs/testing/screenshots/mo-ui-layout-containment-fix-3/after-1280x600-tab-reach.png",
-      fullPage: false,
-    });
+    await attachLayoutScreenshot(page, "after-1280x600-tab-reach.png");
   });
 
   test("1280x600 en: long name tabbed escape and slice detect click", async ({ page }) => {
@@ -436,6 +438,7 @@ test.describe("inspector layout stability", () => {
     await expand.scrollIntoViewIfNeeded();
     await expand.click();
     await expect(page.getByTestId("slice-workspace-expanded-shell")).toBeVisible();
+    await expect(page.locator(".mo-app-shell__inner-split--slice-expanded")).toBeVisible();
     await expectExpandedMainFillsInnerSplit(page);
 
     await page.getByRole("button", { name: uiText("ja", "inspector.exitSliceWorkspaceAria") }).click();
@@ -450,16 +453,14 @@ test.describe("inspector layout stability", () => {
     await expand.scrollIntoViewIfNeeded();
     await expand.click();
     await expect(page.getByTestId("slice-workspace-expanded-shell")).toBeVisible();
+    await expect(page.locator(".mo-app-shell__inner-split--slice-expanded")).toBeVisible();
     await expectExpandedMainFillsInnerSplit(page);
     await page.getByRole("button", { name: uiText("ja", "inspector.exitSliceWorkspaceAria") }).click();
     const afterCollapseWide = await captureWorkspaceChrome(page);
     expectBoxesStable(beforeExpandWide.main, afterCollapseWide.main, "main after wide drag collapse");
     expectBoxesStable(beforeExpandWide.inspector, afterCollapseWide.inspector, "inspector after wide drag collapse");
 
-    await page.screenshot({
-      path: "docs/testing/screenshots/mo-ui-layout-containment-fix-3/after-expand-inner-split-fill.png",
-      fullPage: false,
-    });
+    await attachLayoutScreenshot(page, "after-expand-inner-split-fill.png");
   });
 
   test("900px: wide sources stack expanded slice; widening restores two columns", async ({ page }) => {
@@ -471,7 +472,7 @@ test.describe("inspector layout stability", () => {
     await expand.scrollIntoViewIfNeeded();
     await expand.click();
     await expect(page.getByTestId("slice-workbench-expanded")).toBeVisible();
-
+    await expect(page.locator(".mo-app-shell__inner-split--slice-expanded")).toBeVisible();
     await expectExpandedMainFillsInnerSplit(page);
     const hostWidth = await page.getByTestId("slice-workbench-expanded-host").evaluate((el) => el.clientWidth);
     expect(hostWidth, "wide sources should narrow expanded host").toBeLessThan(640);
@@ -499,10 +500,7 @@ test.describe("inspector layout stability", () => {
       expect(await expandedSliceGridColumns(page)).toBeGreaterThanOrEqual(2);
     }
 
-    await page.screenshot({
-      path: "docs/testing/screenshots/mo-ui-layout-containment-fix-3/after-900-expanded-slice-stack.png",
-      fullPage: false,
-    });
+    await attachLayoutScreenshot(page, "after-900-expanded-slice-stack.png");
   });
 
   test("840px: narrow stack, expand roundtrip keeps preview range", async ({ page }) => {
@@ -528,10 +526,7 @@ test.describe("inspector layout stability", () => {
     await page.getByRole("tab", { name: uiText("ja", "inspector.tabPreview") }).click();
     await expect(page.getByLabel(uiText("ja", "waveform.startFrame"))).toHaveValue("1000");
 
-    await page.screenshot({
-      path: "docs/testing/screenshots/mo-ui-inspector-layout-stability-1/after-840-narrow.png",
-      fullPage: false,
-    });
+    await attachLayoutScreenshot(page, "after-840-narrow.png");
   });
 
   test("1280px en: long filename wraps and preview plot height stays bounded", async ({ page }) => {

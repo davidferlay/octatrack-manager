@@ -1,4 +1,8 @@
-# MO-UI-LAYOUT-CONTAINMENT-FIX-3 — handoff
+# MO-UI-LAYOUT-CONTAINMENT-FIX-3 — historical record
+
+This file is the **FIX-3** record only. It is not the current PR #138 final.
+
+Current canonical record: [`MO_UI_LAYOUT_REVIEW_FIX_4.md`](./MO_UI_LAYOUT_REVIEW_FIX_4.md).
 
 ## Scope
 
@@ -44,18 +48,22 @@ Container query `40rem` unchanged.
 
 Screenshots: `docs/testing/screenshots/mo-ui-layout-containment-fix-3/`.
 
-## Verification
+## Verification (this stage)
+
+These results apply to FIX-3 product SHA `3aef1d267f4ebcf55e7a838673d05918d6c520d6`.
+Later record-only commits (`b6037aab5de9a3e2812bb4d894970377dac29238` screenshots, `d872b61dba7d0cd1bf2bf9a87e8746b00b3b26ac` SHA note) did not change product code.
 
 | Check | Result |
 | --- | --- |
-| Start SHA | `4bc0df2a2c023a6743ce1e54db83a32f40cbfce2` |
-| Final SHA | `b6037aa` (fix `3aef1d2`) |
+| Review start | `4bc0df2a2c023a6743ce1e54db83a32f40cbfce2` |
+| Product | `3aef1d267f4ebcf55e7a838673d05918d6c520d6` |
 | `pnpm run typecheck` | PASS |
 | `pnpm run build` | PASS |
-| Layout E2E (Chromium + WebKit, 16) + `slice-workspace-expand` (2 Chromium) | PASS (18) |
-| `pnpm run test:frontend` | Not re-run this pass (known unrelated `AudioFileTable` popover fail on FIX-2) |
+| Layout E2E (Chromium + WebKit, 16) + `slice-workspace-expand` (2 Chromium) | PASS (18) locally |
+| CI (product head `3aef1d2…`, run `35293464636`) | All jobs PASS including E2E |
+| `pnpm run test:frontend` | Not re-run on FIX-3 locally. CI Frontend Checks PASS on that run. |
 | `cargo` | NOT_RUN |
-| Native Tauri (600px / expand full width) | **Operator** — see below |
+| Native Tauri | NOT_RUN |
 
 ### Native (operator)
 

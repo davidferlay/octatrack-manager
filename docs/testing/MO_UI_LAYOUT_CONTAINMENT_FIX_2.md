@@ -1,10 +1,14 @@
-# MO-UI-LAYOUT-CONTAINMENT-FIX-2 — handoff
+# MO-UI-LAYOUT-CONTAINMENT-FIX-2 — historical record
+
+This file is the **FIX-2** record only. It is not the current PR #138 final.
+
+Current canonical record: [`MO_UI_LAYOUT_REVIEW_FIX_4.md`](./MO_UI_LAYOUT_REVIEW_FIX_4.md).
 
 ## Scope
 
 PR [#138](https://github.com/kaz4g/masterocta/pull/138) / branch `feat/ui-inspector-layout-stability-1`.
 
-Builds on committed `6af77d9` plus prior uncommitted layout fixes (waveform height, sources split, flex height chain).
+Builds on committed `6af77d95fe77f56050bf59862ca7f74ce94b6eae` plus prior uncommitted layout fixes (waveform height, sources split, flex height chain).
 
 ## Problems addressed
 
@@ -47,15 +51,17 @@ Extended [`e2e/inspector-layout-stability.spec.ts`](../e2e/inspector-layout-stab
 
 Screenshots: `docs/testing/screenshots/mo-ui-layout-containment-fix-2/`.
 
-## Verification (local)
+## Verification (local, this stage)
+
+These results apply to FIX-2 product SHA `5f6a0cef2294073c5b179eb3dbb882b17483e800`, not later PR heads.
 
 | Check | Result |
 | --- | --- |
 | `pnpm run typecheck` | PASS |
 | `pnpm run build` | PASS |
-| Layout E2E (Chromium + WebKit, 14×2 runs) | PASS |
+| Layout E2E (Chromium + WebKit) | PASS at this stage (14 tests × 2 projects after WebKit install) |
 | `e2e/slice-workspace-expand.spec.ts` | PASS |
-| `pnpm run test:frontend` | FAIL — `AudioFileTable.test.tsx` popover text (unchanged by this diff; investigate separately) |
+| `pnpm run test:frontend` | Local FAIL on `AudioFileTable.test.tsx` popover text. **CI Frontend Checks later passed** on this branch; do not treat the local fail as current CI status. |
 | `cargo fmt/clippy/test` | NOT_RUN if `cargo` unavailable |
 | Native Tauri acceptance | Operator — see below |
 
@@ -70,12 +76,15 @@ Confirm: 600px-tall window → Inspector tabs scroll to bottom fields; 900px + w
 
 Playwright WebKit PASS ≠ Tauri WebKit layout parity.
 
-## Final SHA
+## Stage SHAs (FIX-2)
 
-| | SHA |
+| | Full SHA |
 | --- | --- |
 | Start (committed layout stability) | `6af77d95fe77f56050bf59862ca7f74ce94b6eae` |
-| Final (MO-UI-LAYOUT-CONTAINMENT-FIX-2) | `28b5160` (layout `5f6a0ce`; CI WebKit cache `28b5160`) |
+| Product (inspector scroll + container query) | `5f6a0cef2294073c5b179eb3dbb882b17483e800` |
+| Record-only (FIX-2 SHA note) | `c45d74538f9f13fcc054493f129c54c2a96c56b2` |
+| CI WebKit cache restore | `28b51608dc738a371358d8025f855530abe4cdf8` |
+| Record-only (handoff after WebKit cache) | `4bc0df2a2c023a6743ce1e54db83a32f40cbfce2` |
 
 PR: https://github.com/kaz4g/masterocta/pull/138
 
