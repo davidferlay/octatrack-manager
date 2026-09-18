@@ -4,7 +4,7 @@
 **Branch:** `feat/ui-narrow-workspace-verify-fix-2`  
 **Base (start):** `origin/main` @ `2fee043dbcaa65177cc561c1f49b88917a820d75` (merge PR #139)  
 **Start SHA (worktree):** `2fee043dbcaa65177cc561c1f49b88917a820d75`  
-**Verify target SHA:** _(record at push: `git rev-parse HEAD`)_
+**Verify target SHA:** `bd79bf290110630f4f6aed1482a2a4c276457996`
 
 ## Summary
 
