@@ -79,6 +79,8 @@ Playwright WebKit PASS ≠ Tauri WebKit layout parity.
 
 PR: https://github.com/kaz4g/masterocta/pull/138
 
+Follow-up: [MO_UI_LAYOUT_CONTAINMENT_FIX_3.md](./MO_UI_LAYOUT_CONTAINMENT_FIX_3.md).
+
 ## CI follow-up
 
 First push after adding WebKit E2E: Ubuntu cache restored a **chromium-only** tree (key was Playwright version only). `webkit-layout` failed with missing `pw_run.sh`. CI cache key now includes `chromium-webkit`; cache-hit path runs `playwright install chromium webkit` before `install-deps`.

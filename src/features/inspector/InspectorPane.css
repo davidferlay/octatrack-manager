@@ -65,11 +65,18 @@
   overflow: hidden;
 }
 
-.mo-inspector-pane__body--tabbed > * {
+.mo-inspector-pane__tabbed-host {
   display: flex;
   flex: 1 1 0;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+}
+
+.mo-inspector-pane__tabbed-host > .mo-inspector-tabbed {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
 }

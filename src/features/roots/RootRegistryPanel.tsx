@@ -788,7 +788,10 @@ export function RootRegistryPanel({
               relativePath={selectedAsset?.relativePath}
             >
               {selectedAsset !== null && session !== null && selectedLibraryFile !== undefined && (
-                <div key={`${session.rootId}:${selectedAsset.fileInstanceId}`}>
+                <div
+                  key={`${session.rootId}:${selectedAsset.fileInstanceId}`}
+                  className="mo-inspector-pane__tabbed-host"
+                >
                   <InspectorTabbedAssetPanel
                     rootId={session.rootId}
                     file={selectedLibraryFile}

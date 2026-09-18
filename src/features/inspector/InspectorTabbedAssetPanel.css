@@ -5,13 +5,12 @@
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
-  scrollbar-gutter: stable;
+  overflow: visible;
 }
 
 .mo-inspector-tabbed__slice-toolbar {
   flex-shrink: 0;
-  margin-bottom: 0;
+  margin: 0 0 var(--mo-space-2);
 }
 
 .mo-inspector-tabbed__header {
@@ -19,6 +18,18 @@
   flex-direction: column;
   gap: var(--mo-space-2);
   flex-shrink: 0;
+}
+
+.mo-app-shell--workspace .mo-inspector-tabbed__header {
+  flex-shrink: 1;
+  min-height: 0;
+  max-height: 5.5rem;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+.mo-app-shell--workspace .mo-inspector-tabbed__panels {
+  min-height: 8rem;
 }
 
 .mo-inspector-tabbed__asset {
@@ -109,6 +120,8 @@
 }
 
 .mo-inspector-tabbed__panels {
+  position: relative;
+  z-index: 1;
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;

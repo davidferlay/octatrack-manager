@@ -166,6 +166,105 @@ async function expandedSliceGridColumns(page: Page): Promise<number> {
   });
 }
 
+async function innerSplitClientWidth(page: Page): Promise<number> {
+  return page.locator(".mo-app-shell__inner-split.mo-split-pane").evaluate((el) => el.clientWidth);
+}
+
+/** Main primary should consume the inner split row while slice workspace is expanded. */
+async function expectExpandedMainFillsInnerSplit(page: Page, tolerancePx = 2) {
+  const innerWidth = await innerSplitClientWidth(page);
+  const mainBox = await boxOf(page.locator(".mo-app-shell__inner-split > .mo-split-pane__primary"));
+  expect(Math.abs(mainBox.width - innerWidth), "expanded main vs inner split").toBeLessThanOrEqual(
+    tolerancePx,
+  );
+}
+
+async function dragInnerMainInspectorDivider(page: Page, deltaX: number) {
+  const divider = page.locator(".mo-app-shell__inner-split .mo-split-pane__divider").first();
+  const dividerBox = await boxOf(divider);
+  const startX = dividerBox.x + dividerBox.width / 2;
+  const y = dividerBox.y + dividerBox.height / 2;
+  await page.mouse.move(startX, y);
+  await page.mouse.down();
+  await page.mouse.move(startX + deltaX, y, { steps: 10 });
+  await page.mouse.up();
+}
+
+async function expectTabbedScrollEscape(page: Page) {
+  const overflowY = await page.locator(".mo-inspector-tabbed").evaluate((el) => getComputedStyle(el).overflowY);
+  expect(["auto", "scroll"], "tabbed overflow escape").toContain(overflowY);
+}
+
+async function scrollControlIntoInspectorPanels(page: Page, control: Locator) {
+  const handle = await control.elementHandle();
+  expect(handle).not.toBeNull();
+  const scrolled = await page.evaluate((controlButton) => {
+    if (!(controlButton instanceof HTMLElement)) return false;
+    const host = controlButton.closest(".mo-inspector-pane__tabbed-host");
+    const tabbed = controlButton.closest(".mo-inspector-tabbed");
+    const panels = controlButton.closest(".mo-inspector-tabbed__panels");
+    if (!(tabbed instanceof HTMLElement) || !(panels instanceof HTMLElement)) return false;
+
+    const isClickable = () => {
+      const btnRect = controlButton.getBoundingClientRect();
+      const panelRect = panels.getBoundingClientRect();
+      const margin = 6;
+      if (
+        btnRect.width <= 0
+        || btnRect.height <= 0
+        || btnRect.top < panelRect.top + margin
+        || btnRect.bottom > panelRect.bottom - margin
+      ) {
+        return false;
+      }
+      const cx = btnRect.left + btnRect.width / 2;
+      const cy = btnRect.top + btnRect.height / 2;
+      const topEl = document.elementFromPoint(cx, cy);
+      return (
+        topEl === controlButton
+        || controlButton.contains(topEl)
+        || (topEl instanceof Node && controlButton.contains(topEl))
+      );
+    };
+
+    const scrollers: HTMLElement[] = [];
+    if (host instanceof HTMLElement) scrollers.push(host);
+    scrollers.push(tabbed, panels);
+
+    for (let pass = 0; pass < 2; pass += 1) {
+      for (const scroller of scrollers) {
+        for (let step = 0; step <= 40; step += 1) {
+          scroller.scrollTop = Math.round((scroller.scrollHeight * step) / 40);
+          panels.scrollTop = 0;
+          if (isClickable()) return true;
+        }
+      }
+      for (const scroller of scrollers) {
+        for (let step = 0; step <= 40; step += 1) {
+          panels.scrollTop = Math.round((panels.scrollHeight * step) / 40);
+          if (isClickable()) return true;
+        }
+      }
+    }
+    return isClickable();
+  }, handle!);
+  expect(scrolled, "control should be clickable inside inspector panels").toBe(true);
+}
+
+async function clickSliceDetectAttacksInCompactInspector(page: Page, locale: "ja" | "en" = "ja") {
+  await page.locator(".mo-app-shell--workspace").scrollIntoViewIfNeeded();
+  const editor = page.getByTestId("slice-workbench-compact");
+  const detect = editor.getByRole("button", { name: uiText(locale, "slicing.detectAttacks") });
+  await expect(async () => {
+    await scrollControlIntoInspectorPanels(page, detect);
+  }).toPass({ timeout: 12000 });
+  await detect.click();
+  const apply = editor.getByRole("button", { name: uiText(locale, "slicing.applyCandidates") });
+  await expect(apply).toBeEnabled({ timeout: 15000 });
+  await scrollControlIntoInspectorPanels(page, apply);
+  await expect(apply).toBeVisible();
+}
+
 /** Scroll workspace and inspector panels so bottom controls are reachable (short viewport / Home chrome). */
 async function expectReachableInInspectorPanels(page: Page, control: Locator) {
   await page.locator(".mo-app-shell--workspace").scrollIntoViewIfNeeded();
@@ -288,6 +387,8 @@ test.describe("inspector layout stability", () => {
     expect(previewPlotBox!.height).toBeGreaterThanOrEqual(80);
     expect(previewPlotBox!.height).toBeLessThanOrEqual(200);
 
+    await expectTabbedScrollEscape(page);
+
     await page.getByRole("tab", { name: uiText("ja", "inspector.tabSlice") }).click();
     await expect(page.getByTestId("slice-workbench-compact-host")).toBeVisible();
     const panels = page.locator(".mo-inspector-tabbed__panels");
@@ -296,6 +397,7 @@ test.describe("inspector layout stability", () => {
       el.scrollTop = el.scrollHeight;
     });
     expect(await panels.evaluate((el) => el.scrollTop)).toBeGreaterThanOrEqual(scrollBefore);
+    await clickSliceDetectAttacksInCompactInspector(page, "ja");
 
     await page.getByRole("tab", { name: uiText("ja", "inspector.tabNotes") }).click();
     const noteField = page.getByLabel(uiText("ja", "metadata.noteLabel"));
@@ -310,20 +412,31 @@ test.describe("inspector layout stability", () => {
     expect(Math.abs(baseline.mainInspectorDividerX - afterTabs.mainInspectorDividerX)).toBeLessThanOrEqual(1);
 
     await page.screenshot({
-      path: "docs/testing/screenshots/mo-ui-layout-containment-fix-2/after-1280x600-tab-reach.png",
+      path: "docs/testing/screenshots/mo-ui-layout-containment-fix-3/after-1280x600-tab-reach.png",
       fullPage: false,
     });
   });
 
-  test("1280px: expand slice workspace restores main/inspector widths", async ({ page }) => {
+  test("1280x600 en: long name tabbed escape and slice detect click", async ({ page }) => {
+    const displayName = "very_long_disposable_name_for_layout_overflow_acceptance_check.wav";
+    await openInspectorSample(page, displayName, "en", { width: 1280, height: 600 });
+    await expectTabbedScrollEscape(page);
+    await page.getByRole("tab", { name: uiText("en", "inspector.tabSlice") }).click();
+    await clickSliceDetectAttacksInCompactInspector(page, "en");
+  });
+
+  test("1280px: expand slice workspace fills inner split and restores widths", async ({ page }) => {
     await openInspectorSample(page, "LOOP.wav");
     await page.getByRole("tab", { name: uiText("ja", "inspector.tabSlice") }).click();
 
+    await dragInnerMainInspectorDivider(page, -80);
     const beforeExpand = await captureWorkspaceChrome(page);
+
     const expand = page.getByRole("button", { name: uiText("ja", "inspector.expandSliceWorkspaceAria") });
     await expand.scrollIntoViewIfNeeded();
     await expand.click();
     await expect(page.getByTestId("slice-workspace-expanded-shell")).toBeVisible();
+    await expectExpandedMainFillsInnerSplit(page);
 
     await page.getByRole("button", { name: uiText("ja", "inspector.exitSliceWorkspaceAria") }).click();
     await expect(page.getByTestId("slice-workspace-expanded-shell")).toBeHidden();
@@ -331,20 +444,37 @@ test.describe("inspector layout stability", () => {
     const afterCollapse = await captureWorkspaceChrome(page);
     expectBoxesStable(beforeExpand.main, afterCollapse.main, "main after collapse");
     expectBoxesStable(beforeExpand.inspector, afterCollapse.inspector, "inspector after collapse");
+
+    await dragInnerMainInspectorDivider(page, 80);
+    const beforeExpandWide = await captureWorkspaceChrome(page);
+    await expand.scrollIntoViewIfNeeded();
+    await expand.click();
+    await expect(page.getByTestId("slice-workspace-expanded-shell")).toBeVisible();
+    await expectExpandedMainFillsInnerSplit(page);
+    await page.getByRole("button", { name: uiText("ja", "inspector.exitSliceWorkspaceAria") }).click();
+    const afterCollapseWide = await captureWorkspaceChrome(page);
+    expectBoxesStable(beforeExpandWide.main, afterCollapseWide.main, "main after wide drag collapse");
+    expectBoxesStable(beforeExpandWide.inspector, afterCollapseWide.inspector, "inspector after wide drag collapse");
+
+    await page.screenshot({
+      path: "docs/testing/screenshots/mo-ui-layout-containment-fix-3/after-expand-inner-split-fill.png",
+      fullPage: false,
+    });
   });
 
   test("900px: wide sources stack expanded slice; widening restores two columns", async ({ page }) => {
     await openInspectorSample(page, "LOOP.wav", "ja", { width: 900, height: 900 });
     await page.getByRole("tab", { name: uiText("ja", "inspector.tabSlice") }).click();
 
-    await dragSourcesDivider(page, 140);
+    await dragSourcesDivider(page, 200);
     const expand = page.getByRole("button", { name: uiText("ja", "inspector.expandSliceWorkspaceAria") });
     await expand.scrollIntoViewIfNeeded();
     await expand.click();
     await expect(page.getByTestId("slice-workbench-expanded")).toBeVisible();
 
+    await expectExpandedMainFillsInnerSplit(page);
     const hostWidth = await page.getByTestId("slice-workbench-expanded-host").evaluate((el) => el.clientWidth);
-    expect(hostWidth).toBeLessThan(640);
+    expect(hostWidth, "wide sources should narrow expanded host").toBeLessThan(640);
     expect(await expandedSliceGridColumns(page)).toBe(1);
 
     const expandedEditor = page.getByTestId("slice-workbench-expanded");
@@ -370,7 +500,7 @@ test.describe("inspector layout stability", () => {
     }
 
     await page.screenshot({
-      path: "docs/testing/screenshots/mo-ui-layout-containment-fix-2/after-900-expanded-slice-stack.png",
+      path: "docs/testing/screenshots/mo-ui-layout-containment-fix-3/after-900-expanded-slice-stack.png",
       fullPage: false,
     });
   });

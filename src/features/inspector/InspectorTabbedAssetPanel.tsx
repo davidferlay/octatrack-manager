@@ -238,19 +238,6 @@ export function InspectorTabbedAssetPanel({
           </button>
         ))}
       </div>
-      {externalSliceHost && activeTab === "slice" && (
-        <div className="mo-inspector-tabbed__slice-toolbar">
-          <Button
-            type="button"
-            variant="secondary"
-            aria-label={t("inspector.expandSliceWorkspaceAria")}
-            disabled={sliceWorkspaceExpanded}
-            onClick={() => onRequestExpandSliceWorkspace?.()}
-          >
-            {t("inspector.expandSliceWorkspace")}
-          </Button>
-        </div>
-      )}
       <div className="mo-inspector-tabbed__panels">
         <TabPanel
           id={`${tablistId}-panel-preview`}
@@ -276,11 +263,24 @@ export function InspectorTabbedAssetPanel({
           hidden={activeTab !== "slice"}
         >
           {externalSliceHost ? (
-            <div
-              ref={sliceCompactHostRef}
-              className="mo-inspector-tabbed__slice-host"
-              data-testid="slice-workbench-compact-host"
-            />
+            <>
+              <div className="mo-inspector-tabbed__slice-toolbar">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  aria-label={t("inspector.expandSliceWorkspaceAria")}
+                  disabled={sliceWorkspaceExpanded}
+                  onClick={() => onRequestExpandSliceWorkspace?.()}
+                >
+                  {t("inspector.expandSliceWorkspace")}
+                </Button>
+              </div>
+              <div
+                ref={sliceCompactHostRef}
+                className="mo-inspector-tabbed__slice-host"
+                data-testid="slice-workbench-compact-host"
+              />
+            </>
           ) : (
             <SliceWorkbench
               rootId={rootId}

@@ -109,13 +109,20 @@
   width: 100%;
   max-width: 100%;
   /* Home header + scan sit above the shell in Tauri/browser; leave headroom. */
-  height: clamp(24rem, calc(100dvh - 18rem), calc(100dvh - 8rem));
+  height: clamp(12rem, calc(100dvh - 18rem), calc(100dvh - 8rem));
   max-height: calc(100dvh - 8rem);
-  min-height: 24rem;
+  min-height: min(24rem, calc(100dvh - 10rem));
   overflow-x: hidden;
 }
 
-.mo-app-shell--workspace .mo-app-shell__context,
+.mo-app-shell--workspace .mo-app-shell__context {
+  flex-shrink: 1;
+  min-height: 0;
+  max-height: min(14rem, 38vh);
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
 .mo-app-shell--workspace .mo-app-shell__status,
 .mo-app-shell--workspace .mo-app-shell__change-drawer {
   flex-shrink: 0;
@@ -228,6 +235,7 @@
   .mo-app-shell__inner-split.mo-split-pane:has(.root-registry-slice-workspace)
   > .mo-split-pane__primary {
   width: 100% !important;
-  max-width: 100%;
-  flex: 1 1 auto;
+  max-width: none !important;
+  flex: 1 1 auto !important;
+  min-width: 0;
 }
