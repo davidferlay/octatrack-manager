@@ -49,6 +49,7 @@ Screenshots: `docs/testing/screenshots/mo-ui-layout-containment-fix-3/`.
 | Check | Result |
 | --- | --- |
 | Start SHA | `4bc0df2a2c023a6743ce1e54db83a32f40cbfce2` |
+| Final SHA | `b6037aa` (fix `3aef1d2`) |
 | `pnpm run typecheck` | PASS |
 | `pnpm run build` | PASS |
 | Layout E2E (Chromium + WebKit, 16) + `slice-workspace-expand` (2 Chromium) | PASS (18) |
