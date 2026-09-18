@@ -245,6 +245,9 @@ export const enMessages = {
   'workspace.showInspectorStatusAria':
     'Show inspector from status bar while the sample list is full screen',
   'workspace.showList': 'Show sample list',
+  'workspace.showListStatusAria':
+    'Showing inspector — open sample list from the status bar',
+  'workspace.sourcesDrawerCloseAria': 'Close catalog navigation',
   'workspace.toggleNav': 'Toggle catalog navigation',
   'workspace.splitResizeAria': 'Resize panes',
   'workspace.trailSeparator': '›',

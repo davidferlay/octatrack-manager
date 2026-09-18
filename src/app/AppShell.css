@@ -85,12 +85,18 @@
 
 .mo-app-shell--narrow .mo-app-shell__inner-split--list-only .mo-split-pane__primary {
   width: 100% !important;
-  flex: 1 1 auto;
+  max-width: none !important;
+  flex: 1 1 auto !important;
 }
 
 .mo-app-shell--narrow .mo-app-shell__inner-split--inspector-only .mo-split-pane__secondary {
   width: 100% !important;
-  flex: 1 1 auto;
+  max-width: none !important;
+  flex: 1 1 auto !important;
+}
+
+.mo-app-shell--narrow .mo-app-shell__context {
+  min-width: 0;
 }
 
 .mo-app-shell__narrow-controls {

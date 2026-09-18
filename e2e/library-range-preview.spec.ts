@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { clickCatalogFileRow } from "./catalogFileRow";
 import { uiText } from "./i18n";
-import { showInspectorFromContextBar } from "./narrowWorkspace";
+import { enableE2eNarrowWorkspace, expectNarrowShellClass, showInspectorFromContextBar } from "./narrowWorkspace";
 import { LOCALE_STORAGE_KEY } from "../src/i18n/registry";
 
 function installLibraryMocks(page: import("@playwright/test").Page) {
@@ -93,9 +93,12 @@ async function exerciseRangePreview(
   await installLocale(page, locale);
   await installLibraryMocks(page);
   await page.goto("/");
+  await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: uiText(locale, "sources.chooseRoot") }).click();
   await clickCatalogFileRow(page, locale, "LOOP.wav");
   if (options?.narrow) {
+    await enableE2eNarrowWorkspace(page);
+    await expectNarrowShellClass(page);
     await showInspectorFromContextBar(page, locale);
   }
   await expect(page.getByRole("img", { name: uiText(locale, "waveform.plotAria") })).toBeVisible();
@@ -123,7 +126,7 @@ for (const locale of ["ja", "en"] as const) {
   });
 
   test(`[${locale}] keeps selection and calls range preview IPC at 840px`, async ({ page }) => {
-    await page.setViewportSize({ width: 840, height: 900 });
+    await page.setViewportSize({ width: 1280, height: 900 });
     await exerciseRangePreview(page, locale, { narrow: true });
   });
 }

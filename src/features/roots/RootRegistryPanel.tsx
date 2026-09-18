@@ -20,8 +20,8 @@ import {
   type RootSession,
 } from "../../api";
 import { AppShell, type AppShellCenterView } from "../../app/index";
-import { Button } from "../../design-system";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { Button, Drawer } from "../../design-system";
 import { createTranslate, readStoredLocaleId, useTranslate } from "../../i18n";
 import {
   OperationsDrawerHost,
@@ -133,6 +133,7 @@ export function RootRegistryPanel({
   const [operationsKind, setOperationsKind] = useState<OperationsDrawerKind>("clone");
   const [pinnedAsset, setPinnedAsset] = useState<CatalogAssetSelection | null>(null);
   const operationsReturnFocusRef = useRef<HTMLElement | null>(null);
+  const navToggleRef = useRef<HTMLButtonElement>(null);
   const userDismissedOperationsRef = useRef(false);
   const [cloneVerification, setCloneVerification] = useState<CloneVerification | null>(null);
   const [sourceEvidenceId, setSourceEvidenceId] = useState<string | null>(null);
@@ -147,7 +148,19 @@ export function RootRegistryPanel({
   const [sliceAnalysisBusy, setSliceAnalysisBusy] = useState(false);
   const [compactSliceHost, setCompactSliceHost] = useState<HTMLDivElement | null>(null);
   const [expandedSliceHost, setExpandedSliceHost] = useState<HTMLDivElement | null>(null);
-  const narrow = useMediaQuery("(max-width: 840px)");
+  const [e2eLayoutEpoch, setE2eLayoutEpoch] = useState(0);
+  const layoutMatchesNarrow = useMediaQuery("(max-width: 840px)");
+
+  useEffect(() => {
+    const syncE2eLayout = () => setE2eLayoutEpoch((value) => value + 1);
+    window.addEventListener("mo-e2e-narrow-change", syncE2eLayout);
+    return () => window.removeEventListener("mo-e2e-narrow-change", syncE2eLayout);
+  }, []);
+  void e2eLayoutEpoch;
+  const e2eForceNarrowWorkspace =
+    typeof window !== "undefined"
+    && (window as Window & { __E2E_FORCE_NARROW_WORKSPACE__?: boolean }).__E2E_FORCE_NARROW_WORKSPACE__ === true;
+  const narrowActive = layoutMatchesNarrow || e2eForceNarrowWorkspace;
 
   const registerSliceAnalysisCancel = useCallback((cancel: (() => void) | null) => {
     sliceCancelRef.current = cancel;
@@ -155,17 +168,17 @@ export function RootRegistryPanel({
 
   const openSliceWorkspace = useCallback(() => {
     setSliceWorkspaceExpanded(true);
-    if (narrow) {
+    if (narrowActive) {
       setCenterView("list");
     }
-  }, [narrow]);
+  }, [narrowActive]);
 
   const closeSliceWorkspace = useCallback(() => {
     setSliceWorkspaceExpanded(false);
-    if (narrow) {
+    if (narrowActive) {
       setCenterView("inspector");
     }
-  }, [narrow]);
+  }, [narrowActive]);
 
   useEffect(() => {
     setLocationSearch("");
@@ -179,12 +192,6 @@ export function RootRegistryPanel({
       setSliceWorkspaceExpanded(false);
     }
   }, [selectedAsset]);
-
-  useEffect(() => {
-    if (!narrow) {
-      setNavigationOpen(true);
-    }
-  }, [narrow]);
 
   async function refreshCloneVerification(rootId: string) {
     try {
@@ -520,6 +527,17 @@ export function RootRegistryPanel({
   }
 
   const catalogReady = session !== null && library !== null;
+  const narrowWorkspace = catalogReady && narrowActive;
+
+  useEffect(() => {
+    if (!narrowActive) {
+      setNavigationOpen(true);
+      return;
+    }
+    if (catalogReady) {
+      setNavigationOpen(false);
+    }
+  }, [narrowActive, catalogReady]);
   const selectedLibraryFile = useMemo(() => {
     if (library === null || selectedAsset === null) return undefined;
     return library.audioFiles.find(
@@ -641,7 +659,12 @@ export function RootRegistryPanel({
 
   const narrowControls = (
     <div className="mo-app-shell__narrow-controls">
-      <Button variant="secondary" onClick={() => setNavigationOpen((open) => !open)}>
+      <Button
+        ref={navToggleRef}
+        variant="secondary"
+        aria-pressed={navigationOpen}
+        onClick={() => setNavigationOpen((open) => !open)}
+      >
         {t("workspace.toggleNav")}
       </Button>
       {catalogReady && (
@@ -675,7 +698,9 @@ export function RootRegistryPanel({
       renameRecovery={renameRecovery}
       onOpenOperations={openOperationsFromStatus}
       onShowInspector={showInspectorPane}
-      inspectorHidden={narrow && centerView === "list"}
+      inspectorHidden={narrowWorkspace && centerView === "list"}
+      onShowList={() => setCenterView("list")}
+      listHidden={narrowWorkspace && centerView === "inspector"}
     />
   );
 
@@ -707,7 +732,7 @@ export function RootRegistryPanel({
         </>
       )}
       narrowControls={narrowControls}
-      narrowLayout={narrow}
+      narrowLayout={narrowWorkspace}
       navigationOpen={navigationOpen}
       onNavigationOpenChange={setNavigationOpen}
       centerView={centerView}
@@ -840,6 +865,20 @@ export function RootRegistryPanel({
           onBrowseContextChange={setBrowseContext}
         >
           {workspaceShell}
+          {narrowWorkspace && (
+            <Drawer
+              open={navigationOpen}
+              onClose={() => setNavigationOpen(false)}
+              title={t("sources.title")}
+              closeAriaLabel={t("workspace.sourcesDrawerCloseAria")}
+              returnFocusRef={navToggleRef}
+              overlayClassName="mo-drawer-overlay--sources-nav"
+              panelClassName="mo-drawer-panel--sources-nav"
+              bodyClassName="mo-drawer-panel__body--sources-nav"
+            >
+              <CatalogWorkspaceNav footer={sourcesFooter} />
+            </Drawer>
+          )}
           {selectedAsset !== null && selectedLibraryFile !== undefined && (
             <SliceWorkbench
               key={`${session.rootId}:${selectedAsset.fileInstanceId}`}
@@ -850,7 +889,7 @@ export function RootRegistryPanel({
               librarySourceSampleRate={librarySourceSampleRate}
               layout={sliceWorkspaceExpanded ? "expanded" : "compact"}
               hostElement={sliceWorkspaceExpanded ? expandedSliceHost : compactSliceHost}
-              narrowExpanded={narrow && sliceWorkspaceExpanded}
+              narrowExpanded={narrowWorkspace && sliceWorkspaceExpanded}
               onRequestStopLibraryPlayback={requestStopLibraryPlayback}
               onAnalysisBusyChange={setSliceAnalysisBusy}
               registerAnalysisCancel={registerSliceAnalysisCancel}

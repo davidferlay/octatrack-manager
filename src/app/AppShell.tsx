@@ -72,6 +72,7 @@ export function AppShell({
 }: AppShellProps) {
   const t = useTranslate()
   const navOpen = navigationOpen ?? defaultNavigationOpen
+  const sourcesColumnVisible = !narrowLayout && navOpen
   const activeCenterView = centerView ?? defaultCenterView
   const showInspector = inspector != null
   const mainHidden = narrowLayout && showInspector && activeCenterView === 'inspector'
@@ -95,7 +96,12 @@ export function AppShell({
     .join(' ')
 
   return (
-    <section className={merged} aria-label={t('app.workspaceAria')} {...rest}>
+    <section
+      {...rest}
+      className={merged}
+      aria-label={t('app.workspaceAria')}
+      data-narrow-layout={narrowLayout ? 'true' : 'false'}
+    >
       {contextBar != null && (
         <div className="mo-app-shell__context" data-testid="app-shell-context">
           {contextBar}
@@ -109,7 +115,7 @@ export function AppShell({
         onPrimarySizeChange={onSourcesSizeChange}
         minPrimary={12}
         maxPrimary={showInspector ? 42 : 50}
-        primaryVisible={navOpen}
+        primaryVisible={sourcesColumnVisible}
       >
         <SplitPane.Primary
           className="mo-app-shell__sources"

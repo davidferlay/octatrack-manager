@@ -251,6 +251,9 @@ export const jaMessages: Record<MessageKey, string> = {
   'workspace.showInspectorStatusAria':
     '一覧表示中 — ステータスバーからインスペクターを開く',
   'workspace.showList': 'サンプル一覧を表示',
+  'workspace.showListStatusAria':
+    'インスペクター表示中 — ステータスバーからサンプル一覧を開く',
+  'workspace.sourcesDrawerCloseAria': 'カタログナビを閉じる',
   'workspace.toggleNav': 'カタログナビの表示切替',
   'workspace.splitResizeAria': 'ペイン幅の調整',
   'workspace.trailSeparator': '›',

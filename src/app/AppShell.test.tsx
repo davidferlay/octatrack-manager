@@ -65,6 +65,21 @@ describe('AppShell', () => {
     expect(screen.getByText('Review additive copy')).toBeInTheDocument()
   })
 
+  it('hides the sources column in narrow layout even when navigation is open', () => {
+    render(
+      <AppShell
+        narrowLayout
+        navigationOpen
+        sources={<div>Sources content</div>}
+        main={<div>Main content</div>}
+        inspector={<div>Inspector content</div>}
+      />,
+    )
+    expect(screen.queryByTestId('app-shell-sources')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('app-shell-divider')).not.toBeInTheDocument()
+    expect(screen.getByText('Main content')).toBeVisible()
+  })
+
   it('hides inspector pane in narrow list view without unmounting', () => {
     render(
       <AppShell
