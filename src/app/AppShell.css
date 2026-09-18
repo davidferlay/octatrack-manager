@@ -71,7 +71,7 @@
 }
 
 .mo-app-shell--narrow .mo-app-shell__body {
-  min-width: min(100%, 20rem);
+  min-width: 0;
 }
 
 .mo-app-shell__pane--stack-hidden {
@@ -100,14 +100,20 @@
 }
 
 .mo-app-shell__narrow-controls {
-  display: none;
+  display: flex;
   flex-wrap: wrap;
   gap: var(--mo-space-2);
   margin-top: var(--mo-space-2);
 }
 
-.mo-app-shell--narrow .mo-app-shell__narrow-controls {
+.mo-app-shell:not(.mo-app-shell--narrow) .mo-app-shell__center-toggles {
+  display: none;
+}
+
+.mo-app-shell__center-toggles {
   display: flex;
+  flex-wrap: wrap;
+  gap: var(--mo-space-2);
 }
 
 /* Catalog workspace: lock shell height; scroll inside panes (not the split chrome).

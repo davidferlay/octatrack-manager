@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { catalogFileRowLocator, clickCatalogFileRow } from "./catalogFileRow";
 import { uiText } from "./i18n";
-import { expectNarrowShellClass, showInspectorFromContextBar } from "./narrowWorkspace";
+import { expectNarrowShellClass, expectNoDocumentHorizontalOverflow, showInspectorFromContextBar } from "./narrowWorkspace";
 import { LOCALE_STORAGE_KEY } from "../src/i18n/registry";
 
 async function installJaLocale(page: import("@playwright/test").Page) {
@@ -115,6 +115,7 @@ test.describe("Workspace layout (synthetic IPC)", () => {
     await clickCatalogFileRow(page, "ja", "KICK.wav");
     await expect(listHeading).toBeVisible();
     await expect(inspector).toBeVisible();
+    await expectNoDocumentHorizontalOverflow(page);
   });
 });
 
@@ -136,6 +137,7 @@ test.describe("Workspace layout narrow (840px viewport)", () => {
     await expect(contextBar.getByRole("button", { name: uiText("ja", "workspace.showInspector") })).toBeVisible({
       timeout: 15000,
     });
+    await expectNoDocumentHorizontalOverflow(page);
   });
 
   test("stacks list and inspector at 840px", async ({ page }) => {
@@ -153,5 +155,6 @@ test.describe("Workspace layout narrow (840px viewport)", () => {
     await showInspectorFromContextBar(page, "ja");
     await expect(inspector).toBeVisible();
     await expect(listHeading).not.toBeVisible();
+    await expectNoDocumentHorizontalOverflow(page);
   });
 });

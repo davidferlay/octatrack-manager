@@ -39,6 +39,7 @@ import {
   type CatalogBrowseContext,
 } from "../library/CatalogLibraryBrowser";
 import { CatalogWorkspaceMain, CatalogWorkspaceNav } from "../library/CatalogWorkspaceViews";
+import { applyWideSourcesNavTransition, resetWideSourcesNav } from "./wideSourcesNav";
 import { WorkspaceStatusBar } from "../workspace/WorkspaceStatusBar";
 import { WorkspaceTopBar } from "../workspace/WorkspaceTopBar";
 import { useLibraryGeometrySelection } from "../waveform/libraryGeometrySelection";
@@ -140,7 +141,8 @@ export function RootRegistryPanel({
   const [browseContext, setBrowseContext] = useState<CatalogBrowseContext | null>(null);
   const [locationSearch, setLocationSearch] = useState("");
   const [navigationOpen, setNavigationOpen] = useState(true);
-  const navigationOpenWideRef = useRef(true);
+  const recordedWideOpenRef = useRef<boolean | null>(null);
+  const wasNarrowRef = useRef(false);
   const [sourcesSplitPercent, setSourcesSplitPercent] = useState<number | undefined>(undefined);
   const [mainSplitPercent, setMainSplitPercent] = useState<number | undefined>(undefined);
   const [centerView, setCenterView] = useState<AppShellCenterView>("list");
@@ -173,9 +175,12 @@ export function RootRegistryPanel({
   }, [narrowActive]);
 
   useEffect(() => {
+    const reset = resetWideSourcesNav();
     setLocationSearch("");
     setCenterView("list");
-    setNavigationOpen(true);
+    setNavigationOpen(reset.nextOpen);
+    recordedWideOpenRef.current = reset.recordedWideOpen;
+    wasNarrowRef.current = reset.wasNarrow;
     setSliceWorkspaceExpanded(false);
   }, [session?.rootId]);
 
@@ -521,25 +526,20 @@ export function RootRegistryPanel({
   const catalogReady = session !== null && library !== null;
   const narrowWorkspace = catalogReady && narrowActive;
 
-  const wasNarrowRef = useRef(false);
-
   useEffect(() => {
-    if (!narrowActive && catalogReady) {
-      navigationOpenWideRef.current = navigationOpen;
+    const next = applyWideSourcesNavTransition({
+      catalogReady,
+      narrowActive,
+      wasNarrow: wasNarrowRef.current,
+      navigationOpen,
+      recordedWideOpen: recordedWideOpenRef.current,
+    });
+    recordedWideOpenRef.current = next.recordedWideOpen;
+    wasNarrowRef.current = next.wasNarrow;
+    if (next.nextOpen !== navigationOpen) {
+      setNavigationOpen(next.nextOpen);
     }
-  }, [narrowActive, catalogReady, navigationOpen]);
-
-  useEffect(() => {
-    if (!catalogReady) {
-      return;
-    }
-    if (narrowActive && !wasNarrowRef.current) {
-      setNavigationOpen(false);
-    } else if (!narrowActive && wasNarrowRef.current) {
-      setNavigationOpen(navigationOpenWideRef.current || true);
-    }
-    wasNarrowRef.current = narrowActive;
-  }, [narrowActive, catalogReady, navigationOpen]);
+  }, [catalogReady, narrowActive, navigationOpen]);
   const selectedLibraryFile = useMemo(() => {
     if (library === null || selectedAsset === null) return undefined;
     return library.audioFiles.find(
@@ -670,7 +670,7 @@ export function RootRegistryPanel({
         {t("workspace.toggleNav")}
       </Button>
       {catalogReady && (
-        <>
+        <div className="mo-app-shell__center-toggles">
           <Button
             variant="secondary"
             aria-pressed={centerView === "list"}
@@ -685,7 +685,7 @@ export function RootRegistryPanel({
           >
             {t("workspace.showInspector")}
           </Button>
-        </>
+        </div>
       )}
     </div>
   );

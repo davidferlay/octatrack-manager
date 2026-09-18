@@ -51,16 +51,43 @@ export async function expectEditEnabledInContextBar(
 }
 
 export async function expectNoDocumentHorizontalOverflow(page: Page, tolerancePx = 1) {
-  const metrics = await page.evaluate(() => {
+  const metrics = await page.evaluate((tolerance) => {
     const root = document.scrollingElement ?? document.documentElement;
+    const limit = window.innerWidth + tolerance;
+    const offenders: Array<{
+      tag: string;
+      className: string;
+      right: number;
+      width: number;
+      minWidth: string;
+      whiteSpace: string;
+    }> = [];
+    for (const node of document.querySelectorAll("body *")) {
+      if (!(node instanceof HTMLElement)) continue;
+      const rect = node.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      if (rect.right <= limit) continue;
+      const style = getComputedStyle(node);
+      offenders.push({
+        tag: node.tagName.toLowerCase(),
+        className: typeof node.className === "string" ? node.className.slice(0, 120) : "",
+        right: Math.round(rect.right),
+        width: Math.round(rect.width),
+        minWidth: style.minWidth,
+        whiteSpace: style.whiteSpace,
+      });
+      if (offenders.length >= 12) break;
+    }
     return {
       scrollWidth: root.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
       innerWidth: window.innerWidth,
+      offenders,
     };
-  });
+  }, tolerancePx);
   expect(
     metrics.scrollWidth,
-    `document scrollWidth ${metrics.scrollWidth} vs innerWidth ${metrics.innerWidth}`,
+    `document overflow: ${JSON.stringify(metrics)}`,
   ).toBeLessThanOrEqual(metrics.innerWidth + tolerancePx);
 }
 
@@ -142,13 +169,18 @@ export async function expectSourcesColumnHidden(page: Page) {
   await expect(page.getByTestId("app-shell-divider")).toHaveCount(0);
 }
 
-export async function openSourcesDrawer(page: Page, locale: "ja" | "en" = "ja") {
+export async function toggleSourcesNav(page: Page, locale: "ja" | "en") {
   const toggle = page.getByTestId("app-shell-context").getByRole("button", {
     name: uiText(locale, "workspace.toggleNav"),
     exact: true,
   });
+  await expect(toggle).toBeVisible({ timeout: 15000 });
   await toggle.scrollIntoViewIfNeeded();
   await toggle.click();
+}
+
+export async function openSourcesDrawer(page: Page, locale: "ja" | "en" = "ja") {
+  await toggleSourcesNav(page, locale);
   const dialog = page.getByRole("dialog", { name: uiText(locale, "sources.title") });
   await expect(dialog).toBeVisible();
   return dialog;

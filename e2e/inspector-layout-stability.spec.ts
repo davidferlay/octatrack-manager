@@ -11,6 +11,7 @@ import {
   expectNarrowBreakpointMatches,
   expectNarrowShellClass,
   expectNoDocumentHorizontalOverflow,
+  toggleSourcesNav,
   expectNoWorkspaceHorizontalOverflow,
   expectSourcesColumnHidden,
   expectVisiblePaneUsesBodyWidth,
@@ -582,6 +583,7 @@ test.describe("inspector layout stability", () => {
     await expectNarrowShellClass(page);
     await expectSourcesColumnHidden(page);
     await expectVisiblePaneUsesBodyWidth(page, "list");
+    await expectNoDocumentHorizontalOverflow(page);
     await expectNoWorkspaceHorizontalOverflow(page);
 
     const dialog = await openSourcesDrawer(page, "ja");
@@ -592,6 +594,7 @@ test.describe("inspector layout stability", () => {
 
     await showInspectorFromContextBar(page, "ja");
     await expectVisiblePaneUsesBodyWidth(page, "inspector");
+    await expectNoDocumentHorizontalOverflow(page);
     await expectNoWorkspaceHorizontalOverflow(page);
     await showListFromStatusBar(page, "ja");
     await expectVisiblePaneUsesBodyWidth(page, "list");
@@ -614,6 +617,7 @@ test.describe("inspector layout stability", () => {
         await expect(page.getByTestId("app-shell-sources")).toBeVisible();
       }
       await attachLayoutMetrics(page, testInfo, `breakpoint-${width}`);
+      await expectNoDocumentHorizontalOverflow(page);
       assertNoLayoutDiagnostics(diagnostics);
     });
   }
@@ -637,7 +641,30 @@ test.describe("inspector layout stability", () => {
     expect(Math.abs(restored.width - wideSourcesWidth), "sources width after narrow roundtrip").toBeLessThanOrEqual(
       4,
     );
+    await expectNoDocumentHorizontalOverflow(page);
     await attachLayoutMetrics(page, testInfo, "after-narrow-roundtrip");
+    assertNoLayoutDiagnostics(diagnostics);
+  });
+
+  test("1280 to 800 to 1280: closed sources stay closed after narrow drawer use", async ({ page }, testInfo) => {
+    const diagnostics = attachLayoutDiagnostics(page);
+    await openInspectorSample(page, "LOOP.wav", "ja", { width: 1280, height: 800 });
+    await toggleSourcesNav(page, "ja");
+    await expectSourcesColumnHidden(page);
+
+    await page.setViewportSize({ width: 800, height: 800 });
+    await syncViewportLayout(page);
+    await expectNarrowShellClass(page);
+    const dialog = await openSourcesDrawer(page, "ja");
+    await page.getByRole("button", { name: uiText("ja", "workspace.sourcesDrawerCloseAria") }).click();
+    await expect(dialog).toBeHidden();
+
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await syncViewportLayout(page);
+    await expectWideShellClass(page);
+    await expectSourcesColumnHidden(page);
+    await expectNoDocumentHorizontalOverflow(page);
+    await attachLayoutMetrics(page, testInfo, "after-closed-sources-roundtrip");
     assertNoLayoutDiagnostics(diagnostics);
   });
 
