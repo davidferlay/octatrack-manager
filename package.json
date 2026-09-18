@@ -23,6 +23,7 @@
     "test:gate-c-candidate": "node --test scripts/gate-c-candidate-contract.test.mjs",
     "test:ui-native-fixture": "node --test scripts/generate-ui-workspace-native-fixture.test.mjs",
     "test:legacy-containment": "node --test scripts/legacy-command-containment.test.mjs",
+    "test:workspace-css": "node --test scripts/app-shell-workspace-css.test.mjs",
     "test:e2e": "playwright test",
     "test:rust": "cd src-tauri && cargo fmt --all -- --check && cargo clippy --locked --workspace --all-targets -- -D warnings && cargo test --locked --workspace",
     "test:initial-contracts": "node scripts/run-initial-contracts.mjs",

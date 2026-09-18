@@ -899,6 +899,9 @@ export function WaveformPreview({
             className="waveform-preview-plot-svg"
             role="img"
             viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
+            preserveAspectRatio="xMidYMid meet"
+            width="100%"
+            height={VIEWBOX_HEIGHT}
             onPointerCancel={cancelPlotPointer}
             onPointerDown={onPlotPointerDown}
             onPointerMove={onPlotPointerMove}

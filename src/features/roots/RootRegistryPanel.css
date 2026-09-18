@@ -15,8 +15,23 @@
 .root-registry-inspector-host {
   display: flex;
   flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
   min-height: 0;
   outline: none;
+}
+
+.mo-app-shell--workspace .root-registry-inspector-host {
+  height: auto;
+}
+
+.mo-app-shell--workspace .root-registry-main-host,
+.mo-app-shell--workspace .root-registry-slice-workspace {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .root-registry-pane--workspace-hidden {
@@ -59,8 +74,12 @@
 
 .root-registry-slice-workspace__body {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
+  scrollbar-gutter: stable;
+  container-type: inline-size;
+  container-name: slice-expanded;
 }
 
 .root-registry-sources-footer {

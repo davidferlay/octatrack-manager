@@ -694,6 +694,8 @@ export function RootRegistryPanel({
 
   const workspaceShell = (
     <AppShell
+      className={catalogReady ? "mo-app-shell--workspace" : undefined}
+      sliceWorkspaceExpanded={sliceWorkspaceExpanded}
       contextBar={(
         <>
           {topBar}
@@ -721,7 +723,10 @@ export function RootRegistryPanel({
         catalogReady ? (
           <>
             <div
-              className={sliceWorkspaceExpanded ? "root-registry-pane--workspace-hidden" : undefined}
+              className={[
+                "root-registry-main-host",
+                sliceWorkspaceExpanded ? "root-registry-pane--workspace-hidden" : "",
+              ].filter(Boolean).join(" ")}
               hidden={sliceWorkspaceExpanded}
               aria-hidden={sliceWorkspaceExpanded}
               inert={sliceWorkspaceExpanded ? true : undefined}
@@ -774,11 +779,7 @@ export function RootRegistryPanel({
           <div
             ref={inspectorPaneRef}
             tabIndex={-1}
-            className={[
-              "root-registry-inspector-host",
-              sliceWorkspaceExpanded ? "root-registry-pane--workspace-hidden" : "",
-            ].filter(Boolean).join(" ")}
-            hidden={sliceWorkspaceExpanded}
+            className="root-registry-inspector-host"
             aria-hidden={sliceWorkspaceExpanded}
             inert={sliceWorkspaceExpanded ? true : undefined}
             data-testid="inspector-workspace-host"
@@ -788,7 +789,10 @@ export function RootRegistryPanel({
               relativePath={selectedAsset?.relativePath}
             >
               {selectedAsset !== null && session !== null && selectedLibraryFile !== undefined && (
-                <div key={`${session.rootId}:${selectedAsset.fileInstanceId}`}>
+                <div
+                  key={`${session.rootId}:${selectedAsset.fileInstanceId}`}
+                  className="mo-inspector-pane__tabbed-host"
+                >
                   <InspectorTabbedAssetPanel
                     rootId={session.rootId}
                     file={selectedLibraryFile}

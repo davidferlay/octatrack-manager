@@ -6,7 +6,7 @@
   min-height: 0;
   height: 100%;
   padding: 0.85rem 0.9rem;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .mo-inspector-pane__header {
@@ -54,4 +54,29 @@
   display: grid;
   gap: 1rem;
   min-width: 0;
+}
+
+.mo-inspector-pane__body--tabbed {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mo-inspector-pane__tabbed-host {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.mo-inspector-pane__tabbed-host > .mo-inspector-tabbed {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
 }

@@ -121,7 +121,9 @@ test.describe("slice workspace expand", () => {
     await page.getByRole("tab", { name: uiText("ja", "inspector.tabSlice") }).click();
     await expect(page.getByRole("button", { name: uiText("ja", "slicing.detectAttacks") })).toBeVisible();
 
-    await page.getByRole("button", { name: uiText("ja", "inspector.expandSliceWorkspaceAria") }).click();
+    const expandWide = page.getByRole("button", { name: uiText("ja", "inspector.expandSliceWorkspaceAria") });
+    await expandWide.scrollIntoViewIfNeeded();
+    await expandWide.click();
     const shell = page.getByTestId("slice-workspace-expanded-shell");
     await expect(shell).toBeVisible();
     await expect(page.getByTestId("catalog-workspace-main-host")).toBeHidden();
@@ -145,7 +147,9 @@ test.describe("slice workspace expand", () => {
     await clickCatalogFileRow(page, "ja", "LOOP.wav");
     await showInspectorFromContextBar(page, "ja");
     await page.getByRole("tab", { name: uiText("ja", "inspector.tabSlice") }).click();
-    await page.getByRole("button", { name: uiText("ja", "inspector.expandSliceWorkspaceAria") }).click();
+    const expandWide = page.getByRole("button", { name: uiText("ja", "inspector.expandSliceWorkspaceAria") });
+    await expandWide.scrollIntoViewIfNeeded();
+    await expandWide.click();
     await expect(page.getByTestId("slice-workspace-expanded-shell")).toBeVisible();
 
     const exit = page.getByRole("button", { name: uiText("ja", "inspector.exitSliceWorkspaceAria") });

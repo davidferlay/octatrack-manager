@@ -230,14 +230,31 @@
   background: color-mix(in srgb, var(--mo-accent) 8%, var(--mo-surface-2));
 }
 
+.catalog-workspace-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+}
+
 .catalog-workspace-main__trail {
   margin: var(--mo-space-1) 0 0;
   color: var(--mo-text-muted);
   font-size: var(--mo-font-size-sm);
 }
 
+.catalog-workspace-main .catalog-library-title-row {
+  flex-shrink: 0;
+}
+
 .catalog-workspace-main__region {
+  flex: 1 1 0;
   min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
 }
 
 .catalog-library-empty {

@@ -114,4 +114,28 @@ describe('AppShell', () => {
 
     expect(sources).toHaveStyle({ width: '25%' })
   })
+
+  it('adds an explicit inner-split class while slice workspace is expanded', () => {
+    const { rerender } = render(
+      <AppShell
+        className="mo-app-shell--workspace"
+        sliceWorkspaceExpanded
+        sources={<div>Sources content</div>}
+        main={<div>Main content</div>}
+        inspector={<div>Inspector content</div>}
+      />,
+    )
+    expect(document.querySelector('.mo-app-shell__inner-split--slice-expanded')).not.toBeNull()
+
+    rerender(
+      <AppShell
+        className="mo-app-shell--workspace"
+        sliceWorkspaceExpanded={false}
+        sources={<div>Sources content</div>}
+        main={<div>Main content</div>}
+        inspector={<div>Inspector content</div>}
+      />,
+    )
+    expect(document.querySelector('.mo-app-shell__inner-split--slice-expanded')).toBeNull()
+  })
 })

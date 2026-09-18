@@ -208,6 +208,9 @@ jobs:
       - name: Run initial-contracts runner tests
         run: node --test scripts/run-initial-contracts.test.mjs
 
+      - name: Check workspace CSS fallback
+        run: pnpm run test:workspace-css
+
       - name: Build frontend
         run: pnpm run build
 
@@ -233,23 +236,28 @@ jobs:
         id: pw
         run: echo "version=$(pnpm exec playwright --version | awk '{print $2}')" >> "$GITHUB_OUTPUT"
 
-      # Downloading Chromium is ~1 minute of the job; keyed on the exact
-      # Playwright version so an upgrade fetches a matching browser.
+      # Browser downloads are ~1 minute; key includes the browser set so an
+      # older chromium-only cache is not restored after adding webkit.
       - name: Cache Playwright browsers
         id: pw-cache
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}-chromium-webkit
 
       - name: Install Playwright browsers
         if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install chromium --with-deps
+        run: pnpm exec playwright install chromium webkit --with-deps
 
-      # The cached browser still needs its system libraries on a fresh runner.
+      # Cached tree may still need a matching browser binary; install is a no-op
+      # when present. System libs are required on every fresh runner.
+      - name: Install Playwright browsers (cache hit)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install chromium webkit
+
       - name: Install Playwright system dependencies
         if: steps.pw-cache.outputs.cache-hit == 'true'
-        run: pnpm exec playwright install-deps chromium
+        run: pnpm exec playwright install-deps chromium webkit
 
       - name: Run E2E tests
         run: pnpm run test:e2e
