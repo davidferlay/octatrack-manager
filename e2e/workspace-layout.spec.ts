@@ -118,7 +118,7 @@ test.describe("Workspace layout (synthetic IPC)", () => {
   });
 });
 
-test.describe.fixme("Workspace layout narrow (840px viewport)", () => {
+test.describe("Workspace layout narrow (840px viewport)", () => {
   test.use({ viewport: { width: 840, height: 900 } });
 
   test("exposes narrow layout toggles at 840px", async ({ page }) => {

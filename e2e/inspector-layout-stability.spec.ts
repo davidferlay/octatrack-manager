@@ -3,11 +3,18 @@ import { catalogFileRowLocator, clickCatalogFileRow } from "./catalogFileRow";
 import { uiText } from "./i18n";
 import { LOCALE_STORAGE_KEY } from "../src/i18n/registry";
 import {
-  expectNarrowMediaMatches,
+  assertNoLayoutDiagnostics,
+  attachLayoutDiagnostics,
+  attachLayoutMetrics,
+} from "./layoutDiagnostics";
+import {
+  expectNarrowBreakpointMatches,
   expectNarrowShellClass,
   expectNoDocumentHorizontalOverflow,
+  expectNoWorkspaceHorizontalOverflow,
   expectSourcesColumnHidden,
   expectVisiblePaneUsesBodyWidth,
+  expectWideShellClass,
   openSourcesDrawer,
   showInspectorFromContextBar,
   showListFromContextBar,
@@ -323,7 +330,7 @@ async function openInspectorSample(
   await seedLayoutFixture(page, displayName);
   await page.setViewportSize({
     width: viewport.width,
-    height: Math.max(viewport.height, 720),
+    height: viewport.height,
   });
   await page.goto("/");
   await page.waitForLoadState("networkidle");
@@ -522,7 +529,8 @@ test.describe("inspector layout stability", () => {
     await attachLayoutScreenshot(page, "after-900-expanded-slice-stack.png");
   });
 
-  test.fixme("840px: narrow stack, expand roundtrip keeps preview range", async ({ page }) => {
+  test("840px: narrow stack, expand roundtrip keeps preview range", async ({ page }, testInfo) => {
+    const diagnostics = attachLayoutDiagnostics(page);
     await openInspectorSample(page, "LOOP.wav", "ja", { width: 840, height: 900 });
     await expectNarrowShellClass(page);
     await expect(page.locator(".mo-app-shell--workspace")).toBeVisible();
@@ -544,6 +552,8 @@ test.describe("inspector layout stability", () => {
     await expect(page.getByLabel(uiText("ja", "waveform.startFrame"))).toHaveValue("1000");
 
     await attachLayoutScreenshot(page, "after-840-narrow.png");
+    await attachLayoutMetrics(page, testInfo, "after-840-narrow");
+    assertNoLayoutDiagnostics(diagnostics);
   });
 
   test("1280px en: long filename wraps and preview plot height stays bounded", async ({ page }) => {
@@ -566,12 +576,13 @@ test.describe("inspector layout stability", () => {
     expect(after.width, "sources width after drag").toBeGreaterThan(before.width + 24);
   });
 
-  test.fixme("800x600: narrow workspace hides sources column and uses full list width", async ({ page }) => {
+  test("800x600: narrow workspace hides sources column and uses full list width", async ({ page }, testInfo) => {
+    const diagnostics = attachLayoutDiagnostics(page);
     await openInspectorSample(page, "LOOP.wav", "ja", { width: 800, height: 600 });
     await expectNarrowShellClass(page);
     await expectSourcesColumnHidden(page);
     await expectVisiblePaneUsesBodyWidth(page, "list");
-    await expectNoDocumentHorizontalOverflow(page);
+    await expectNoWorkspaceHorizontalOverflow(page);
 
     const dialog = await openSourcesDrawer(page, "ja");
     const dialogWidth = await dialog.evaluate((el) => el.getBoundingClientRect().width);
@@ -581,39 +592,34 @@ test.describe("inspector layout stability", () => {
 
     await showInspectorFromContextBar(page, "ja");
     await expectVisiblePaneUsesBodyWidth(page, "inspector");
-    await expectNoDocumentHorizontalOverflow(page);
+    await expectNoWorkspaceHorizontalOverflow(page);
     await showListFromStatusBar(page, "ja");
     await expectVisiblePaneUsesBodyWidth(page, "list");
 
     await attachLayoutScreenshot(page, "after-800-narrow-full-width.png");
+    await attachLayoutMetrics(page, testInfo, "after-800-narrow");
+    assertNoLayoutDiagnostics(diagnostics);
   });
 
-  test.fixme("839/840/841px: narrow breakpoint matches matchMedia", async ({ page }) => {
-    for (const width of [841, 840, 839] as const) {
+  for (const width of [841, 840, 839] as const) {
+    test(`${width}px: narrow breakpoint matches matchMedia`, async ({ page }, testInfo) => {
+      const diagnostics = attachLayoutDiagnostics(page);
       await openInspectorSample(page, "LOOP.wav", "ja", { width, height: 700 });
-      await expectNarrowMediaMatches(page, width <= 840);
+      await expectNarrowBreakpointMatches(page, width <= 840);
       if (width <= 840) {
         await expectNarrowShellClass(page);
         await expectSourcesColumnHidden(page);
       } else {
-        await expect(page.locator(".mo-app-shell--narrow")).toHaveCount(0);
+        await expectWideShellClass(page);
+        await expect(page.getByTestId("app-shell-sources")).toBeVisible();
       }
-    }
-
-    const layoutLog = await page.evaluate(() => ({
-      innerWidth: window.innerWidth,
-      innerHeight: window.innerHeight,
-      devicePixelRatio: window.devicePixelRatio,
-      narrow: window.matchMedia("(max-width: 840px)").matches,
-    }));
-    await test.info().attach("narrow-breakpoint-metrics.json", {
-      body: JSON.stringify(layoutLog, null, 2),
-      contentType: "application/json",
+      await attachLayoutMetrics(page, testInfo, `breakpoint-${width}`);
+      assertNoLayoutDiagnostics(diagnostics);
     });
-  });
+  }
 
-  test.fixme("1280 to 800 to 1280: sources split percentage restores after narrow overlay", async ({ page }) => {
-    // Playwright mid-test setViewportSize clears #root in preview runs; verify split restore manually on Tauri.
+  test("1280 to 800 to 1280: sources split percentage restores after narrow overlay", async ({ page }, testInfo) => {
+    const diagnostics = attachLayoutDiagnostics(page);
     await openInspectorSample(page, "LOOP.wav", "ja", { width: 1280, height: 800 });
     await dragSourcesDivider(page, 120);
     const wideSourcesWidth = (await boxOf(page.locator(".mo-app-shell__sources"))).width;
@@ -625,14 +631,14 @@ test.describe("inspector layout stability", () => {
 
     await page.setViewportSize({ width: 1280, height: 800 });
     await syncViewportLayout(page);
-    await expect
-      .poll(async () => page.locator(".mo-app-shell--narrow").count(), { timeout: 20000 })
-      .toBe(0);
+    await expectWideShellClass(page);
     await expect(page.getByTestId("app-shell-sources")).toBeVisible({ timeout: 20000 });
     const restored = await boxOf(page.locator(".mo-app-shell__sources"));
     expect(Math.abs(restored.width - wideSourcesWidth), "sources width after narrow roundtrip").toBeLessThanOrEqual(
       4,
     );
+    await attachLayoutMetrics(page, testInfo, "after-narrow-roundtrip");
+    assertNoLayoutDiagnostics(diagnostics);
   });
 
   test("1280x800 ja: inspector header rename and copy stay clickable", async ({ page }) => {

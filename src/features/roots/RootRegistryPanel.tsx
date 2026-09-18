@@ -140,6 +140,9 @@ export function RootRegistryPanel({
   const [browseContext, setBrowseContext] = useState<CatalogBrowseContext | null>(null);
   const [locationSearch, setLocationSearch] = useState("");
   const [navigationOpen, setNavigationOpen] = useState(true);
+  const navigationOpenWideRef = useRef(true);
+  const [sourcesSplitPercent, setSourcesSplitPercent] = useState<number | undefined>(undefined);
+  const [mainSplitPercent, setMainSplitPercent] = useState<number | undefined>(undefined);
   const [centerView, setCenterView] = useState<AppShellCenterView>("list");
   const catalogEpochRef = useRef(0);
   const inspectorPaneRef = useRef<HTMLDivElement>(null);
@@ -148,19 +151,8 @@ export function RootRegistryPanel({
   const [sliceAnalysisBusy, setSliceAnalysisBusy] = useState(false);
   const [compactSliceHost, setCompactSliceHost] = useState<HTMLDivElement | null>(null);
   const [expandedSliceHost, setExpandedSliceHost] = useState<HTMLDivElement | null>(null);
-  const [e2eLayoutEpoch, setE2eLayoutEpoch] = useState(0);
   const layoutMatchesNarrow = useMediaQuery("(max-width: 840px)");
-
-  useEffect(() => {
-    const syncE2eLayout = () => setE2eLayoutEpoch((value) => value + 1);
-    window.addEventListener("mo-e2e-narrow-change", syncE2eLayout);
-    return () => window.removeEventListener("mo-e2e-narrow-change", syncE2eLayout);
-  }, []);
-  void e2eLayoutEpoch;
-  const e2eForceNarrowWorkspace =
-    typeof window !== "undefined"
-    && (window as Window & { __E2E_FORCE_NARROW_WORKSPACE__?: boolean }).__E2E_FORCE_NARROW_WORKSPACE__ === true;
-  const narrowActive = layoutMatchesNarrow || e2eForceNarrowWorkspace;
+  const narrowActive = layoutMatchesNarrow;
 
   const registerSliceAnalysisCancel = useCallback((cancel: (() => void) | null) => {
     sliceCancelRef.current = cancel;
@@ -529,15 +521,25 @@ export function RootRegistryPanel({
   const catalogReady = session !== null && library !== null;
   const narrowWorkspace = catalogReady && narrowActive;
 
+  const wasNarrowRef = useRef(false);
+
   useEffect(() => {
-    if (!narrowActive) {
-      setNavigationOpen(true);
+    if (!narrowActive && catalogReady) {
+      navigationOpenWideRef.current = navigationOpen;
+    }
+  }, [narrowActive, catalogReady, navigationOpen]);
+
+  useEffect(() => {
+    if (!catalogReady) {
       return;
     }
-    if (catalogReady) {
+    if (narrowActive && !wasNarrowRef.current) {
       setNavigationOpen(false);
+    } else if (!narrowActive && wasNarrowRef.current) {
+      setNavigationOpen(navigationOpenWideRef.current || true);
     }
-  }, [narrowActive, catalogReady]);
+    wasNarrowRef.current = narrowActive;
+  }, [narrowActive, catalogReady, navigationOpen]);
   const selectedLibraryFile = useMemo(() => {
     if (library === null || selectedAsset === null) return undefined;
     return library.audioFiles.find(
@@ -735,6 +737,10 @@ export function RootRegistryPanel({
       narrowLayout={narrowWorkspace}
       navigationOpen={navigationOpen}
       onNavigationOpenChange={setNavigationOpen}
+      sourcesSize={sourcesSplitPercent}
+      onSourcesSizeChange={setSourcesSplitPercent}
+      mainSize={mainSplitPercent}
+      onMainSizeChange={setMainSplitPercent}
       centerView={centerView}
       onCenterViewChange={setCenterView}
       sources={

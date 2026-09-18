@@ -23,7 +23,7 @@ export default defineConfig({
     },
     {
       name: 'webkit-layout',
-      testMatch: /inspector-layout-stability\.spec\.ts/,
+      testMatch: /inspector-layout-stability\.spec\.ts|workspace-layout\.spec\.ts/,
       use: { ...devices['Desktop Safari'] },
     },
   ],

@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { clickCatalogFileRow } from "./catalogFileRow";
 import { uiText } from "./i18n";
 import { LOCALE_STORAGE_KEY } from "../src/i18n/registry";
-import { enableE2eNarrowWorkspace, expectNarrowShellClass, showInspectorFromContextBar } from "./narrowWorkspace";
+import { expectNarrowShellClass, showInspectorFromContextBar } from "./narrowWorkspace";
 
 function installLibraryMocks(page: import("@playwright/test").Page) {
   return page.addInitScript(() => {
@@ -122,12 +122,11 @@ test("zoom controls fit 840px inspector width in en", async ({ page }) => {
     localStorage.setItem(storageKey, "en");
   }, LOCALE_STORAGE_KEY);
   await installLibraryMocks(page);
-  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.setViewportSize({ width: 840, height: 900 });
   await page.goto("/");
   await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: uiText("en", "sources.chooseRoot") }).click();
   await clickCatalogFileRow(page, "en", "ZOOM.wav");
-  await enableE2eNarrowWorkspace(page);
   await expectNarrowShellClass(page);
   await showInspectorFromContextBar(page, "en");
   await expect(page.getByRole("button", { name: uiText("en", "waveform.zoomIn") })).toBeVisible();

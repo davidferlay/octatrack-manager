@@ -13,10 +13,10 @@ Base: `origin/main` @ `c2bf80c77bb7658ef2687032bf3d363f3788f79e` (#138)
 
 | Check | Before (RC8 / main repro) | After (this branch) |
 | --- | --- | --- |
-| 800px: no permanent Sources column | FAIL (12% column) | PASS (expected; verify in Tauri) |
-| List/inspector use full inner width | FAIL (62% cap) | PASS (expected; verify in Tauri) |
-| Inspector header Rename/Copy reachable | FAIL (5.5rem clip) | PASS (CSS clip removed) |
-| List return from inspector (context + status) | FAIL / clipped | PASS (status + i18n) |
+| 800px: no permanent Sources column | FAIL (12% column) | **NOT_VERIFIED** on Tauri (Playwright real viewport PASS in FIX-2) |
+| List/inspector use full inner width | FAIL (62% cap) | **NOT_VERIFIED** on Tauri (Playwright real viewport PASS in FIX-2) |
+| Inspector header Rename/Copy reachable | FAIL (5.5rem clip) | PASS (CSS clip removed; Playwright 1280 header tests) |
+| List return from inspector (context + status) | FAIL / clipped | PASS (Playwright narrow + status aria; Tauri **NOT_VERIFIED**) |
 | Wide split % after narrow | Not verified | NOT_RUN (Playwright resize clears `#root`; see E2E) |
 
 ## Automated verification
@@ -33,9 +33,8 @@ Base: `origin/main` @ `c2bf80c77bb7658ef2687032bf3d363f3788f79e` (#138)
 
 ## E2E notes (known gaps)
 
-1. **Initial viewport ≤840px (Playwright preview):** synthetic catalog row often never appears within 60s; bootstrap at **1280px**, select a sample, then set `window.__E2E_FORCE_NARROW_WORKSPACE__` and dispatch `mo-e2e-narrow-change` (see `e2e/narrowWorkspace.ts`). Do **not** set the force flag before the catalog row is visible — it breaks registration/catalog mount.
-2. **Mid-test `setViewportSize` after React mount:** `#root` can become empty; prefer the force-narrow hook over post-mount resize. Split-restore roundtrip layout specs may stay `fixme` until resize stability is understood.
-3. **Sources Drawer:** `CatalogWorkspaceNav` must render **inside** `CatalogBrowseProvider` (narrow overlay drawer is a sibling of `workspaceShell` within the provider). Rendering it outside the provider crashes React (`useCatalogBrowseContext`).
+1. **Superseded by FIX-2:** real viewport ≤840px and post-mount resize are covered by `MO_UI_NARROW_WORKSPACE_VERIFY_FIX_2.md`. Do not use `__E2E_FORCE_NARROW_WORKSPACE__` in product code.
+2. **Sources Drawer:** `CatalogWorkspaceNav` must stay **inside** `CatalogBrowseProvider` (see FIX-1 / #139).
 
 ## Files (high level)
 
