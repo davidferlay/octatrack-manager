@@ -5,8 +5,8 @@
 **PR:** https://github.com/kaz4g/masterocta/pull/140 (Draft)
 **Base (start):** `origin/main` @ `2fee043dbcaa65177cc561c1f49b88917a820d75` (merge PR #139)
 **Follow-up start SHA:** `23b17564f26dc192cdcb695a0f43adb25662be83`
-**Product change SHA:** _(record after commit)_
-**Verify target SHA:** _(record after commit)_
+**Product change SHA:** `3986a929b4d52d9449be2f43bb679160b342522c`
+**Verify target SHA:** `3986a929b4d52d9449be2f43bb679160b342522c`
 
 CI on start SHA `23b1756`: run [35398820632](https://github.com/kaz4g/masterocta/actions/runs/35398820632) — Rust / Frontend / E2E / Gate C ubuntu+macos **PASS**. That run does **not** cover this follow-up.
 
