@@ -316,14 +316,16 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ### 6.0 現在の次作業（2026-09-19）
 
-**作業ID:** `MO-SLICE-ANALYSIS-SESSION-RECOVERY-RESCUE-1`（Draft PR → `main`。
-merge / release しない。Native 受入は PASS にしない）
+**作業ID:** `MO-NATIVE-ACCEPTANCE-HARNESS-DOCS-FIX-1`（acceptance launcher + docs のみ。
+Draft PR。merge / release しない。製品コード変更なし）
 
-**記録:** `docs/testing/MO_SLICE_ANALYSIS_SESSION_RECOVERY_1.md` §Rescue onto main
-**rescue base:** `main` `14b37f506d0538f7eedd3d1dd5ff4091d914cb9a`（#140 merge）
-**製品:** cherry-pick of original #141（`ef59520`…`e92e4a7`、merge `f0437eff` は未使用）
-ブランチ `feat/slice-analysis-session-recovery-rescue-1`。
+**記録:** `docs/testing/MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md`（Real native acceptance on `main` post-#142）
+**基点:** `main` `0f39f5056c25e996f1e3ff69b7a51ca20b0c45bb`（#142 merge）
+**Native 製品受入:** **PASS**（同上ドキュメント。本 PR は harness 再現性の修正のみ）
 稼働中 Native / 既存 worktree / fixture・catalog・draft には触れない。
+
+**履歴 — MO-SLICE-ANALYSIS-SESSION-RECOVERY-RESCUE-1:** **MERGED** #142（`0f39f50`）。
+記録: `docs/testing/MO_SLICE_ANALYSIS_SESSION_RECOVERY_1.md` §Rescue onto main
 
 **履歴 — MO-SLICE-ANALYSIS-SESSION-RECOVERY-1:** original PR #141 は #140 branch
 へ merge 済みだが `main` 未到達。救出のみ実施。
