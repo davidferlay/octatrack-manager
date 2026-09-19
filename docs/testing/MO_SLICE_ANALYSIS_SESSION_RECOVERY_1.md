@@ -52,23 +52,39 @@ not treat process uptime as job age.
   (revision CAS + analysis ROI). Locale change does not reset the invalid
   session or re-run IPC.
 
+## Rescue onto main (MO-SLICE-ANALYSIS-SESSION-RECOVERY-RESCUE-1)
+
+Original PR #141 merged into `feat/ui-narrow-workspace-verify-fix-2` only
+(merge `f0437eff824b7274bfe0235a6b5f207713407faa`). After #140 reached `main`
+(`14b37f506d0538f7eedd3d1dd5ff4091d914cb9a`), the five #141-only commits were
+cherry-picked onto `main` without picking `f0437eff` or re-importing #140.
+
+Rescue commits (oldest first): `ef59520`, `4f07f93`, `1c6d596`, `3dd8eac`,
+`e92e4a7` (new SHAs on rescue branch). Product tree matches original #141 head.
+
 ## Verification SHA
 
-Review product (current): `3dd8eac05339be543072cd8447e56fc380f78473`
-First product: `ef59520f86f76de7db24b415f8a67ba2ac9749e1`
-Base: `3f916962205b4b13a984ded8e7fd56cb63e438e9` (PR #140 diagnostic head)
+Original #141 head: `e92e4a7d3afb01404fe1380ea1dbeac0571a6f29`
+Original #141 base: `3f916962205b4b13a984ded8e7fd56cb63e438e9`
+Review product (original): `3dd8eac05339be543072cd8447e56fc380f78473`
+First product (original): `ef59520f86f76de7db24b415f8a67ba2ac9749e1`
+Rescue base: `14b37f506d0538f7eedd3d1dd5ff4091d914cb9a` (#140 on main)
+Rescue head: see rescue docs commit on `feat/slice-analysis-session-recovery-rescue-1`
+Rescue cherry-picks (new SHAs): `a00fa86`, `1051d42`, `7a002a1`, `250df01`, `c5581dc`
 
-## Tests (review SHA)
+## Tests (rescue branch, local)
 
 - `pnpm run typecheck` PASS
-- `pnpm run test:frontend` PASS (81 files / 639 tests)
+- `pnpm run typecheck` PASS
+- `pnpm run test:frontend` PASS (81 files / 639 tests; one rerun after unrelated flake)
+- `pnpm run build` PASS
 - `pnpm run check:architecture` PASS
 - `cargo fmt --all -- --check` PASS
 - `cargo clippy --workspace --all-targets -- -D warnings` PASS
 - `cargo test --workspace --lib slice_workbench` PASS (12 cases)
-- `pnpm run test:e2e` NOT_RUN (layout Playwright is out of scope)
-- Real Tauri IPC NOT_RUN (running Native process left untouched)
-- `pnpm run build` NOT_RUN on this review SHA (PASS on `ef59520`)
+- `pnpm run test:e2e` NOT_RUN (out of scope for this rescue)
+- Real Tauri IPC NOT_RUN
+- Native Tauri acceptance NOT_RUN / Native hearing NOT_RUN
 
 ## Real Tauri IPC
 
