@@ -31,6 +31,8 @@ body {
   margin: 0;
   padding: 0;
   min-height: 100vh;
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   flex-direction: column;
 }
@@ -61,6 +63,7 @@ h1 {
 .scan-section {
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
   gap: 1rem;
   padding: 1.5rem 2rem;
   background-color: var(--mo-surface-1);
@@ -899,14 +902,37 @@ h1 {
 
 /* Project Detail Page */
 .project-header {
-  height: 52px;
+  min-height: 52px;
+  height: auto;
   padding: 0 2rem;
   background-color: var(--mo-surface-1);
   border-bottom: 1px solid var(--mo-border);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 1rem;
   box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.project-header__brand,
+.project-header__tools {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.project-header__brand {
+  flex: 1 1 12rem;
+  gap: 1rem;
+}
+
+.project-header__tools {
+  flex: 1 1 16rem;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .back-button {
@@ -1889,17 +1915,50 @@ h1 {
   position: relative;
   display: flex;
   align-items: center;
+  min-width: 0;
+  flex: 1 1 8rem;
+  max-width: 12rem;
 }
 
 .header-search-input {
-  width: 150px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   padding: 0.4rem 1.8rem 0.4rem 0.6rem;
   background-color: var(--mo-surface-1);
   border: 1px solid var(--mo-border);
   border-radius: 4px;
   color: var(--mo-text);
   font-size: 0.85rem;
-  transition: border-color 0.2s ease, width 0.2s ease;
+  transition: border-color 0.2s ease;
+}
+
+@media (max-width: 840px) {
+  .project-header {
+    padding: 0.35rem 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .project-header__brand,
+  .project-header__tools {
+    flex-basis: 100%;
+  }
+
+  .project-header .header-path-info {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .scan-section {
+    padding: 0.75rem;
+  }
+
+  .workspace-top-bar__search {
+    min-width: 0;
+    flex-basis: 100%;
+    max-width: none;
+  }
 }
 
 .header-search-input:focus {

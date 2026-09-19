@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { clickCatalogFileRow } from "./catalogFileRow";
 import { uiText } from "./i18n";
-import { enableE2eNarrowWorkspace, expectNarrowShellClass, showInspectorFromContextBar } from "./narrowWorkspace";
+import { expectNarrowShellClass, showInspectorFromContextBar } from "./narrowWorkspace";
 import { LOCALE_STORAGE_KEY } from "../src/i18n/registry";
 
 function installLibraryMocks(page: import("@playwright/test").Page) {
@@ -82,7 +82,6 @@ async function openSampleInspector(
   await page.getByRole("button", { name: uiText(locale, "sources.chooseRoot") }).click();
   await clickCatalogFileRow(page, locale, "LOOP.wav");
   if (narrow) {
-    await enableE2eNarrowWorkspace(page);
     await expectNarrowShellClass(page);
     await showInspectorFromContextBar(page, locale);
   }
@@ -117,7 +116,7 @@ for (const locale of ["ja", "en"] as const) {
   });
 
   test(`[${locale}] inspector tabs at 840px narrow layout`, async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.setViewportSize({ width: 840, height: 900 });
     await openSampleInspector(page, locale, true);
     await page.getByRole("tab", { name: uiText(locale, "inspector.tabUsage") }).click();
     await expect(page.getByLabel(uiText(locale, "usage.aria"))).toContainText(

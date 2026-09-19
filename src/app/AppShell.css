@@ -71,7 +71,7 @@
 }
 
 .mo-app-shell--narrow .mo-app-shell__body {
-  min-width: min(100%, 20rem);
+  min-width: 0;
 }
 
 .mo-app-shell__pane--stack-hidden {
@@ -100,14 +100,20 @@
 }
 
 .mo-app-shell__narrow-controls {
-  display: none;
+  display: flex;
   flex-wrap: wrap;
   gap: var(--mo-space-2);
   margin-top: var(--mo-space-2);
 }
 
-.mo-app-shell--narrow .mo-app-shell__narrow-controls {
+.mo-app-shell:not(.mo-app-shell--narrow) .mo-app-shell__center-toggles {
+  display: none;
+}
+
+.mo-app-shell__center-toggles {
   display: flex;
+  flex-wrap: wrap;
+  gap: var(--mo-space-2);
 }
 
 /* Catalog workspace: lock shell height; scroll inside panes (not the split chrome).
@@ -211,6 +217,26 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
+  overflow: auto;
+}
+
+@media (max-height: 720px) {
+  .mo-app-shell--workspace {
+    margin: 0.35rem 0 0.5rem;
+    height: calc(100vh - 1rem);
+    max-height: calc(100vh - 1rem);
+  }
+
+  @supports (height: 100dvh) {
+    .mo-app-shell--workspace {
+      height: calc(100dvh - 1rem);
+      max-height: calc(100dvh - 1rem);
+    }
+  }
+
+  .mo-app-shell--workspace .mo-app-shell__context {
+    max-height: min(8.5rem, 32vh);
+  }
 }
 
 .mo-app-shell--workspace .mo-app-shell__inner-split.mo-split-pane {

@@ -2,33 +2,6 @@ import { expect, type Page } from "@playwright/test";
 import { clickCatalogFileRow } from "./catalogFileRow";
 import { uiText } from "./i18n";
 
-const LIBRARY_BOOTSTRAP_WIDTH = 1280;
-
-export async function enableE2eNarrowWorkspace(page: Page) {
-  await page.evaluate(() => {
-    (window as Window & { __E2E_FORCE_NARROW_WORKSPACE__?: boolean }).__E2E_FORCE_NARROW_WORKSPACE__ = true;
-    window.dispatchEvent(new Event("mo-e2e-narrow-change"));
-    window.dispatchEvent(new Event("resize"));
-  });
-}
-
-/** Register root and select a sample, then enter narrow inspector layout (1280 bootstrap). */
-export async function bootstrapCatalogSampleForNarrowInspector(
-  page: Page,
-  locale: "ja" | "en",
-  displayName: string,
-  viewportHeight = 900,
-) {
-  await page.setViewportSize({ width: LIBRARY_BOOTSTRAP_WIDTH, height: viewportHeight });
-  await page.goto("/");
-  await page.waitForLoadState("networkidle");
-  await page.getByRole("button", { name: uiText(locale, "sources.chooseRoot") }).click();
-  await clickCatalogFileRow(page, locale, displayName);
-  await enableE2eNarrowWorkspace(page);
-  await expectNarrowShellClass(page);
-  await showInspectorFromContextBar(page, locale);
-}
-
 /** Narrow layout: inspector toggle in the context bar (not the status bar). */
 export async function showInspectorFromContextBar(
   page: Page,
@@ -59,7 +32,7 @@ export async function showListFromStatusBar(
   locale: "ja" | "en",
 ): Promise<void> {
   const toggle = page.getByTestId("app-shell-status").getByRole("button", {
-    name: uiText(locale, "workspace.showList"),
+    name: uiText(locale, "workspace.showListStatusAria"),
     exact: true,
   });
   await expect(toggle).toBeVisible({ timeout: 15000 });
@@ -78,22 +51,70 @@ export async function expectEditEnabledInContextBar(
 }
 
 export async function expectNoDocumentHorizontalOverflow(page: Page, tolerancePx = 1) {
-  const metrics = await page.evaluate(() => {
+  const metrics = await page.evaluate((tolerance) => {
     const root = document.scrollingElement ?? document.documentElement;
+    const limit = window.innerWidth + tolerance;
+    const offenders: Array<{
+      tag: string;
+      className: string;
+      right: number;
+      width: number;
+      minWidth: string;
+      whiteSpace: string;
+    }> = [];
+    for (const node of document.querySelectorAll("body *")) {
+      if (!(node instanceof HTMLElement)) continue;
+      const rect = node.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      if (rect.right <= limit) continue;
+      const style = getComputedStyle(node);
+      offenders.push({
+        tag: node.tagName.toLowerCase(),
+        className: typeof node.className === "string" ? node.className.slice(0, 120) : "",
+        right: Math.round(rect.right),
+        width: Math.round(rect.width),
+        minWidth: style.minWidth,
+        whiteSpace: style.whiteSpace,
+      });
+      if (offenders.length >= 12) break;
+    }
     return {
       scrollWidth: root.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
       innerWidth: window.innerWidth,
+      offenders,
     };
-  });
+  }, tolerancePx);
   expect(
     metrics.scrollWidth,
-    `document scrollWidth ${metrics.scrollWidth} vs innerWidth ${metrics.innerWidth}`,
+    `document overflow: ${JSON.stringify(metrics)}`,
   ).toBeLessThanOrEqual(metrics.innerWidth + tolerancePx);
 }
 
-export async function expectNarrowMediaMatches(page: Page, expected: boolean) {
-  const matched = await page.evaluate(() => window.matchMedia("(max-width: 840px)").matches);
-  expect(matched, "matchMedia (max-width: 840px)").toBe(expected);
+/** Workspace shell only (legacy Home chrome above the shell may widen the document). */
+export async function expectNoWorkspaceHorizontalOverflow(page: Page, tolerancePx = 1) {
+  const shell = page.locator(".mo-app-shell--workspace");
+  await expect(shell).toBeVisible();
+  const metrics = await shell.evaluate((el) => ({
+    scrollWidth: el.scrollWidth,
+    clientWidth: el.clientWidth,
+  }));
+  expect(
+    metrics.scrollWidth,
+    `workspace scrollWidth ${metrics.scrollWidth} vs clientWidth ${metrics.clientWidth}`,
+  ).toBeLessThanOrEqual(metrics.clientWidth + tolerancePx);
+}
+
+/** Matches RootRegistryPanel / useMediaQuery max-width handling (innerWidth, not matchMedia alone). */
+export async function expectNarrowBreakpointMatches(page: Page, expectedNarrow: boolean) {
+  const metrics = await page.evaluate(() => ({
+    innerWidth: window.innerWidth,
+    mq: window.matchMedia("(max-width: 840px)").matches,
+    narrowData: document.querySelector(".mo-app-shell")?.getAttribute("data-narrow-layout") ?? null,
+  }));
+  const layoutNarrow = metrics.innerWidth <= 840;
+  expect(layoutNarrow, `innerWidth ${metrics.innerWidth} narrow`).toBe(expectedNarrow);
+  expect(metrics.narrowData, "data-narrow-layout").toBe(expectedNarrow ? "true" : "false");
 }
 
 /** Playwright viewport changes do not always emit matchMedia "change"; nudge React listeners. */
@@ -116,31 +137,31 @@ async function readNarrowLayoutMetrics(page: Page) {
 }
 
 export async function expectNarrowShellClass(page: Page) {
-  const pageErrors: string[] = [];
-  const onPageError = (error: Error) => pageErrors.push(error.message);
-  const onConsole = (msg: { type: () => string; text: () => string }) => {
-    if (msg.type() === "error") pageErrors.push(msg.text());
-  };
-  page.on("pageerror", onPageError);
-  page.on("console", onConsole);
-  try {
-    await page.waitForSelector(".mo-app-shell", { timeout: 30000 });
-    for (let attempt = 0; attempt < 40; attempt += 1) {
-      await syncViewportLayout(page);
-      const metrics = await readNarrowLayoutMetrics(page);
-      if (metrics.narrowData === "true") {
-        return;
-      }
-      await page.waitForTimeout(250);
-    }
+  await page.waitForSelector(".mo-app-shell", { timeout: 30000 });
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    await syncViewportLayout(page);
     const metrics = await readNarrowLayoutMetrics(page);
-    throw new Error(
-      `narrow layout not applied: ${JSON.stringify(metrics)}; pageErrors=${pageErrors.join(" | ")}`,
-    );
-  } finally {
-    page.off("pageerror", onPageError);
-    page.off("console", onConsole);
+    if (metrics.narrowData === "true") {
+      return;
+    }
+    await page.waitForTimeout(250);
   }
+  const metrics = await readNarrowLayoutMetrics(page);
+  throw new Error(`narrow layout not applied: ${JSON.stringify(metrics)}`);
+}
+
+export async function expectWideShellClass(page: Page) {
+  await page.waitForSelector(".mo-app-shell", { timeout: 30000 });
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    await syncViewportLayout(page);
+    const metrics = await readNarrowLayoutMetrics(page);
+    if (metrics.narrowData === "false") {
+      return;
+    }
+    await page.waitForTimeout(250);
+  }
+  const metrics = await readNarrowLayoutMetrics(page);
+  throw new Error(`wide layout not applied: ${JSON.stringify(metrics)}`);
 }
 
 export async function expectSourcesColumnHidden(page: Page) {
@@ -148,12 +169,18 @@ export async function expectSourcesColumnHidden(page: Page) {
   await expect(page.getByTestId("app-shell-divider")).toHaveCount(0);
 }
 
-export async function openSourcesDrawer(page: Page, locale: "ja" | "en" = "ja") {
+export async function toggleSourcesNav(page: Page, locale: "ja" | "en") {
   const toggle = page.getByTestId("app-shell-context").getByRole("button", {
     name: uiText(locale, "workspace.toggleNav"),
     exact: true,
   });
+  await expect(toggle).toBeVisible({ timeout: 15000 });
+  await toggle.scrollIntoViewIfNeeded();
   await toggle.click();
+}
+
+export async function openSourcesDrawer(page: Page, locale: "ja" | "en" = "ja") {
+  await toggleSourcesNav(page, locale);
   const dialog = page.getByRole("dialog", { name: uiText(locale, "sources.title") });
   await expect(dialog).toBeVisible();
   return dialog;
@@ -169,6 +196,7 @@ export async function expectVisiblePaneUsesBodyWidth(
   const pane = mode === "list"
     ? page.locator(".mo-app-shell__main")
     : page.locator(".mo-app-shell__inspector");
+  await expect(pane).toBeVisible();
   const paneWidth = await pane.evaluate((el) => el.getBoundingClientRect().width);
   expect(Math.abs(paneWidth - bodyWidth), `${mode} pane vs body`).toBeLessThanOrEqual(tolerancePx);
 }

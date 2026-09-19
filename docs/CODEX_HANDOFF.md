@@ -314,14 +314,18 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ## 6. 次のCodex作業
 
-### 6.0 現在の次作業（2026-09-17）
+### 6.0 現在の次作業（2026-09-19）
 
-**作業ID:** `MO-UI-SLICE-RANGE-HANDOFF-FIX-1`（Slice タブでプレビュー選択範囲を表示し、
-**この範囲を解析** の表示と送信を同一 `librarySelectionRange` に揃える。Draft PR。merge しない）
+**作業ID:** `MO-UI-NARROW-WORKSPACE-VERIFY-FIX-2-FOLLOWUP`（PR #140 Draft。
+document 横はみ出しと Sources 開閉復元は製品修正済み。merge / release しない）
 
-**記録:** `docs/testing/MO_UI_SLICE_RANGE_HANDOFF_FIX_1.md`  
-**原因:** 範囲は既に props で渡っていたが、手入力欄（別系統）だけが空に見えていた。  
-**Native 受入:** Vitest のみ **PASS**；実 Tauri 再確認は **NOT_RUN**。
+**記録:** `docs/testing/MO_UI_NARROW_WORKSPACE_VERIFY_FIX_2.md`
+**基点 follow-up:** `23b1756`。製品 `3986a92`。検証 `9907d42`。
+ブランチ `feat/ui-narrow-workspace-verify-fix-2`。
+**CI:** [35401675643](https://github.com/kaz4g/masterocta/actions/runs/35401675643) PASS（`9907d42`）。
+**Native 受入:** 手順は FIX-2 に記載。GUI は **NOT_RUN**。
+
+**履歴 — MO-UI-SLICE-RANGE-HANDOFF-FIX-1:** 完了済み。`docs/testing/MO_UI_SLICE_RANGE_HANDOFF_FIX_1.md`。
 
 **履歴 — MO-UI-WORKSPACE-NATIVE-ACCEPTANCE-FIX-1:** **MERGED** #136。引き継ぎ:
 `docs/testing/MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md`。

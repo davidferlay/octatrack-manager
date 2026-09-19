@@ -24,9 +24,7 @@ export function useMediaQuery(query: string): boolean {
     media.addEventListener("change", sync);
     window.addEventListener("resize", sync);
     window.visualViewport?.addEventListener("resize", sync);
-    const interval = window.setInterval(sync, 100);
     return () => {
-      window.clearInterval(interval);
       media.removeEventListener("change", sync);
       window.removeEventListener("resize", sync);
       window.visualViewport?.removeEventListener("resize", sync);

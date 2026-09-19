@@ -8,6 +8,7 @@ export async function clickCatalogFileRow(
 ) {
   const row = catalogFileRowLocator(page, locale, displayName);
   await expect(row).toBeVisible({ timeout: 60000 });
+  await row.scrollIntoViewIfNeeded();
   await row.click();
 }
 

@@ -462,11 +462,11 @@ export function HomePage() {
     <main className="container" ref={pageRef}>
       <LegacyWriteRestrictionNotice />
       <div className="project-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: '1' }}>
+        <div className="project-header__brand">
           <h1>{PRODUCT_NAME}</h1>
           <span className="header-path-info">{PRODUCT_TAGLINE}</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <div className="project-header__tools">
           <div className="header-search-container">
             <input
               ref={searchInputRef}

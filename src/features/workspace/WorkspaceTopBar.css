@@ -27,7 +27,7 @@
   display: grid;
   gap: var(--mo-space-1);
   flex: 1 1 12rem;
-  min-width: 10rem;
+  min-width: 0;
   max-width: 22rem;
   font-size: var(--mo-font-size-xs);
   color: var(--mo-text-muted);

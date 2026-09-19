@@ -65,6 +65,19 @@ describe('AppShell', () => {
     expect(screen.getByText('Review additive copy')).toBeInTheDocument()
   })
 
+  it('hides the sources column in wide layout when navigation is closed', () => {
+    render(
+      <AppShell
+        navigationOpen={false}
+        sources={<div>Sources content</div>}
+        main={<div>Main content</div>}
+        inspector={<div>Inspector content</div>}
+      />,
+    )
+    expect(screen.queryByTestId('app-shell-sources')).not.toBeInTheDocument()
+    expect(screen.getByText('Main content')).toBeVisible()
+  })
+
   it('hides the sources column in narrow layout even when navigation is open', () => {
     render(
       <AppShell

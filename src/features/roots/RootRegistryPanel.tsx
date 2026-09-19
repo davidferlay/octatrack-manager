@@ -39,6 +39,7 @@ import {
   type CatalogBrowseContext,
 } from "../library/CatalogLibraryBrowser";
 import { CatalogWorkspaceMain, CatalogWorkspaceNav } from "../library/CatalogWorkspaceViews";
+import { applyWideSourcesNavTransition, resetWideSourcesNav } from "./wideSourcesNav";
 import { WorkspaceStatusBar } from "../workspace/WorkspaceStatusBar";
 import { WorkspaceTopBar } from "../workspace/WorkspaceTopBar";
 import { useLibraryGeometrySelection } from "../waveform/libraryGeometrySelection";
@@ -140,6 +141,10 @@ export function RootRegistryPanel({
   const [browseContext, setBrowseContext] = useState<CatalogBrowseContext | null>(null);
   const [locationSearch, setLocationSearch] = useState("");
   const [navigationOpen, setNavigationOpen] = useState(true);
+  const recordedWideOpenRef = useRef<boolean | null>(null);
+  const wasNarrowRef = useRef(false);
+  const [sourcesSplitPercent, setSourcesSplitPercent] = useState<number | undefined>(undefined);
+  const [mainSplitPercent, setMainSplitPercent] = useState<number | undefined>(undefined);
   const [centerView, setCenterView] = useState<AppShellCenterView>("list");
   const catalogEpochRef = useRef(0);
   const inspectorPaneRef = useRef<HTMLDivElement>(null);
@@ -148,19 +153,8 @@ export function RootRegistryPanel({
   const [sliceAnalysisBusy, setSliceAnalysisBusy] = useState(false);
   const [compactSliceHost, setCompactSliceHost] = useState<HTMLDivElement | null>(null);
   const [expandedSliceHost, setExpandedSliceHost] = useState<HTMLDivElement | null>(null);
-  const [e2eLayoutEpoch, setE2eLayoutEpoch] = useState(0);
   const layoutMatchesNarrow = useMediaQuery("(max-width: 840px)");
-
-  useEffect(() => {
-    const syncE2eLayout = () => setE2eLayoutEpoch((value) => value + 1);
-    window.addEventListener("mo-e2e-narrow-change", syncE2eLayout);
-    return () => window.removeEventListener("mo-e2e-narrow-change", syncE2eLayout);
-  }, []);
-  void e2eLayoutEpoch;
-  const e2eForceNarrowWorkspace =
-    typeof window !== "undefined"
-    && (window as Window & { __E2E_FORCE_NARROW_WORKSPACE__?: boolean }).__E2E_FORCE_NARROW_WORKSPACE__ === true;
-  const narrowActive = layoutMatchesNarrow || e2eForceNarrowWorkspace;
+  const narrowActive = layoutMatchesNarrow;
 
   const registerSliceAnalysisCancel = useCallback((cancel: (() => void) | null) => {
     sliceCancelRef.current = cancel;
@@ -181,9 +175,12 @@ export function RootRegistryPanel({
   }, [narrowActive]);
 
   useEffect(() => {
+    const reset = resetWideSourcesNav();
     setLocationSearch("");
     setCenterView("list");
-    setNavigationOpen(true);
+    setNavigationOpen(reset.nextOpen);
+    recordedWideOpenRef.current = reset.recordedWideOpen;
+    wasNarrowRef.current = reset.wasNarrow;
     setSliceWorkspaceExpanded(false);
   }, [session?.rootId]);
 
@@ -530,14 +527,19 @@ export function RootRegistryPanel({
   const narrowWorkspace = catalogReady && narrowActive;
 
   useEffect(() => {
-    if (!narrowActive) {
-      setNavigationOpen(true);
-      return;
+    const next = applyWideSourcesNavTransition({
+      catalogReady,
+      narrowActive,
+      wasNarrow: wasNarrowRef.current,
+      navigationOpen,
+      recordedWideOpen: recordedWideOpenRef.current,
+    });
+    recordedWideOpenRef.current = next.recordedWideOpen;
+    wasNarrowRef.current = next.wasNarrow;
+    if (next.nextOpen !== navigationOpen) {
+      setNavigationOpen(next.nextOpen);
     }
-    if (catalogReady) {
-      setNavigationOpen(false);
-    }
-  }, [narrowActive, catalogReady]);
+  }, [catalogReady, narrowActive, navigationOpen]);
   const selectedLibraryFile = useMemo(() => {
     if (library === null || selectedAsset === null) return undefined;
     return library.audioFiles.find(
@@ -668,7 +670,7 @@ export function RootRegistryPanel({
         {t("workspace.toggleNav")}
       </Button>
       {catalogReady && (
-        <>
+        <div className="mo-app-shell__center-toggles">
           <Button
             variant="secondary"
             aria-pressed={centerView === "list"}
@@ -683,7 +685,7 @@ export function RootRegistryPanel({
           >
             {t("workspace.showInspector")}
           </Button>
-        </>
+        </div>
       )}
     </div>
   );
@@ -735,6 +737,10 @@ export function RootRegistryPanel({
       narrowLayout={narrowWorkspace}
       navigationOpen={navigationOpen}
       onNavigationOpenChange={setNavigationOpen}
+      sourcesSize={sourcesSplitPercent}
+      onSourcesSizeChange={setSourcesSplitPercent}
+      mainSize={mainSplitPercent}
+      onMainSizeChange={setMainSplitPercent}
       centerView={centerView}
       onCenterViewChange={setCenterView}
       sources={

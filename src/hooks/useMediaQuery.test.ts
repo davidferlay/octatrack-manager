@@ -26,12 +26,12 @@ describe("useMediaQuery", () => {
     vi.useRealTimers();
   });
 
-  it("tracks max-width queries from innerWidth", () => {
+  it("tracks max-width queries from innerWidth on resize", () => {
     const { result } = renderHook(() => useMediaQuery("(max-width: 840px)"));
     expect(result.current).toBe(false);
     act(() => {
       setInnerWidth(840);
-      vi.advanceTimersByTime(150);
+      window.dispatchEvent(new Event("resize"));
     });
     expect(result.current).toBe(true);
   });
