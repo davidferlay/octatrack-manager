@@ -2,11 +2,13 @@
 
 use ot_codec_ports::{CodecError, ProjectCodec};
 use ot_domain::{
-    ContentHash, LibrarySnapshot, ManualAssetMetadata, ProjectDocument, RootId, RootRelativePath,
+    AssetDerivation, ContentHash, LibrarySnapshot, ManualAssetMetadata, ProjectDocument, RootId,
+    RootRelativePath,
 };
 use ot_storage_ports::{
-    AssetMetadataCatalog, CatalogError, CatalogRootIdentity, CatalogRootObservation, CatalogScan,
-    LibraryCatalog, ProjectStorage, ReadOnlyLibrary, StorageError,
+    AssetDerivationCatalog, AssetMetadataCatalog, CatalogError, CatalogRootIdentity,
+    CatalogRootObservation, CatalogScan, LibraryCatalog, ProjectStorage, ReadOnlyLibrary,
+    StorageError,
 };
 use std::fmt;
 
@@ -135,6 +137,57 @@ where
 
     pub fn execute(&self, asset: &ContentHash) -> Result<ManualAssetMetadata, CatalogError> {
         self.catalog.load_manual_asset_metadata(asset)
+    }
+}
+
+pub struct RegisterAssetDerivation<'a, C> {
+    catalog: &'a mut C,
+}
+
+impl<'a, C> RegisterAssetDerivation<'a, C>
+where
+    C: AssetDerivationCatalog,
+{
+    pub fn new(catalog: &'a mut C) -> Self {
+        Self { catalog }
+    }
+
+    pub fn execute(&mut self, derivation: &AssetDerivation) -> Result<(), CatalogError> {
+        self.catalog.register_asset_derivation(derivation)
+    }
+}
+
+pub struct LoadAssetDerivation<'a, C> {
+    catalog: &'a C,
+}
+
+impl<'a, C> LoadAssetDerivation<'a, C>
+where
+    C: AssetDerivationCatalog,
+{
+    pub fn new(catalog: &'a C) -> Self {
+        Self { catalog }
+    }
+
+    pub fn execute(&self, output: &ContentHash) -> Result<Option<AssetDerivation>, CatalogError> {
+        self.catalog.load_asset_derivation(output)
+    }
+}
+
+pub struct ListDerivedChildren<'a, C> {
+    catalog: &'a C,
+}
+
+impl<'a, C> ListDerivedChildren<'a, C>
+where
+    C: AssetDerivationCatalog,
+{
+    pub fn new(catalog: &'a C) -> Self {
+        Self { catalog }
+    }
+
+    pub fn execute(&self, source: &ContentHash) -> Result<Vec<AssetDerivation>, CatalogError> {
+        self.catalog.list_derived_children(source)
     }
 }
 
@@ -361,5 +414,157 @@ mod tests {
             .unwrap();
 
         assert_eq!(loaded, replacement);
+    }
+
+    struct FakeDerivationCatalog {
+        assets: std::collections::HashSet<ContentHash>,
+        derivations: Vec<AssetDerivation>,
+    }
+
+    impl AssetDerivationCatalog for FakeDerivationCatalog {
+        fn register_asset_derivation(
+            &mut self,
+            derivation: &AssetDerivation,
+        ) -> Result<(), CatalogError> {
+            if !self.assets.contains(derivation.output())
+                || !self.assets.contains(derivation.source())
+            {
+                return Err(CatalogError::AssetNotFound);
+            }
+            if self
+                .derivations
+                .iter()
+                .any(|existing| existing.output() == derivation.output())
+            {
+                return Err(CatalogError::Derivation(
+                    ot_domain::InvalidDerivation::ConflictingLineage,
+                ));
+            }
+            let edges: Vec<_> = self
+                .derivations
+                .iter()
+                .map(|existing| ot_domain::DerivationEdge {
+                    output: existing.output().clone(),
+                    source: existing.source().clone(),
+                })
+                .collect();
+            ot_domain::validate_new_derivation(&edges, derivation)
+                .map_err(CatalogError::Derivation)?;
+            self.derivations.push(derivation.clone());
+            Ok(())
+        }
+
+        fn load_asset_derivation(
+            &self,
+            output: &ContentHash,
+        ) -> Result<Option<AssetDerivation>, CatalogError> {
+            Ok(self
+                .derivations
+                .iter()
+                .find(|derivation| derivation.output() == output)
+                .cloned())
+        }
+
+        fn list_derived_children(
+            &self,
+            source: &ContentHash,
+        ) -> Result<Vec<AssetDerivation>, CatalogError> {
+            Ok(self
+                .derivations
+                .iter()
+                .filter(|derivation| derivation.source() == source)
+                .cloned()
+                .collect())
+        }
+
+        fn list_derivation_edges(&self) -> Result<Vec<(ContentHash, ContentHash)>, CatalogError> {
+            Ok(self
+                .derivations
+                .iter()
+                .map(|derivation| (derivation.output().clone(), derivation.source().clone()))
+                .collect())
+        }
+    }
+
+    fn content_hash(label: u8) -> ContentHash {
+        ContentHash::parse(format!("sha256:{label:064x}")).unwrap()
+    }
+
+    #[test]
+    fn asset_derivation_use_cases_reject_unknown_assets_and_conflicts() {
+        let source = content_hash(1);
+        let output = content_hash(2);
+        let mut catalog = FakeDerivationCatalog {
+            assets: [source.clone(), output.clone()].into_iter().collect(),
+            derivations: Vec::new(),
+        };
+        let derivation = AssetDerivation::new(
+            output.clone(),
+            source.clone(),
+            ot_domain::DerivationKind::Normalize,
+            ot_domain::ProcessorIdentity::new("normalize", "1").unwrap(),
+            ot_domain::DerivationParameterEnvelope::empty(),
+            source.clone(),
+            "2026-09-20T00:00:00.000Z",
+        )
+        .unwrap();
+        RegisterAssetDerivation::new(&mut catalog)
+            .execute(&derivation)
+            .unwrap();
+        let loaded = LoadAssetDerivation::new(&catalog)
+            .execute(&output)
+            .unwrap()
+            .unwrap();
+        assert_eq!(loaded, derivation);
+        let conflict = AssetDerivation::new(
+            output.clone(),
+            source.clone(),
+            ot_domain::DerivationKind::Trim,
+            ot_domain::ProcessorIdentity::new("trim", "1").unwrap(),
+            ot_domain::DerivationParameterEnvelope::empty(),
+            source.clone(),
+            "2026-09-20T00:00:00.000Z",
+        )
+        .unwrap();
+        assert!(matches!(
+            RegisterAssetDerivation::new(&mut catalog).execute(&conflict),
+            Err(CatalogError::Derivation(
+                ot_domain::InvalidDerivation::ConflictingLineage
+            ))
+        ));
+        let unknown_output = content_hash(7);
+        catalog.assets.insert(unknown_output.clone());
+        let unknown_source = content_hash(8);
+        let missing_asset = AssetDerivation::new(
+            unknown_output,
+            unknown_source,
+            ot_domain::DerivationKind::Resample,
+            ot_domain::ProcessorIdentity::new("resample", "1").unwrap(),
+            ot_domain::DerivationParameterEnvelope::empty(),
+            content_hash(8),
+            "2026-09-20T00:00:00.000Z",
+        )
+        .unwrap();
+        assert!(matches!(
+            RegisterAssetDerivation::new(&mut catalog).execute(&missing_asset),
+            Err(CatalogError::AssetNotFound)
+        ));
+    }
+
+    #[test]
+    fn asset_derivation_use_case_rejects_stale_evidence() {
+        let source = content_hash(4);
+        let output = content_hash(5);
+        let stale = AssetDerivation::new(
+            output,
+            source.clone(),
+            ot_domain::DerivationKind::ImportProcess,
+            ot_domain::ProcessorIdentity::new("import", "1").unwrap(),
+            ot_domain::DerivationParameterEnvelope::empty(),
+            content_hash(6),
+            "2026-09-20T00:00:00.000Z",
+        )
+        .unwrap_err();
+        assert_eq!(stale, ot_domain::InvalidDerivation::StaleSourceEvidence);
     }
 }

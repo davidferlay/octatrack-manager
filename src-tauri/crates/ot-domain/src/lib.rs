@@ -2,10 +2,17 @@
 
 use std::fmt;
 
+pub mod derivation;
 pub mod onsets;
 pub mod reference_identity;
 pub mod slice_draft;
 pub mod slicing;
+
+pub use derivation::{
+    validate_new_derivation, would_create_cycle, AssetDerivation, DerivationEdge, DerivationKind,
+    DerivationParameterEnvelope, DerivationParameters, InvalidDerivation, ProcessorIdentity,
+    StemRole,
+};
 
 pub use reference_identity::{
     inventory_paths_equivalent, raw_path_matches_inventory_reference, resolve_against_inventory,

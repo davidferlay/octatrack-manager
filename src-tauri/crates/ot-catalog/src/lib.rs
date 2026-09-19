@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod asset_derivations;
 mod slice_drafts;
 
 use ot_domain::{
@@ -21,7 +22,7 @@ use rusqlite::{
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
-const LATEST_SCHEMA_VERSION: u64 = 11;
+const LATEST_SCHEMA_VERSION: u64 = 12;
 const PROJECTION_REPAIR_META_KEY: &str = "observational_projection_repair_applied";
 const MIGRATION_REQUIRES_FOREIGN_KEYS_OFF: u64 = 8;
 const MIGRATIONS: &[(u64, &str)] = &[
@@ -61,6 +62,7 @@ const MIGRATIONS: &[(u64, &str)] = &[
         11,
         include_str!("../migrations/0011_projection_trust_repair.sql"),
     ),
+    (12, include_str!("../migrations/0012_asset_derivations.sql")),
 ];
 
 type StateProjection = (
@@ -308,6 +310,10 @@ impl SqliteCatalog {
                  SELECT 1 FROM tag_assignments WHERE tag_assignments.audio_asset_id = audio_assets.id\
              ) AND NOT EXISTS (\
                  SELECT 1 FROM notes WHERE notes.audio_asset_id = audio_assets.id\
+             ) AND NOT EXISTS (\
+                 SELECT 1 FROM asset_derivations \
+                 WHERE asset_derivations.output_audio_asset_id = audio_assets.id \
+                    OR asset_derivations.source_audio_asset_id = audio_assets.id\
              )",
             [],
         )?;
@@ -616,6 +622,10 @@ impl AssetMetadataCatalog for SqliteCatalog {
                      SELECT 1 FROM tag_assignments WHERE tag_assignments.audio_asset_id = audio_assets.id\
                  ) AND NOT EXISTS (\
                      SELECT 1 FROM notes WHERE notes.audio_asset_id = audio_assets.id\
+                 ) AND NOT EXISTS (\
+                     SELECT 1 FROM asset_derivations \
+                     WHERE asset_derivations.output_audio_asset_id = audio_assets.id \
+                        OR asset_derivations.source_audio_asset_id = audio_assets.id\
                  )",
                 [asset_row_id],
             )
