@@ -341,7 +341,19 @@ Legacy write containment（#125/#126）は引き続き有効。公開配布は *
 | query | `v2_audio_waveform_query` に **非 null `range`**（viewport）+ #129 の `targetPoints`。150ms debounce、query-key 抑制 |
 | stale | frontend request id + 応答 `range` / `targetPoints` / selection 照合。不一致 peaks は描画しない（引き伸ばさない） |
 | 試聴 | 既存フレーム入力 + Play/Stop。選択変更開始で Stop。zoom/pan/resize では Stop しない |
-| 未実装 | Canvas、WFM2、スライスマーカー、backend キャンセル API |
+| 未実装 | Canvas、スライスマーカー、backend キャンセル API |
+
+### 13.6 MO-M7-WFM2-MULTIRES-CACHE-1
+
+| 項目 | 決定 |
+| --- | --- |
+| IPC / UI | **変更なし**（`v2_audio_waveform_query` DTO、`WaveformPreview` SVG 契約維持） |
+| On-disk cache | **`waveform-v2-{digest}.wfm2`**（binary WFM2 v1）。旧 `waveform-v2-*.json` は読まない・破壊的 migration しない |
+| Analyzer | 応答 `analyzerVersion: "waveform:v2"` のまま |
+| Query engine | Multi-res pyramid + level 選択 + partial peak read。finer level 再帰後にのみ PCM 残差 decode |
+| 未実装 | Canvas、prepare job UI（#104）、descriptor-relative cache |
+
+詳細: [MO_M7_WFM2_MULTIRES_CACHE_1.md](../testing/MO_M7_WFM2_MULTIRES_CACHE_1.md)
 
 ### 13.2 後続でよい
 

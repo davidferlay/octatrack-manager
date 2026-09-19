@@ -20,6 +20,7 @@ use symphonia::core::meta::MetadataOptions;
 use symphonia::core::probe::Hint;
 
 pub mod waveform_v2;
+pub mod wfm2;
 
 pub use waveform_v2::{
     parse_decimal_frame, FrameRange, WaveformCacheV2, WaveformQueryResult,
