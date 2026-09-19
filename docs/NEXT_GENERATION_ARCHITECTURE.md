@@ -1004,6 +1004,13 @@ legacy terminal journalは履歴として読み、recovery replayを拒否する
 
 ### M5 — rename/move/reference update
 
+> **Historical milestone numbering (M5–M9 below):** Product milestone IDs **M5–M11**
+> for post–Gate C work follow
+> [`planning/MILESTONE_INDEX.md`](planning/MILESTONE_INDEX.md) (Performance System
+> v0.1, 2026-09-06). This section’s **M6–M9 headings** describe legacy next-gen
+> capabilities (Portable Project, Slice/Chain, AI, cloud). Do not assign new work
+> using legacy M6–M9 numbers. Mapping: MILESTONE_INDEX § Legacy milestone mapping.
+
 - Sample rename/move
 - Set内の全Project参照更新
 - stale plan detection
