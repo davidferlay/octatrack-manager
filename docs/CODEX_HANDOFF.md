@@ -316,8 +316,21 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ### 6.0 現在の次作業（2026-09-19）
 
-**作業ID:** `MO-UI-NARROW-WORKSPACE-VERIFY-FIX-2-FOLLOWUP`（PR #140 Draft。
-document 横はみ出しと Sources 開閉復元は製品修正済み。merge / release しない）
+**作業ID:** `MO-SLICE-ANALYSIS-SESSION-RECOVERY-RESCUE-1`（Draft PR → `main`。
+merge / release しない。Native 受入は PASS にしない）
+
+**記録:** `docs/testing/MO_SLICE_ANALYSIS_SESSION_RECOVERY_1.md` §Rescue onto main
+**rescue base:** `main` `14b37f506d0538f7eedd3d1dd5ff4091d914cb9a`（#140 merge）
+**製品:** cherry-pick of original #141（`ef59520`…`e92e4a7`、merge `f0437eff` は未使用）
+ブランチ `feat/slice-analysis-session-recovery-rescue-1`。
+稼働中 Native / 既存 worktree / fixture・catalog・draft には触れない。
+
+**履歴 — MO-SLICE-ANALYSIS-SESSION-RECOVERY-1:** original PR #141 は #140 branch
+へ merge 済みだが `main` 未到達。救出のみ実施。
+
+**履歴 — MO-UI-NARROW-WORKSPACE-VERIFY-FIX-2-FOLLOWUP:** **MERGED** #140（`14b37f5`）。
+document 横はみ出しと Sources 開閉復元。記録:
+`docs/testing/MO_UI_NARROW_WORKSPACE_VERIFY_FIX_2.md`。
 
 **記録:** `docs/testing/MO_UI_NARROW_WORKSPACE_VERIFY_FIX_2.md`
 **基点 follow-up:** `23b1756`。製品 `3986a92`。検証 `9907d42`。

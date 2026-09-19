@@ -5,6 +5,7 @@ const KNOWN_SLICE_ERROR_CODES = [
   "ANALYSIS_BUSY",
   "ANALYSIS_CANCELLED",
   "ANALYSIS_NOT_FOUND",
+  "ANALYSIS_EXPIRED",
   "DRAFT_CONFLICT",
   "SOURCE_CHANGED",
   "AUDIO_LIMIT_EXCEEDED",
@@ -24,6 +25,11 @@ export type SliceErrorState = {
   code?: string;
   detail?: string;
 };
+
+/** Job missing/cancelled/replaced vs TTL. Preview-token NOT_FOUND is not a session death. */
+export function isAnalysisSessionInvalid(state: SliceErrorState): boolean {
+  return state.code === "ANALYSIS_NOT_FOUND" || state.code === "ANALYSIS_EXPIRED";
+}
 
 function trimDetail(value: string | undefined): string | undefined {
   const trimmed = value?.trim();

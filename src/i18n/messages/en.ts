@@ -288,6 +288,8 @@ export const enMessages = {
   'slicing.applyCandidates': 'Apply candidates to draft',
   'slicing.updatingCandidates': 'Updating candidates…',
   'slicing.candidatesUnavailable': 'Candidates unavailable',
+  'slicing.reanalyzeRequired':
+    'Analyze again to continue. The saved draft is unchanged. Applying candidates is disabled.',
   'slicing.candidatesSummary': '{count} candidates · {suppressed} suppressed',
   'slicing.noAttacksFound':
     'No attacks found at these settings. Manual boundaries can still be inserted.',
@@ -308,6 +310,7 @@ export const enMessages = {
   'slicing.error.ANALYSIS_BUSY': 'Another analysis is already running.',
   'slicing.error.ANALYSIS_CANCELLED': 'Analysis was cancelled.',
   'slicing.error.ANALYSIS_NOT_FOUND': 'Analysis is no longer available.',
+  'slicing.error.ANALYSIS_EXPIRED': 'The analysis session has expired.',
   'slicing.error.DRAFT_CONFLICT': 'The draft changed; reload it before editing.',
   'slicing.error.SOURCE_CHANGED': 'Source changed; rescan and analyze again.',
   'slicing.error.AUDIO_LIMIT_EXCEEDED':

@@ -24,6 +24,9 @@ pub struct SliceWorkbench {
     busy: AtomicBool,
     nonce: [u8; 32],
     counter: AtomicU64,
+    /// Test-only clock. Compiled out of production; `job()` always uses `JOB_TTL`.
+    #[cfg(test)]
+    test_job_ttl: Mutex<Duration>,
 }
 
 struct Job {
@@ -251,7 +254,25 @@ impl SliceWorkbench {
             busy: AtomicBool::new(false),
             nonce,
             counter: AtomicU64::new(1),
+            #[cfg(test)]
+            test_job_ttl: Mutex::new(JOB_TTL),
         })
+    }
+    #[allow(clippy::unused_self)]
+    fn job_ttl(&self) -> Duration {
+        #[cfg(test)]
+        {
+            self.test_job_ttl.lock().map(|ttl| *ttl).unwrap_or(JOB_TTL)
+        }
+        #[cfg(not(test))]
+        JOB_TTL
+    }
+    #[cfg(test)]
+    fn expire_jobs_for_test(&self) {
+        // Zero TTL is the fake clock. Never expose this outside `cfg(test)`.
+        if let Ok(mut ttl) = self.test_job_ttl.lock() {
+            *ttl = Duration::ZERO;
+        }
     }
     fn token(&self, kind: &str) -> String {
         let mut hash = Sha256::new();
@@ -265,13 +286,13 @@ impl SliceWorkbench {
             .as_ref()
             .filter(|j| j.id == id && &j.root == root && j.window == window)
             .ok_or_else(not_found)?;
-        if job.created.elapsed() > JOB_TTL {
+        if job.created.elapsed() > self.job_ttl() {
             job.cancelled.store(true, Ordering::Relaxed);
             let mut state = job.state.lock().map_err(|_| internal())?;
             state.ready = None;
             state.proposal = None;
             job.previews.lock().map_err(|_| internal())?.clear();
-            return Err(not_found());
+            return Err(expired());
         }
         Ok(Arc::clone(job))
     }
@@ -324,7 +345,7 @@ impl SliceWorkbench {
             if current.as_ref().is_some_and(|old| {
                 old.window != job.window
                     && !old.cancelled.load(Ordering::Relaxed)
-                    && old.created.elapsed() <= JOB_TTL
+                    && old.created.elapsed() <= self.job_ttl()
             }) {
                 self.busy.store(false, Ordering::Release);
                 return Err(ApiError::new(
@@ -808,6 +829,9 @@ fn not_found() -> ApiError {
         true,
     )
 }
+fn expired() -> ApiError {
+    ApiError::new("ANALYSIS_EXPIRED", "the analysis session has expired", true)
+}
 fn conflict() -> ApiError {
     ApiError::new(
         "DRAFT_CONFLICT",
@@ -848,6 +872,7 @@ mod tests {
     use ot_audio::pcm::{PcmInfo, PcmRegion};
     use ot_catalog::SqliteCatalog;
     use ot_domain::{ContentHash, RootRelativePath};
+    use ot_storage_ports::slice_drafts::SliceDraftCatalog;
     use ot_storage_ports::CatalogRootIdentity;
 
     fn fixture() -> (SliceWorkbench, Arc<Job>, SharedCatalog, tempfile::TempDir) {
@@ -927,6 +952,53 @@ mod tests {
             silence_floor_db: -72,
             snap_radius_us: 0,
         }
+    }
+    fn error_code(error: &ApiError) -> String {
+        serde_json::to_value(error)
+            .expect("serialize ApiError")
+            .get("code")
+            .and_then(|value| value.as_str())
+            .unwrap_or_default()
+            .to_string()
+    }
+    fn catalog_draft_revision(catalog: &SharedCatalog, job: &Job) -> u64 {
+        let binding = job
+            .state
+            .lock()
+            .unwrap()
+            .ready
+            .as_ref()
+            .expect("ready binding")
+            .binding
+            .clone();
+        catalog
+            .lock()
+            .unwrap()
+            .load_slice_draft(&binding)
+            .unwrap()
+            .expect("catalog draft")
+            .revision
+    }
+    fn accept_first_proposal(
+        workbench: &SliceWorkbench,
+        catalog: &SharedCatalog,
+        job: &Job,
+    ) -> SliceDraftDto {
+        let proposal = workbench
+            .propose(catalog, &job.root, "main", &job.id, 0, parameters())
+            .unwrap();
+        workbench
+            .edit(
+                catalog,
+                &job.root,
+                "main",
+                &job.id,
+                0,
+                SliceEditDto::AcceptProposal {
+                    proposal_id: proposal.proposal_id,
+                },
+            )
+            .unwrap()
     }
 
     #[test]
@@ -1164,5 +1236,168 @@ mod tests {
             .markers
             .iter()
             .any(|m| m.marker_id == removed.marker_id));
+    }
+
+    #[test]
+    fn job_ttl_is_fifteen_minutes_and_zero_seam_is_cfg_test_only() {
+        assert_eq!(JOB_TTL, Duration::from_secs(15 * 60));
+        let (workbench, job, _catalog, _directory) = fixture();
+        assert!(workbench.status(&job.root, "main", &job.id).is_ok());
+        workbench.expire_jobs_for_test();
+        assert_eq!(
+            error_code(&workbench.status(&job.root, "main", &job.id).unwrap_err()),
+            "ANALYSIS_EXPIRED"
+        );
+    }
+
+    #[test]
+    fn fresh_proposal_accept_persists_catalog_draft() {
+        let (workbench, job, catalog, _directory) = fixture();
+        let saved = accept_first_proposal(&workbench, &catalog, &job);
+        assert_eq!(saved.revision, 1);
+        assert_eq!(
+            workbench
+                .draft(&catalog, &job.root, "main", &job.id)
+                .unwrap()
+                .revision,
+            1
+        );
+        assert_eq!(catalog_draft_revision(&catalog, &job), 1);
+    }
+
+    #[test]
+    fn job_ttl_expiry_returns_analysis_expired_and_keeps_catalog_draft() {
+        let (workbench, job, catalog, _directory) = fixture();
+        let saved = accept_first_proposal(&workbench, &catalog, &job);
+        assert_eq!(saved.revision, 1);
+        let binding = job
+            .state
+            .lock()
+            .unwrap()
+            .ready
+            .as_ref()
+            .unwrap()
+            .binding
+            .clone();
+        workbench.expire_jobs_for_test();
+        assert_eq!(
+            error_code(
+                &workbench
+                    .edit(&catalog, &job.root, "main", &job.id, 1, SliceEditDto::Undo)
+                    .unwrap_err()
+            ),
+            "ANALYSIS_EXPIRED"
+        );
+        assert_eq!(
+            error_code(
+                &workbench
+                    .propose(&catalog, &job.root, "main", &job.id, 1, parameters())
+                    .unwrap_err()
+            ),
+            "ANALYSIS_EXPIRED"
+        );
+        let stored = catalog
+            .lock()
+            .unwrap()
+            .load_slice_draft(&binding)
+            .unwrap()
+            .expect("catalog draft after TTL");
+        assert_eq!(stored.revision, 1);
+        assert!(!stored.markers.is_empty());
+    }
+
+    #[test]
+    fn cancel_returns_analysis_not_found_and_keeps_catalog_draft() {
+        let (workbench, job, catalog, _directory) = fixture();
+        let saved = accept_first_proposal(&workbench, &catalog, &job);
+        assert_eq!(saved.revision, 1);
+        let binding = job
+            .state
+            .lock()
+            .unwrap()
+            .ready
+            .as_ref()
+            .unwrap()
+            .binding
+            .clone();
+        workbench.cancel(&job.root, "main", &job.id).unwrap();
+        assert_eq!(
+            error_code(
+                &workbench
+                    .edit(&catalog, &job.root, "main", &job.id, 1, SliceEditDto::Undo)
+                    .unwrap_err()
+            ),
+            "ANALYSIS_NOT_FOUND"
+        );
+        let stored = catalog
+            .lock()
+            .unwrap()
+            .load_slice_draft(&binding)
+            .unwrap()
+            .expect("catalog draft after cancel");
+        assert_eq!(stored.revision, 1);
+    }
+
+    #[test]
+    fn replaced_job_id_returns_analysis_not_found_and_keeps_catalog_draft() {
+        let (workbench, job, catalog, _directory) = fixture();
+        let saved = accept_first_proposal(&workbench, &catalog, &job);
+        assert_eq!(saved.revision, 1);
+        let ready = job.state.lock().unwrap().ready.clone();
+        let binding = ready.as_ref().unwrap().binding.clone();
+        let replacement = Arc::new(Job {
+            id: workbench.token("analysis"),
+            root: job.root.clone(),
+            window: job.window.clone(),
+            created: Instant::now(),
+            cancelled: AtomicBool::new(false),
+            proposal_generation: AtomicU64::new(0),
+            state: Mutex::new(JobState {
+                phase: "ready",
+                error: None,
+                ready,
+                proposal: None,
+            }),
+            previews: Mutex::new(HashMap::new()),
+            history: Mutex::new(History::default()),
+        });
+        *workbench.current.lock().unwrap() = Some(replacement);
+        assert_eq!(
+            error_code(
+                &workbench
+                    .edit(&catalog, &job.root, "main", &job.id, 1, SliceEditDto::Undo)
+                    .unwrap_err()
+            ),
+            "ANALYSIS_NOT_FOUND"
+        );
+        let stored = catalog
+            .lock()
+            .unwrap()
+            .load_slice_draft(&binding)
+            .unwrap()
+            .expect("catalog draft after job replace");
+        assert_eq!(stored.revision, 1);
+    }
+
+    #[test]
+    fn expired_preview_token_keeps_analysis_not_found() {
+        let (workbench, job, _, _directory) = fixture();
+        let ticket = workbench
+            .preview(&job.root, "main", &job.id, range("0", "1"))
+            .unwrap();
+        job.previews
+            .lock()
+            .unwrap()
+            .get_mut(&ticket.preview_token)
+            .unwrap()
+            .expires = Instant::now() - Duration::from_secs(1);
+        assert_eq!(
+            error_code(
+                &workbench
+                    .read_preview(&job.root, "main", &job.id, &ticket.preview_token)
+                    .unwrap_err()
+            ),
+            "ANALYSIS_NOT_FOUND"
+        );
     }
 }
