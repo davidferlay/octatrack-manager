@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -111,4 +111,39 @@ test("Case F: launcher --print-child-env does not mutate parent HOME/PATH", () =
   assert.equal(childEnv.CARGO_HOME, join(tmp, ".cargo"));
   assert.equal(childEnv.RUSTUP_HOME, join(tmp, ".rustup"));
   assert.ok(childEnv.PATH.includes(join(tmp, ".cargo", "bin")));
+});
+
+test("prepare script prints code-derived catalog path without bundle-id segment", () => {
+  const prepare = readFileSync(
+    join(ROOT_DIR, "scripts/prepare-ui-workspace-native-acceptance.sh"),
+    "utf8",
+  );
+  assert.match(
+    prepare,
+    /Library\/Application Support\/MasterOCTa\/catalog\.sqlite3/,
+  );
+  assert.doesNotMatch(
+    prepare,
+    /Application Support\/\$\{BUNDLE_ID\}/,
+  );
+  assert.doesNotMatch(
+    prepare,
+    /jp\.d3nousan\.masterocta\/MasterOCTa/,
+  );
+});
+
+test("native acceptance docs launch from current checkout, not historical #136 worktree", () => {
+  const docs = readFileSync(
+    join(ROOT_DIR, "docs/testing/MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md"),
+    "utf8",
+  );
+  const operatorSection = docs.slice(docs.indexOf("## Operator commands (next)"));
+  assert.doesNotMatch(
+    operatorSection,
+    /cd \.worktrees\/ui-workspace-native-acceptance-1/,
+  );
+  assert.match(
+    operatorSection,
+    /Library\/Application Support\/MasterOCTa\/catalog\.sqlite3/,
+  );
 });

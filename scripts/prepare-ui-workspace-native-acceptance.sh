@@ -33,20 +33,22 @@ fi
 echo "fixture_root=${FIXTURE_ROOT}"
 echo "${MANIFEST_JSON}"
 
+# Bundle ID is app identity only; current data_dir() does not insert it as a path segment.
 BUNDLE_ID="jp.d3nousan.masterocta"
-EXPECTED_DATA_DIR="${ISOLATED_HOME}/Library/Application Support/${BUNDLE_ID}"
-EXPECTED_CATALOG="${EXPECTED_DATA_DIR}/MasterOCTa/catalog.sqlite3"
+EXPECTED_CATALOG="${ISOLATED_HOME}/Library/Application Support/MasterOCTa/catalog.sqlite3"
 
 cat <<EOF
 
 Catalog path (code-derived expectation — not proof of runtime isolation):
-  bundle_identifier=${BUNDLE_ID}
-  tauri_data_dir=\${HOME}/Library/Application Support/${BUNDLE_ID}
+  bundle_identifier=${BUNDLE_ID} (app identity; not a catalog path segment)
+  tauri_data_dir=\${HOME}/Library/Application Support
   catalog_sqlite=${EXPECTED_CATALOG}
+  macOS note: /tmp and /private/tmp are the same volume; lsof may show /private/tmp/...
 
 Isolation verification (operator — after register + rescan in isolated session):
   test -f "${EXPECTED_CATALOG}"
   Do not treat HOME= alone as sufficient; confirm catalog appears only under isolated_home above.
+  Isolation proof also needs a live native process handle on that catalog (lsof), not just file existence.
 
 Launch (child process — parent shell HOME/PATH unchanged):
   REAL_HOME="\${REAL_HOME:-\$HOME}" \\
