@@ -152,24 +152,25 @@ impl WaveformCacheV2 {
             .lock()
             .map_err(|_| AudioError::CacheUnavailable("waveform cache lock was poisoned".into()))?;
 
-        let (meta, cache_hit) = if let Some(meta) = load_wfm2_metadata(&cache_path, asset_id)? {
+        let (mut meta, mut cache_hit) = if let Some(meta) =
+            load_wfm2_metadata(&cache_path, asset_id)?
+        {
             (meta, true)
         } else {
             check_cancel()?;
             let pyramid = analyze(&mut source, source_path, asset_id, check_cancel)?;
             write_wfm2(&cache_path, &pyramid)?;
             let meta = load_wfm2_metadata(&cache_path, asset_id)?
-                .expect("wfm2 cache should exist after write");
+                .ok_or_else(|| AudioError::CacheUnavailable("wfm2 cache was not written".into()))?;
             (meta, false)
         };
-        drop(_guard);
 
         let frame_count = meta.frame_count;
         let range = match range {
             Some((start, end_exclusive)) => FrameRange::parse(start, end_exclusive, frame_count)?,
             None => FrameRange::full(frame_count)?,
         };
-        let channel_peaks = aggregate_range_peaks(
+        let channel_peaks = match aggregate_range_peaks(
             &mut source,
             source_path,
             &cache_path,
@@ -177,7 +178,34 @@ impl WaveformCacheV2 {
             &range,
             target_points,
             check_cancel,
-        )?;
+        ) {
+            Ok(peaks) => peaks,
+            Err(AudioError::CacheUnavailable(_)) if cache_hit => {
+                check_cancel()?;
+                let pyramid = analyze(&mut source, source_path, asset_id, check_cancel)?;
+                write_wfm2(&cache_path, &pyramid)?;
+                meta = load_wfm2_metadata(&cache_path, asset_id)?.ok_or_else(|| {
+                    AudioError::CacheUnavailable("wfm2 cache was not rebuilt".into())
+                })?;
+                cache_hit = false;
+                if meta.frame_count != frame_count {
+                    return Err(AudioError::CacheUnavailable(
+                        "rebuilt waveform frame count changed".into(),
+                    ));
+                }
+                aggregate_range_peaks(
+                    &mut source,
+                    source_path,
+                    &cache_path,
+                    &meta,
+                    &range,
+                    target_points,
+                    check_cancel,
+                )?
+            }
+            Err(error) => return Err(error),
+        };
+        drop(_guard);
         let frames_per_peak = range.len().div_ceil(target_points as u64).max(1);
 
         Ok(WaveformQueryResult {
@@ -190,6 +218,35 @@ impl WaveformCacheV2 {
             cache_hit,
         })
     }
+}
+
+fn proportional_bucket_start(bucket_index: usize, range_len: u64, target_points: usize) -> u64 {
+    if bucket_index == 0 {
+        return 0;
+    }
+    let start = (bucket_index as u128)
+        .saturating_mul(u128::from(range_len))
+        .div_ceil(target_points as u128);
+    start.min(u128::from(range_len)) as u64
+}
+
+fn proportional_bucket_bounds(
+    bucket_index: usize,
+    range_len: u64,
+    target_points: usize,
+) -> (u64, u64) {
+    let start = proportional_bucket_start(bucket_index, range_len, target_points);
+    let end = if bucket_index + 1 >= target_points {
+        range_len
+    } else {
+        proportional_bucket_start(bucket_index + 1, range_len, target_points)
+    };
+    (start, end)
+}
+
+fn output_bucket_for_offset(offset: u64, range_len: u64, target_points: usize) -> usize {
+    let bucket = (u128::from(offset) * target_points as u128) / u128::from(range_len);
+    (bucket as usize).min(target_points - 1)
 }
 
 fn select_waveform_level_index(meta: &Wfm2Metadata, frames_per_output_bucket: u64) -> usize {
@@ -269,11 +326,13 @@ where
 
     for bucket_index in 0..target_points {
         check_cancel()?;
-        let bucket_start = range.start + bucket_index as u64 * frames_per_bucket;
-        if bucket_start >= range.end_exclusive {
-            break;
+        let (offset_start, offset_end) =
+            proportional_bucket_bounds(bucket_index, range_len, target_points);
+        if offset_start >= offset_end {
+            continue;
         }
-        let bucket_end = (bucket_start + frames_per_bucket).min(range.end_exclusive);
+        let bucket_start = range.start + offset_start;
+        let bucket_end = range.start + offset_end;
         fill_output_bucket_from_level(
             cache_path,
             meta,
@@ -471,8 +530,7 @@ where
                 && frame_index < range.end_exclusive
             {
                 let offset = frame_index - range.start;
-                let bucket = (offset * target_points as u64 / range_len) as usize;
-                let bucket = bucket.min(target_points - 1);
+                let bucket = output_bucket_for_offset(offset, range_len, target_points);
                 for (channel_index, sample) in frame.iter().enumerate() {
                     if !sample.is_finite() {
                         return Err(AudioError::DecodeFailed(
@@ -652,15 +710,24 @@ mod tests {
     use crate::{create_preview, WaveformCache};
     use sha2::{Digest, Sha256};
     use std::f32::consts::PI;
-    use std::fs;
+    use std::fs::{self, OpenOptions};
+    use std::io::{Seek, SeekFrom, Write};
     use tempfile::TempDir;
 
     fn write_impulse_wav(path: &Path, frames: usize) {
+        write_impulse_at(path, frames, 0);
+    }
+
+    fn write_impulse_at(path: &Path, frames: usize, impulse_frame: usize) {
         let sample_rate = 44_100_u32;
         let channels = 1_u16;
         let mut pcm = Vec::with_capacity(frames * 2);
         for frame in 0..frames {
-            let sample = if frame == 0 { i16::MAX / 2 } else { 0 };
+            let sample = if frame == impulse_frame {
+                i16::MAX / 2
+            } else {
+                0
+            };
             pcm.extend_from_slice(&sample.to_le_bytes());
         }
         fs::write(path, encode_pcm_wav(&pcm, sample_rate, channels)).unwrap();
@@ -758,8 +825,7 @@ mod tests {
             for frame in samples.samples().chunks_exact(decoded_channels) {
                 if frame_index >= range.start && frame_index < range.end_exclusive {
                     let offset = frame_index - range.start;
-                    let bucket = ((offset * target_points as u64 / range_len) as usize)
-                        .min(target_points - 1);
+                    let bucket = output_bucket_for_offset(offset, range_len, target_points);
                     for (channel_index, sample) in frame.iter().enumerate() {
                         let sample = sample.clamp(-1.0, 1.0);
                         let peak = &mut channel_buckets[channel_index][bucket];
@@ -1004,6 +1070,67 @@ mod tests {
             .unwrap();
         assert!(!rebuilt.cache_hit);
         assert!(load_wfm2_metadata(&cache_path, &id).unwrap().is_some());
+    }
+
+    #[test]
+    fn invalid_peak_payload_is_regenerated() {
+        let fixture = TempDir::new().unwrap();
+        let cache = TempDir::new().unwrap();
+        let audio_path = fixture.path().join("tone.wav");
+        write_wav(&audio_path, 8192);
+        let hash = content_hash(&audio_path);
+        let id = asset_id(&hash);
+        let cache = WaveformCacheV2::open(cache.path()).unwrap();
+        let mut cancel = || Ok(());
+        cache
+            .query(&id, &hash, &audio_path, None, 32, &mut cancel)
+            .unwrap();
+        let digest = id.strip_prefix("asset:v1:").unwrap();
+        let cache_path = cache.directory.join(format!("waveform-v2-{digest}.wfm2"));
+        let meta = load_wfm2_metadata(&cache_path, &id).unwrap().unwrap();
+        let mut file = OpenOptions::new().write(true).open(&cache_path).unwrap();
+        file.seek(SeekFrom::Start(meta.levels[0].data_offset))
+            .unwrap();
+        file.write_all(&f32::NAN.to_le_bytes()).unwrap();
+        file.write_all(&1.0_f32.to_le_bytes()).unwrap();
+        drop(file);
+
+        let rebuilt = cache
+            .query(&id, &hash, &audio_path, None, 32, &mut cancel)
+            .unwrap();
+        assert!(!rebuilt.cache_hit);
+        assert!(rebuilt.channel_peaks[0]
+            .iter()
+            .all(|peak| peak.min.is_finite() && peak.max.is_finite()));
+    }
+
+    #[test]
+    fn proportional_buckets_keep_impulse_out_of_adjacent_ceil_bucket() {
+        let fixture = TempDir::new().unwrap();
+        let cache = TempDir::new().unwrap();
+        let frames = 8161_usize;
+        let impulse_frame = 511_usize;
+        let audio_path = fixture.path().join("impulse.wav");
+        write_impulse_at(&audio_path, frames, impulse_frame);
+        let hash = content_hash(&audio_path);
+        let id = asset_id(&hash);
+        let cache = WaveformCacheV2::open(cache.path()).unwrap();
+        let mut cancel = || Ok(());
+        cache
+            .query(&id, &hash, &audio_path, None, 32, &mut cancel)
+            .unwrap();
+        let range = FrameRange::full(frames as u64).unwrap();
+        let window = cache
+            .query(&id, &hash, &audio_path, None, 32, &mut cancel)
+            .unwrap();
+        let direct = direct_range_decode(&audio_path, &hash, 1, &range, 32);
+        assert_eq!(window.channel_peaks, direct);
+        let expected_bucket = output_bucket_for_offset(impulse_frame as u64, frames as u64, 32);
+        assert!(
+            window.channel_peaks[0][expected_bucket].max.abs() > f32::EPSILON
+                || window.channel_peaks[0][expected_bucket].min.abs() > f32::EPSILON
+        );
+        assert!(window.channel_peaks[0][1].max.abs() < f32::EPSILON);
     }
 
     #[test]

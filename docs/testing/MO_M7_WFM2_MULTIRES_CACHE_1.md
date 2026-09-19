@@ -13,8 +13,9 @@ Baseline `origin/main`: `954863063f25bf5315cec289928eff2127fb8ea1` (#144 merge)
 | File | `waveform-v2-{digest}.json` | `waveform-v2-{digest}.wfm2` |
 | Analyzer string | `waveform:v2` | Same |
 | Pyramid | 256 base, scale 4, per-channel | Same semantics; coarser base if 64 MiB exceeded |
-| Query hot path | Full JSON parse + in-memory levels | Header/metadata + on-demand peak reads |
+| Query hot path | Full JSON parse + in-memory levels | Header/table prefix + on-demand peak reads |
 | Zoom residual | PCM `decode_residual_spans` when peaks misaligned | Finer pyramid level first; PCM only at finest level |
+| Output buckets | ceil-width then residual proportional | **Both** use `offset * targetPoints / range_len` |
 
 Legacy `waveform-v2-*.json` files are **not** read or migrated. A missing/invalid WFM2 triggers rebuild from verified source.
 
@@ -33,6 +34,7 @@ Legacy `waveform-v2-*.json` files are **not** read or migrated. A missing/invali
 - `frames_per_bucket = range_len.div_ceil(target_points).max(1)` (integer u64)
 - Choose coarsest level with `frames_per_bucket <= frames_per_output_bucket` (same rule as pre-WFM2)
 - Partial alignment: recurse to finer level; PCM decode only when finest level still has gaps
+- Output bucket frames use the same proportional map as residual PCM: `offset * targetPoints / range_len` (u128 math)
 
 ## Invalidation
 
@@ -40,6 +42,7 @@ Legacy `waveform-v2-*.json` files are **not** read or migrated. A missing/invali
 | --- | --- |
 | Missing WFM2 | Build + atomic write |
 | Truncated / malformed WFM2 | Treat as miss → regen |
+| Structurally valid header but invalid peak payload | Query treats as miss → overwrite + regen |
 | Wrong `asset_id` / analyzer / format version | Miss → regen |
 | Live SHA ≠ catalog | `AUDIO_SOURCE_CHANGED` (no stale peaks) |
 | Symlink cache entry | `UnsafeCachePath` |

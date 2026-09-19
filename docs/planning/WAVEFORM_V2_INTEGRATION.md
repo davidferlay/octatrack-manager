@@ -350,7 +350,7 @@ Legacy write containment（#125/#126）は引き続き有効。公開配布は *
 | IPC / UI | **変更なし**（`v2_audio_waveform_query` DTO、`WaveformPreview` SVG 契約維持） |
 | On-disk cache | **`waveform-v2-{digest}.wfm2`**（binary WFM2 v1）。旧 `waveform-v2-*.json` は読まない・破壊的 migration しない |
 | Analyzer | 応答 `analyzerVersion: "waveform:v2"` のまま |
-| Query engine | Multi-res pyramid + level 選択 + partial peak read。finer level 再帰後にのみ PCM 残差 decode |
+| Query engine | Multi-res pyramid + **header/table のみ load** + 必要 peak の seek。出力 bucket は residual と同じ比例分割。壊れた payload は miss → regen |
 | 未実装 | Canvas、prepare job UI（#104）、descriptor-relative cache |
 
 詳細: [MO_M7_WFM2_MULTIRES_CACHE_1.md](../testing/MO_M7_WFM2_MULTIRES_CACHE_1.md)

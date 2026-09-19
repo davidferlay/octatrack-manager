@@ -180,6 +180,15 @@ pub fn write_wfm2(path: &Path, pyramid: &Wfm2Pyramid) -> Result<(), AudioError> 
     Ok(())
 }
 
+fn max_header_bytes() -> usize {
+    usize::try_from(header_size_for(
+        WFM2_MAX_ASSET_ID_BYTES,
+        WFM2_MAX_ANALYZER_BYTES,
+        WFM2_MAX_LEVELS,
+    ))
+    .unwrap_or(usize::MAX)
+}
+
 pub fn load_wfm2_metadata(path: &Path, asset_id: &str) -> Result<Option<Wfm2Metadata>, AudioError> {
     let metadata = match fs::symlink_metadata(path) {
         Ok(metadata) => metadata,
@@ -191,11 +200,16 @@ pub fn load_wfm2_metadata(path: &Path, asset_id: &str) -> Result<Option<Wfm2Meta
             "cache entry must be a regular file",
         ));
     }
-    if metadata.len() > MAX_CACHE_BYTES {
+    let file_size = metadata.len();
+    if file_size > MAX_CACHE_BYTES {
         return Ok(None);
     }
-    let bytes = fs::read(path).map_err(cache_io)?;
-    let parsed = match parse_wfm2(&bytes) {
+    let prefix_len = (file_size as usize).min(max_header_bytes());
+    let mut prefix = vec![0_u8; prefix_len];
+    File::open(path)
+        .and_then(|mut file| file.read_exact(&mut prefix))
+        .map_err(cache_io)?;
+    let parsed = match parse_wfm2_prefix(&prefix, file_size) {
         Ok(parsed) => parsed,
         Err(_) => return Ok(None),
     };
@@ -360,6 +374,10 @@ fn encode_wfm2(pyramid: &Wfm2Pyramid) -> Result<Vec<u8>, AudioError> {
 }
 
 pub fn parse_wfm2(bytes: &[u8]) -> Result<Wfm2Metadata, AudioError> {
+    parse_wfm2_prefix(bytes, bytes.len() as u64)
+}
+
+pub fn parse_wfm2_prefix(bytes: &[u8], actual_file_size: u64) -> Result<Wfm2Metadata, AudioError> {
     if bytes.len() < 48 {
         return Err(invalid("waveform header is truncated"));
     }
@@ -385,33 +403,27 @@ pub fn parse_wfm2(bytes: &[u8]) -> Result<Wfm2Metadata, AudioError> {
     }
     let asset_id = String::from_utf8(read_bytes(bytes, &mut cursor, asset_id_len)?.to_vec())
         .map_err(|_| invalid("waveform asset id is invalid utf-8"))?;
-    if cursor + 16 > bytes.len() {
-        return Err(invalid("waveform header is truncated"));
-    }
-    let sample_rate = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
-    cursor += 4;
-    let channels = u16::from_le_bytes(bytes[cursor..cursor + 2].try_into().unwrap());
-    cursor += 4;
+    let sample_rate = read_u32(bytes, &mut cursor)?;
+    let channels = read_u16(bytes, &mut cursor)?;
+    let _channels_pad = read_u16(bytes, &mut cursor)?;
+    let frame_count = read_u64(bytes, &mut cursor)?;
     if sample_rate == 0 || channels == 0 || channels > WFM2_MAX_CHANNELS {
         return Err(invalid("waveform channel metadata is invalid"));
     }
-    let frame_count = u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().unwrap());
-    cursor += 8;
     if frame_count == 0 {
         return Err(invalid("waveform frame count is invalid"));
+    }
+    if cursor + 8 > bytes.len() {
+        return Err(invalid("waveform header is truncated"));
     }
     let level_count = bytes[cursor] as usize;
     cursor += 8;
     if level_count == 0 || level_count > WFM2_MAX_LEVELS {
         return Err(invalid("waveform level count is invalid"));
     }
-    if cursor + 16 > bytes.len() {
-        return Err(invalid("waveform header is truncated"));
-    }
-    let base_frames_per_bucket = u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().unwrap());
-    cursor += 8;
-    let level_scale = u32::from_le_bytes(bytes[cursor..cursor + 4].try_into().unwrap());
-    cursor += 8;
+    let base_frames_per_bucket = read_u64(bytes, &mut cursor)?;
+    let level_scale = read_u32(bytes, &mut cursor)?;
+    let _level_scale_pad = read_u32(bytes, &mut cursor)?;
     if base_frames_per_bucket == 0 || level_scale != WFM2_LEVEL_SCALE {
         return Err(invalid("waveform pyramid metadata is invalid"));
     }
@@ -424,14 +436,10 @@ pub fn parse_wfm2(bytes: &[u8]) -> Result<Wfm2Metadata, AudioError> {
     let mut levels = Vec::with_capacity(level_count);
     let mut expected_scale = base_frames_per_bucket;
     for index in 0..level_count {
-        let frames_per_bucket = u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().unwrap());
-        cursor += 8;
-        let bucket_count = u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().unwrap());
-        cursor += 8;
-        let data_offset = u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().unwrap());
-        cursor += 8;
-        let data_size = u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().unwrap());
-        cursor += 8;
+        let frames_per_bucket = read_u64(bytes, &mut cursor)?;
+        let bucket_count = read_u64(bytes, &mut cursor)?;
+        let data_offset = read_u64(bytes, &mut cursor)?;
+        let data_size = read_u64(bytes, &mut cursor)?;
         if frames_per_bucket != expected_scale || bucket_count == 0 {
             return Err(invalid("waveform level scale is invalid"));
         }
@@ -449,7 +457,7 @@ pub fn parse_wfm2(bytes: &[u8]) -> Result<Wfm2Metadata, AudioError> {
         if data_offset
             .checked_add(data_size)
             .ok_or_else(|| invalid("waveform level offset overflowed"))?
-            > bytes.len() as u64
+            > actual_file_size
         {
             return Err(invalid("waveform level offset is out of range"));
         }
@@ -465,8 +473,8 @@ pub fn parse_wfm2(bytes: &[u8]) -> Result<Wfm2Metadata, AudioError> {
                 .ok_or_else(|| invalid("waveform level scale overflowed"))?;
         }
     }
-    let file_size = u64::from_le_bytes(bytes[cursor..cursor + 8].try_into().unwrap());
-    if file_size as usize != bytes.len() {
+    let file_size = read_u64(bytes, &mut cursor)?;
+    if file_size != actual_file_size {
         return Err(invalid("waveform file size mismatch"));
     }
     let meta = Wfm2Metadata {
@@ -554,13 +562,19 @@ fn peak_is_valid(min: f32, max: f32) -> bool {
     min.is_finite() && max.is_finite() && min >= -1.0 && max <= 1.0 && min <= max
 }
 
+fn read_u16(bytes: &[u8], cursor: &mut usize) -> Result<u16, AudioError> {
+    let slice = read_bytes(bytes, cursor, 2)?;
+    Ok(u16::from_le_bytes(slice.try_into().unwrap()))
+}
+
 fn read_u32(bytes: &[u8], cursor: &mut usize) -> Result<u32, AudioError> {
-    if *cursor + 4 > bytes.len() {
-        return Err(invalid("waveform header is truncated"));
-    }
-    let value = u32::from_le_bytes(bytes[*cursor..*cursor + 4].try_into().unwrap());
-    *cursor += 4;
-    Ok(value)
+    let slice = read_bytes(bytes, cursor, 4)?;
+    Ok(u32::from_le_bytes(slice.try_into().unwrap()))
+}
+
+fn read_u64(bytes: &[u8], cursor: &mut usize) -> Result<u64, AudioError> {
+    let slice = read_bytes(bytes, cursor, 8)?;
+    Ok(u64::from_le_bytes(slice.try_into().unwrap()))
 }
 
 fn read_bytes<'a>(bytes: &'a [u8], cursor: &mut usize, len: usize) -> Result<&'a [u8], AudioError> {
@@ -640,6 +654,28 @@ mod tests {
     fn rejects_truncated_header() {
         let bytes = encode_wfm2(&sample_pyramid(128, 1, 64)).unwrap();
         assert!(parse_wfm2(&bytes[..40]).is_err());
+    }
+
+    #[test]
+    fn rejects_truncation_after_frame_count_without_panicking() {
+        let pyramid = sample_pyramid(128, 1, 64);
+        let bytes = encode_wfm2(&pyramid).unwrap();
+        let through_frame_count =
+            8 + 4 + WAVEFORM_V2_ANALYZER_VERSION.len() + 4 + pyramid.asset_id.len() + 4 + 4 + 8;
+        let truncated = &bytes[..through_frame_count];
+        assert!(parse_wfm2(truncated).is_err());
+        assert!(parse_wfm2_prefix(truncated, truncated.len() as u64).is_err());
+    }
+
+    #[test]
+    fn parses_header_prefix_without_payload() {
+        let pyramid = sample_pyramid(4096, 2, 256);
+        let bytes = encode_wfm2(&pyramid).unwrap();
+        let full = parse_wfm2(&bytes).unwrap();
+        let prefix = &bytes[..full.levels[0].data_offset as usize];
+        let from_prefix = parse_wfm2_prefix(prefix, bytes.len() as u64).unwrap();
+        assert_eq!(full, from_prefix);
+        assert!(prefix.len() < bytes.len());
     }
 
     #[test]
