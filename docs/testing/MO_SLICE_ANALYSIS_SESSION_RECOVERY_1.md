@@ -45,32 +45,30 @@ not treat process uptime as job age.
 - `readPreview` `ANALYSIS_NOT_FOUND` does **not** mark the session dead (token
   TTL still shares that code).
 - Play `ANALYSIS_EXPIRED` does mark the session dead (job lookup).
-- Draft / propose / waveform / status ignore stale responses via
-  `generation.current`.
+- Draft / propose / waveform / status / edit ignore stale responses via
+  `generation.current`. A superseded edit's success, failure, and `finally`
+  must not set `editing`/`editBusy` on the new session.
 - Explicit Detect / Analyze again starts a new job under the existing contract
   (revision CAS + analysis ROI). Locale change does not reset the invalid
   session or re-run IPC.
 
 ## Verification SHA
 
-Product: `ef59520f86f76de7db24b415f8a67ba2ac9749e1`
+Review product (current): `3dd8eac05339be543072cd8447e56fc380f78473`
+First product: `ef59520f86f76de7db24b415f8a67ba2ac9749e1`
 Base: `3f916962205b4b13a984ded8e7fd56cb63e438e9` (PR #140 diagnostic head)
 
-## Tests (this SHA)
+## Tests (review SHA)
 
 - `pnpm run typecheck` PASS
-- `pnpm run test:frontend` PASS (81 files / 637 tests)
-- `pnpm run build` PASS
+- `pnpm run test:frontend` PASS (81 files / 639 tests)
 - `pnpm run check:architecture` PASS
 - `cargo fmt --all -- --check` PASS
 - `cargo clippy --workspace --all-targets -- -D warnings` PASS
-- `cargo test --workspace` PASS (lib tests including 11 `slice_workbench` cases)
+- `cargo test --workspace --lib slice_workbench` PASS (12 cases)
 - `pnpm run test:e2e` NOT_RUN (layout Playwright is out of scope)
 - Real Tauri IPC NOT_RUN (running Native process left untouched)
-
-## Tests
-
-See the commit / PR body for the exact cargo / vitest commands and results.
+- `pnpm run build` NOT_RUN on this review SHA (PASS on `ef59520`)
 
 ## Real Tauri IPC
 

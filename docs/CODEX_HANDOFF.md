@@ -321,7 +321,7 @@ Native 受入は PASS にしない）
 
 **記録:** `docs/testing/MO_SLICE_ANALYSIS_SESSION_RECOVERY_1.md`
 **基点:** PR #140 head `3f916962205b4b13a984ded8e7fd56cb63e438e9`
-**製品:** `ef59520f86f76de7db24b415f8a67ba2ac9749e1`
+**製品:** `3dd8eac05339be543072cd8447e56fc380f78473`
 ブランチ `feat/slice-analysis-session-recovery-1`。
 稼働中 Native / VERIFY-FIX-2 worktree / 既存 fixture・catalog・draft には触れない。
 
