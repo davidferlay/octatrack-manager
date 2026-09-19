@@ -69,8 +69,8 @@ Original #141 base: `3f916962205b4b13a984ded8e7fd56cb63e438e9`
 Review product (original): `3dd8eac05339be543072cd8447e56fc380f78473`
 First product (original): `ef59520f86f76de7db24b415f8a67ba2ac9749e1`
 Rescue base: `14b37f506d0538f7eedd3d1dd5ff4091d914cb9a` (#140 on main)
-Rescue head: see rescue docs commit on `feat/slice-analysis-session-recovery-rescue-1`
-Rescue cherry-picks (new SHAs): `a00fa86`, `1051d42`, `7a002a1`, `250df01`, `c5581dc`
+Rescue head: `040070edee1dd8bfc37479107cc260cde57a3860` (Draft PR #142)
+Rescue cherry-picks (new SHAs): `a00fa86`, `1051d42`, `7a002a1`, `250df01`, `c5581dc`, docs `040070e`
 
 ## Tests (rescue branch, local)
 
