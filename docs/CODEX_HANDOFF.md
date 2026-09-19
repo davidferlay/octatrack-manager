@@ -316,8 +316,16 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ### 6.0 現在の次作業（2026-09-19）
 
-**作業ID:** `MO-UI-NARROW-WORKSPACE-VERIFY-FIX-2-FOLLOWUP`（PR #140 Draft。
-document 横はみ出しと Sources 開閉復元は製品修正済み。merge / release しない）
+**作業ID:** `MO-SLICE-ANALYSIS-SESSION-RECOVERY-1`（Draft PR。merge / release しない。
+Native 受入は PASS にしない）
+
+**記録:** `docs/testing/MO_SLICE_ANALYSIS_SESSION_RECOVERY_1.md`
+**基点:** PR #140 head `3f916962205b4b13a984ded8e7fd56cb63e438e9`
+ブランチ `feat/slice-analysis-session-recovery-1`。
+稼働中 Native / VERIFY-FIX-2 worktree / 既存 fixture・catalog・draft には触れない。
+
+**履歴 — MO-UI-NARROW-WORKSPACE-VERIFY-FIX-2-FOLLOWUP:** Draft PR #140。
+document 横はみ出しと Sources 開閉復元は製品修正済み。merge / release しない。
 
 **記録:** `docs/testing/MO_UI_NARROW_WORKSPACE_VERIFY_FIX_2.md`
 **基点 follow-up:** `23b1756`。製品 `3986a92`。検証 `9907d42`。
