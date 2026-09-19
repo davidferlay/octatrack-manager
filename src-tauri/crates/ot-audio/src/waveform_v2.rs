@@ -359,7 +359,8 @@ where
                     )?;
                 }
             }
-            for (channel_index, channel_bucket) in channel_buckets.iter_mut().enumerate().take(channels)
+            for (channel_index, channel_bucket) in
+                channel_buckets.iter_mut().enumerate().take(channels)
             {
                 let peak = read_level_peaks(
                     cache_path,
