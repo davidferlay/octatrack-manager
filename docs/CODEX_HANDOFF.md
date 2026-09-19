@@ -39,8 +39,8 @@ Masta-Octaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 
 **ADR 一覧:** `docs/planning/ADR_INDEX.md`。
 
-GitHub `main` 基準（canonicalization 時点）: `95ca4cbda8fb3846fd41b892f705785b7bc23558`
-（PR #145 merge。WFM2 head `820183b` を含む）。
+GitHub `main` 基準: `6a03deb687fc7d060aad9d75500a50d726f1d243`（PR #146 merge。
+#145 WFM2 `95ca4cb` を含む）。
 
 方針は、現行Octatrack Managerを全面破棄するリライトではない。現行版を解析知識、
 比較対象、移行期間中の利用可能なアプリとして残し、legacy adapter越しに段階的に
@@ -193,7 +193,8 @@ GitHub `main` 基準（canonicalization 時点）: `95ca4cbda8fb3846fd41b892f705
 - M5-C2 rename Mac staging: **完了**
 - M5-C3 rename clone apply / rollback: **#69 マージ済み**（`373a755`）
 - M5-C4 Gate C automated clone-rescan proof: **#70 マージ済み**（`15eef67`）
-- SQLite schema: **v11**（`ot-catalog` `LATEST_SCHEMA_VERSION`。0010 observational trust、0011 projection-trust repair を含む。v6 compatibility evidence はその履歴）
+- SQLite schema: **v12** on `feat/m7-derived-audioasset-1`（`asset_derivations` lineage）。
+  `main` @ #146 は **v11**（0010 observational trust、0011 projection-trust repair）。
 - Developer ID signing / notarization / public distribution は別release gate
 - M5-A contract 正本: `docs/planning/M5_A_SAMPLE_RENAME_IMPACT.md`
 - M5-B contract 正本: `docs/planning/M5_B_REFERENCE_REWRITE.md`
@@ -334,8 +335,9 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 **Canonical milestone source:** `docs/planning/MILESTONE_INDEX.md`
 **Canonical current status:** `docs/planning/DEVELOPMENT_STATUS.md`
 
-**推奨次製品 Work ID（docs 正本化後）:** `MO-M7-DERIVED-AUDIOASSET-1`（M7-06）。詳細は
-DEVELOPMENT_STATUS § Recommended next product Work ID。
+**進行中 Work ID:** `MO-M7-DERIVED-AUDIOASSET-1`（M7-06 lineage foundation、branch
+`feat/m7-derived-audioasset-1`）。正本: [`docs/planning/M7_DERIVED_AUDIOASSET.md`](docs/planning/M7_DERIVED_AUDIOASSET.md)。
+次候補は DEVELOPMENT_STATUS § Recommended next product Work ID。
 
 **M7-05 native:** 統合受入 **PASS**（`main` `0f39f50`、
 `docs/testing/MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md` § post-#142）。

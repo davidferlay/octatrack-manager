@@ -2,7 +2,9 @@
 
 pub mod slice_drafts;
 
-use ot_domain::{ContentHash, LibrarySnapshot, ManualAssetMetadata, RootId, RootRelativePath};
+use ot_domain::{
+    AssetDerivation, ContentHash, LibrarySnapshot, ManualAssetMetadata, RootId, RootRelativePath,
+};
 use std::fmt;
 
 pub trait ProjectStorage {
@@ -135,6 +137,25 @@ pub trait AssetMetadataCatalog {
     ) -> Result<(), CatalogError>;
 }
 
+pub trait AssetDerivationCatalog {
+    fn register_asset_derivation(
+        &mut self,
+        derivation: &AssetDerivation,
+    ) -> Result<(), CatalogError>;
+
+    fn load_asset_derivation(
+        &self,
+        output: &ContentHash,
+    ) -> Result<Option<AssetDerivation>, CatalogError>;
+
+    fn list_derived_children(
+        &self,
+        source: &ContentHash,
+    ) -> Result<Vec<AssetDerivation>, CatalogError>;
+
+    fn list_derivation_edges(&self) -> Result<Vec<(ContentHash, ContentHash)>, CatalogError>;
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CatalogError {
     InvalidRootIdentity,
@@ -146,6 +167,7 @@ pub enum CatalogError {
     UnsupportedSchema { found: u64, supported: u64 },
     Migration { version: u64, message: String },
     Integrity { message: String },
+    Derivation(ot_domain::InvalidDerivation),
     Unavailable { message: String },
 }
 
@@ -174,6 +196,7 @@ impl fmt::Display for CatalogError {
                 write!(formatter, "catalog migration {version} failed: {message}")
             }
             Self::Integrity { message } => write!(formatter, "catalog integrity error: {message}"),
+            Self::Derivation(error) => write!(formatter, "catalog derivation error: {error}"),
             Self::Unavailable { message } => write!(formatter, "catalog unavailable: {message}"),
         }
     }

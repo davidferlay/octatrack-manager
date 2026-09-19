@@ -4006,6 +4006,11 @@ fn catalog_error(error: CatalogError) -> ApiError {
             "the requested audio asset is not present in the catalog",
             true,
         ),
+        CatalogError::Derivation(_) => (
+            "CATALOG_DERIVATION_INVALID",
+            "the requested asset derivation could not be recorded",
+            true,
+        ),
     };
     ApiError::new(code, message, recoverable)
 }
