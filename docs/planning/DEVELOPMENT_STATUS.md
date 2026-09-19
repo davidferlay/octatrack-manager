@@ -89,7 +89,7 @@ Judged by **responsibility**, not exact v0.1 widget names.
 | M7-02 multi-resolution cache (WFM2) | **COMPLETE** | #145 (`820183b`) | CI + `wfm2`/`waveform_v2` tests (see MO_M7_WFM2 doc) | **NOT_RUN** | Fail-closed truncated header; invalid peak regen; warm path uses header/table + seek peak reads; proportional buckets — verified on `main` |
 | M7-03 stereo/channel representation | **COMPLETE** | #124 | Tests | — | Per-channel peaks in v2 query |
 | M7-04 zoom / range / scroll UI | **IN_PROGRESS** | #129, #130 | CI + frontend tests | — | Button zoom/pan/drag range; **Canvas renderer / scroll** not implemented (WAVEFORM_V2 §13.5) |
-| M7-05 transient analysis | **IMPLEMENTED_NOT_FULLY_ACCEPTED** | #102, #131, #141/#142 | Rust/UI tests | Range→slice native **NOT_COMPLETE** (A–D) | Onsets + Library range→analysis; not full v0.1 “non-blocking job” for all analysis |
+| M7-05 transient analysis | **IMPLEMENTED_NOT_FULLY_ACCEPTED** | #102, #131, #141/#142 | Rust/UI tests | Range→slice native **PASS** on `main` `0f39f50` (integrated; see below) | Onsets + Library range→analysis. [`M7_RANGE_TO_SLICE_NATIVE_ACCEPTANCE.md`](../testing/M7_RANGE_TO_SLICE_NATIVE_ACCEPTANCE.md) A–D **NOT_RUN** at #131 head is **superseded** by [`MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md`](../testing/MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md) post-#142. v0.1 “non-blocking job” for all analysis still open |
 | M7-06 derived AudioAsset framework | **PLANNED** | — | — | — | No derived-asset domain on `main` |
 | M7-07 stem separation adapter spike | **PLANNED** | — | — | — | Explicitly out of AUTO-SLICE-1 scope |
 | M7-08 optional stem separation workflow | **PLANNED** | — | — | — | — |
@@ -166,11 +166,31 @@ Aligned with v0.1 §23; stem separation does not precede M7-06 without explicit 
 
 ## Recommended next product Work ID
 
-**Candidate:** `MO-M7-DERIVED-AUDIOASSET-1` (M7-06) **or** complete **`MO-M7-RANGE-TO-SLICE-NATIVE-ACCEPTANCE-1`** operator tranche A–D before new features.
+**Candidate:** `MO-M7-DERIVED-AUDIOASSET-1` (M7-06).
 
-**Reason:** M7-02 merged (#145); v0.1 §23 step 9 emphasizes WF2/range/channel then derived assets; native acceptance debt remains on range→slice.
+**Reason:** M7-02 merged (#145); range→slice native acceptance **PASS** on integrated `main` `0f39f50` (see M7-05 re-audit). Next gap is derived AudioAsset (M7-06) per v0.1 §23.
 
 **Dependencies:** M5 COMPLETE; M7-01–03 and M7-02 on `main`; Gate C boundaries unchanged.
+
+---
+
+## M7-05 native acceptance re-audit (2026-09-20)
+
+| Source | Overall | Scope |
+| --- | --- | --- |
+| [`M7_RANGE_TO_SLICE_NATIVE_ACCEPTANCE.md`](../testing/M7_RANGE_TO_SLICE_NATIVE_ACCEPTANCE.md) | **NOT_COMPLETE** (historical) | #131 head `31ef6ca`; A–D **NOT_RUN** |
+| [`MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md`](../testing/MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md) § post-#142 | **PASS** | `main` `0f39f50`; integrated workspace + slice/range |
+
+**A–D mapping (integrated PASS):**
+
+| ID | Original step | Superseded on `0f39f50`? |
+| --- | --- | --- |
+| A | Range preview Play + Stop | **Yes** — “Preview range” PASS |
+| B | Analyze range; candidates vs attacks | **Yes** — analysis region, 2 candidates / 2 suppressed PASS |
+| C | Apply candidates; draft + SQLite after quit | **Partial** — Apply + draft revision PASS; persistence verified via **file switch**, not documented post-quit `SELECT` |
+| D | Range B → `ANALYSIS_REGION_MISMATCH` | **Yes** — fail-closed mismatch PASS |
+
+**Conclusion:** Treat range→slice **native product acceptance** as **PASS** on integrated `main` at `0f39f50`. Keep `M7_RANGE_TO_SLICE_NATIVE_ACCEPTANCE.md` as historical #131 evidence; do not cite its NOT_COMPLETE as current blocker. Re-run on newer `main` (e.g. post-#145) only if slice/range UI changes.
 
 ---
 

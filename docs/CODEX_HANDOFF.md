@@ -334,9 +334,12 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 **Canonical milestone source:** `docs/planning/MILESTONE_INDEX.md`
 **Canonical current status:** `docs/planning/DEVELOPMENT_STATUS.md`
 
-**推奨次製品 Work ID（docs 正本化後）:** `MO-M7-DERIVED-AUDIOASSET-1`（M7-06）**または**
-未完了の `MO-M7-RANGE-TO-SLICE-NATIVE-ACCEPTANCE-1`（A–D オペレーター）。詳細は
+**推奨次製品 Work ID（docs 正本化後）:** `MO-M7-DERIVED-AUDIOASSET-1`（M7-06）。詳細は
 DEVELOPMENT_STATUS § Recommended next product Work ID。
+
+**M7-05 native:** 統合受入 **PASS**（`main` `0f39f50`、
+`docs/testing/MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md` § post-#142）。
+`M7_RANGE_TO_SLICE_NATIVE_ACCEPTANCE.md` の A–D NOT_RUN は #131 時点の歴史。
 
 **直近 merge 参考:** #145 WFM2、#142 session recovery、#134 Operations Drawer、
 #132–#133 workspace/inspector。open PR なし（2026-09-20 監査）。
@@ -381,10 +384,9 @@ document 横はみ出しと Sources 開閉復元。記録:
 
 **履歴 — M7 range→slice:** `MO-M7-RANGE-TO-SLICE-ANALYSIS-1`（製品 PR。Draft 提出。merge しない）
 
-**Native acceptance (`MO-M7-RANGE-TO-SLICE-NATIVE-ACCEPTANCE-1`):** 記録
-`docs/testing/M7_RANGE_TO_SLICE_NATIVE_ACCEPTANCE.md`（head `31ef6ca`）。
-合成 fixture 生成脚本・隔離 `HOME` 手順・dev 起動 smoke は済。**A–D（picker /
-聴感・draft SQLite）はオペレーター未実施 → 製品受入 NOT_COMPLETE。**
+**Native acceptance (`MO-M7-RANGE-TO-SLICE-NATIVE-ACCEPTANCE-1`):** 歴史記録
+`docs/testing/M7_RANGE_TO_SLICE_NATIVE_ACCEPTANCE.md`（#131 head `31ef6ca`、A–D NOT_RUN）。
+**統合 PASS:** `docs/testing/MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md`（`main` `0f39f50` post-#142、Slice/Range A–D 相当 + recovery）。
 
 ベース: GitHub `main` `4da00644493b79195be7082221a1753082652ec5`（#130 merge）。ブランチ `feat/m7-range-to-slice-analysis-1`。
 

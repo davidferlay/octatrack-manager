@@ -1,5 +1,13 @@
 # M7 Library range → slice native acceptance
 
+> **HISTORICAL / SUPERSEDED (operator A–D on integrated `main`):** This file
+> records the **#131 branch head** (`31ef6ca`) before merge. Operator steps A–D
+> below remain **NOT_RUN** here only. Integrated native **PASS** on GitHub `main`
+> **`0f39f5056c25e996f1e3ff69b7a51ca20b0c45bb`** (post-#142) is documented in
+> [`MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md`](./MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md)
+> § “Real native acceptance on `main` post-#142” (Slice / Range, persistence /
+> mismatch, session recovery). **Current status:** [`../planning/DEVELOPMENT_STATUS.md`](../planning/DEVELOPMENT_STATUS.md).
+
 **Work ID:** `MO-M7-RANGE-TO-SLICE-NATIVE-ACCEPTANCE-1`  
 **Pull Request:** https://github.com/kaz4g/masterocta/pull/131  
 **Application commit (last product code before acceptance artifacts):**
