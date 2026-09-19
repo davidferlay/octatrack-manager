@@ -536,4 +536,74 @@ describe("attack slicing workbench", () => {
     expect(vi.mocked(api.draft).mock.calls.length).toBe(draftCalls);
     expect(vi.mocked(api.propose).mock.calls.length).toBe(proposeCalls);
   });
+
+  it("ignores a late edit success after a new analysis session starts", async () => {
+    const api = client();
+    let finishEdit!: (value: SliceDraft) => void;
+    vi.mocked(api.start)
+      .mockResolvedValueOnce(ready)
+      .mockResolvedValueOnce({ ...ready, jobId: "job-2" });
+    vi.mocked(api.edit).mockImplementationOnce(
+      () => new Promise((resolve) => { finishEdit = resolve; }),
+    );
+    mount(api);
+    await detect();
+    fireEvent.click(screen.getByRole("button", { name: tJa("slicing.applyCandidates") }));
+    await waitFor(() => expect(api.edit).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: tJa("slicing.analyzeAgain") }));
+    await waitFor(() => expect(
+      screen.getByRole("button", { name: tJa("slicing.applyCandidates") }),
+    ).toBeEnabled());
+    finishEdit({
+      ...empty,
+      revision: 9,
+      canUndo: true,
+      markers: [{
+        markerId: "stale",
+        startFrame: "1234",
+        endExclusive: "44100",
+        manual: false,
+        locked: false,
+      }],
+    });
+    await Promise.resolve();
+    expect(screen.queryByDisplayValue("1234")).not.toBeInTheDocument();
+    expect(screen.queryByText(/revision 9/)).not.toBeInTheDocument();
+    expect(screen.queryByText(tJa("slicing.reanalyzeRequired"))).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: tJa("slicing.applyCandidates") })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: tJa("slicing.applyCandidates") }));
+    await waitFor(() => expect(api.edit).toHaveBeenCalledWith(
+      "root-1",
+      "job-2",
+      0,
+      { kind: "acceptProposal", proposalId: "proposal-1" },
+    ));
+  });
+
+  it("ignores a late edit failure after a new analysis session starts", async () => {
+    const api = client();
+    let rejectEdit!: (error: unknown) => void;
+    vi.mocked(api.start)
+      .mockResolvedValueOnce(ready)
+      .mockResolvedValueOnce({ ...ready, jobId: "job-2" });
+    vi.mocked(api.edit).mockImplementationOnce(
+      () => new Promise((_resolve, reject) => { rejectEdit = reject; }),
+    );
+    mount(api);
+    await detect();
+    fireEvent.click(screen.getByRole("button", { name: tJa("slicing.applyCandidates") }));
+    await waitFor(() => expect(api.edit).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: tJa("slicing.analyzeAgain") }));
+    await waitFor(() => expect(
+      screen.getByRole("button", { name: tJa("slicing.applyCandidates") }),
+    ).toBeEnabled());
+    rejectEdit({
+      code: "ANALYSIS_NOT_FOUND",
+      message: "analysis or preview is unavailable",
+    });
+    await Promise.resolve();
+    expect(screen.queryByText(tJa("slicing.reanalyzeRequired"))).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: tJa("slicing.applyCandidates") })).toBeEnabled();
+    expect(screen.getByText(tJa("slicing.draftSummary", { count: 0, revision: 0 }))).toBeInTheDocument();
+  });
 });

@@ -24,7 +24,7 @@ pub struct SliceWorkbench {
     busy: AtomicBool,
     nonce: [u8; 32],
     counter: AtomicU64,
-    /// Test-only clock: production always uses `JOB_TTL`. Never wait real wall time.
+    /// Test-only clock. Compiled out of production; `job()` always uses `JOB_TTL`.
     #[cfg(test)]
     test_job_ttl: Mutex<Duration>,
 }
@@ -269,6 +269,7 @@ impl SliceWorkbench {
     }
     #[cfg(test)]
     fn expire_jobs_for_test(&self) {
+        // Zero TTL is the fake clock. Never expose this outside `cfg(test)`.
         if let Ok(mut ttl) = self.test_job_ttl.lock() {
             *ttl = Duration::ZERO;
         }
@@ -1235,6 +1236,18 @@ mod tests {
             .markers
             .iter()
             .any(|m| m.marker_id == removed.marker_id));
+    }
+
+    #[test]
+    fn job_ttl_is_fifteen_minutes_and_zero_seam_is_cfg_test_only() {
+        assert_eq!(JOB_TTL, Duration::from_secs(15 * 60));
+        let (workbench, job, _catalog, _directory) = fixture();
+        assert!(workbench.status(&job.root, "main", &job.id).is_ok());
+        workbench.expire_jobs_for_test();
+        assert_eq!(
+            error_code(&workbench.status(&job.root, "main", &job.id).unwrap_err()),
+            "ANALYSIS_EXPIRED"
+        );
     }
 
     #[test]

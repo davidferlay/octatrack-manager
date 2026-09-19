@@ -116,6 +116,9 @@ function SliceSession({
     setError(null);
     setAnalysisSessionInvalid(false);
     const epoch = ++generation.current;
+    editBusy.current = false;
+    setEditing(false);
+    setProposing(false);
     stop();
     onRequestStopLibraryPlayback?.();
     setStarting(true);
@@ -173,6 +176,8 @@ function SliceSession({
     stop();
     const id = jobId.current;
     jobId.current = null;
+    editBusy.current = false;
+    setEditing(false);
     setAnalysisSessionInvalid(false);
     setJob(null); setDraft(null); setProposal(null); setView(null); setStarting(false);
     if (id) {
@@ -283,7 +288,12 @@ function SliceSession({
           } catch { /* Keep the conflict visible; re-analysis remains available. */ }
         }
       }
-    } finally { editBusy.current = false; if (alive.current && epoch === generation.current) setEditing(false); }
+    } finally {
+      if (epoch === generation.current) {
+        editBusy.current = false;
+        if (alive.current) setEditing(false);
+      }
+    }
   }
 
   async function play(range: SliceRange) {
@@ -295,7 +305,18 @@ function SliceSession({
       context.current ??= new AudioContext();
       await context.current.resume();
       const ticket = await api.preview(rootId, readyId, range);
-      const bytes = await api.readPreview(rootId, readyId, ticket.previewToken);
+      let bytes: Awaited<ReturnType<SliceApi["readPreview"]>>;
+      try {
+        bytes = await api.readPreview(rootId, readyId, ticket.previewToken);
+      } catch (e) {
+        if (alive.current && epoch === playGeneration.current) {
+          const normalized = normalizeSliceError(e);
+          // Token missing/expiry uses ANALYSIS_NOT_FOUND; do not kill the analysis session.
+          if (normalized.code === "ANALYSIS_EXPIRED") noteCommandError(e);
+          else setError(normalized);
+        }
+        return;
+      }
       if (!alive.current || epoch !== playGeneration.current) return;
       const channels = previewChannels(ticket, bytes);
       const buffer = context.current.createBuffer(ticket.channels, channels[0].length, ticket.sampleRate);
@@ -416,12 +437,12 @@ function SliceSession({
       <div className="slice-actions">
         <button
           type="button"
-          disabled={busy || editing || librarySelectionRange === null}
+          disabled={busy || librarySelectionRange === null}
           onClick={() => void analyzeSelectedLibraryRange()}
         >
           {t("slicing.analyzeSelectedRange")}
         </button>
-        <button disabled={busy || editing} onClick={() => void analyze()}>
+        <button disabled={busy} onClick={() => void analyze()}>
           {busy ? t("slicing.analyzing") : readyId ? t("slicing.analyzeAgain") : t("slicing.detectAttacks")}
         </button>
         {(busy || readyId) && (
