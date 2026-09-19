@@ -136,3 +136,5 @@ test("CLI generation exits non-zero when RANGE path missing for verify script", 
   });
   assert.notEqual(missing.status, 0);
 });
+
+await import("./launch-native-acceptance-tauri.test.mjs");
