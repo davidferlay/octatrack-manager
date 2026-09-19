@@ -1,6 +1,6 @@
 # Codex引継ぎ — MasterOCTa
 
-更新日: 2026-09-14
+更新日: 2026-09-20
 
 ## 1. 目的
 
@@ -28,8 +28,19 @@ Masta-Octaは既存OSSのOctatrack Managerを素体に、macOSでマウントし
 
 ## 1.1 次世代設計の正本
 
-新規機能と段階移行のアーキテクチャは
+新規機能と段階移行の**安全アーキテクチャ原則**は
 `docs/NEXT_GENERATION_ARCHITECTURE.md`を正本とする。
+
+**製品 milestone 番号（M5–M11）の唯一の正本:**
+`docs/planning/MILESTONE_INDEX.md`（根拠: `docs/planning/sources/MASTA_OCTA_OCTA_NODE_IMPLEMENTATION_PLAN_v0.1.md`）。
+
+**現在地（実装・merge・受入の分離）:**
+`docs/planning/DEVELOPMENT_STATUS.md`。
+
+**ADR 一覧:** `docs/planning/ADR_INDEX.md`。
+
+GitHub `main` 基準（canonicalization 時点）: `95ca4cbda8fb3846fd41b892f705785b7bc23558`
+（PR #145 merge。WFM2 head `820183b` を含む）。
 
 方針は、現行Octatrack Managerを全面破棄するリライトではない。現行版を解析知識、
 比較対象、移行期間中の利用可能なアプリとして残し、legacy adapter越しに段階的に
@@ -314,15 +325,29 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 
 ## 6. 次のCodex作業
 
-### 6.0 現在の次作業（2026-09-19）
+### 6.0 現在の次作業（2026-09-20）
 
-**作業ID:** `MO-NATIVE-ACCEPTANCE-HARNESS-DOCS-FIX-1`（acceptance launcher + docs のみ。
-Draft PR。merge / release しない。製品コード変更なし）
+**M5:** **COMPLETE**（rename / reference-safe）。**Gate C:** **PASS**（personal / local）。
+**M6:** **IN_PROGRESS**（[`DEVELOPMENT_STATUS.md`](planning/DEVELOPMENT_STATUS.md)）。
+**M7:** **IN_PROGRESS**。**M7-02 WFM2:** **COMPLETE** on `main`（#145 merge、`820183b`）。
 
-**記録:** `docs/testing/MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md`（Real native acceptance on `main` post-#142）
-**基点:** `main` `0f39f5056c25e996f1e3ff69b7a51ca20b0c45bb`（#142 merge）
-**Native 製品受入:** **PASS**（同上ドキュメント。本 PR は harness 再現性の修正のみ）
-稼働中 Native / 既存 worktree / fixture・catalog・draft には触れない。
+**Canonical milestone source:** `docs/planning/MILESTONE_INDEX.md`
+**Canonical current status:** `docs/planning/DEVELOPMENT_STATUS.md`
+
+**推奨次製品 Work ID（docs 正本化後）:** `MO-M7-DERIVED-AUDIOASSET-1`（M7-06）**または**
+未完了の `MO-M7-RANGE-TO-SLICE-NATIVE-ACCEPTANCE-1`（A–D オペレーター）。詳細は
+DEVELOPMENT_STATUS § Recommended next product Work ID。
+
+**直近 merge 参考:** #145 WFM2、#142 session recovery、#134 Operations Drawer、
+#132–#133 workspace/inspector。open PR なし（2026-09-20 監査）。
+
+公開配布・RC8 再ビルド・#103/#104/#105 再開 — **禁止**（従来どおり）。
+
+**履歴 — MO-DEVELOPMENT-PLAN-CANONICALIZATION-1:** docs-only milestone/status 正本化
+（branch `docs/development-plan-canonicalization-1`）。
+
+**履歴 — MO-NATIVE-ACCEPTANCE-HARNESS-DOCS-FIX-1:** **MERGED** #143/#144。
+**記録:** `docs/testing/MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md`（post-#142 native PASS）。
 
 **履歴 — MO-SLICE-ANALYSIS-SESSION-RECOVERY-RESCUE-1:** **MERGED** #142（`0f39f50`）。
 記録: `docs/testing/MO_SLICE_ANALYSIS_SESSION_RECOVERY_1.md` §Rescue onto main
@@ -367,7 +392,8 @@ Library の **確定幾何範囲**（試聴上限と分離）を Attack slicing 
 
 **#130 zoom/range:** **MERGED**。**#128 i18n** / **#127 range preview** / **#129 pane resolution:** main 取り込み済み。
 
-**次作業（製品 PR）:** WFM2 / Canvas、`OperationsDialog`、Slice 残 UI 翻訳、#105 Auto Slice 残機能。#103 / #104 / #105 は reopen しない。
+**履歴 — 旧次作業メモ（2026-09-15 以前）:** WFM2 は **#145 MERGED**。残: Canvas、
+M7-06 derived AudioAsset、Slice native 受入、#105 計画の AS-N（reopen しない）。
 
 **履歴 — RC8 closeout docs:** `MO-RC8-GATE-C-M5-CLOSEOUT-DOCS-1`（docs 記録。試験は追加しない）
 

@@ -1,8 +1,8 @@
 # Waveform v2 統合設計
 
 - Work ID: `MO-WAVEFORM-V2-INTEGRATION-DESIGN-1`
-- Status: Design complete (docs-only)
-- Date: 2026-09-12
+- Status: Design complete (docs-only); **implementation status:** [`DEVELOPMENT_STATUS.md`](./DEVELOPMENT_STATUS.md), [`MILESTONE_INDEX.md`](./MILESTONE_INDEX.md)
+- Date: 2026-09-12 (design); status sync 2026-09-20
 - Audience: M7 Waveform v2 実装 PR 着手前
 
 ## 1. 目的
@@ -244,7 +244,7 @@ SliceWorkbench の job 状態 UI と **混在させない**。
 | 0 | **#122 MERGED** | M6 Library layout — **完了** |
 | 1 | **本設計の次 PR** | Library `v2_audio_waveform_query` + Inspector v2 表示 + 契約テスト |
 | 2 | ranged preview token | `v2_audio_preview_range_create` — **MO-M7-LIBRARY-RANGE-PREVIEW-1（Draft PR）** |
-| 3 | cache 最適化 | WFM2 / multi-res pyramid（#104 エンジン、u64 string） |
+| 3 | cache 最適化 | **#145 MERGED** — WFM2 / multi-res pyramid（`MO-M7-WFM2-MULTIRES-CACHE-1`） |
 | 4 | zoom / pan / drag selection | **MO-M7-WAVEFORM-ZOOM-RANGE-SELECT-1**（ボタン zoom/pan、波形ドラッグ選択） |
 | 5+ | #105 AS-N* | WF2 安定後 |
 
@@ -301,7 +301,8 @@ Inspector で選択中サンプルについて、**フレーム address 可能�
 | Preview | **v1 先頭 60s** のまま（ranged preview は PR-2） |
 | キャンセル | Library 専用 generation（**spawn 前** `fetch_add`）+ frontend request id |
 
-**未実装（QUERY PR 外）:** ranged preview token、WFM2、zoom / Canvas、descriptor-relative cache。
+**未実装（QUERY PR 当時）:** ranged preview token、WFM2、zoom / Canvas、descriptor-relative cache。
+**2026-09-20 更新:** range preview **#127**、pane **#129**、zoom/range **#130**、WFM2 **#145** は main 済。Canvas / descriptor-relative cache は未。
 
 ### 13.3 MO-M7-LIBRARY-RANGE-PREVIEW-1（PR-2 到達点）
 
@@ -314,7 +315,7 @@ Inspector で選択中サンプルについて、**フレーム address 可能�
 | Range 応答 | `sampleRate` + 確定 `range`（decimal string）。`truncated` は常に `false` |
 | Read 再検証 | live root + catalog identity + **ファイル SHA256**（`verify_source_unchanged`）。不一致時 token 破棄 |
 | UI | Inspector: 開始/終了フレーム、`Play selected range` / `Stop`。先頭 60s `Load preview` は維持 |
-| 未実装 | WFM2、Canvas/zoom、descriptor-relative cache、媒体 write |
+| 未実装 | Canvas、descriptor-relative cache、媒体 write（WFM2 **#145 済**） |
 
 Legacy write containment（#125/#126）は引き続き有効。公開配布は **NOT AUTHORIZED**。
 
@@ -327,7 +328,7 @@ Legacy write containment（#125/#126）は引き続き有効。公開配布は *
 | 抑制 | 150ms debounce。同一 `rootId` / `assetId` / `range: null` / `targetPoints` では再 IPC しない |
 | stale | 既存 `waveformRequest` + 応答時 `targetPoints` 照合。解像度再取得中も peaks を空にしない |
 | 状態 | リサイズ・locale 切替で区間フレーム入力・Play/Stop・Library 選択をリセットしない |
-| 未実装 | zoom / pan / Canvas、WFM2、波形 range 再クエリ |
+| 未実装 | Canvas（zoom/pan/range query **#130 済**；WFM2 **#145 済**） |
 
 ### 13.5 MO-M7-WAVEFORM-ZOOM-RANGE-SELECT-1
 
@@ -357,7 +358,7 @@ Legacy write containment（#125/#126）は引き続き有効。公開配布は *
 
 ### 13.2 後続でよい
 
-- WFM2 prepare / async job UI（#104 `WaveformPreparation`）。
+- WFM2 on-disk cache **#145 済**。prepare / async job UI（#104 `WaveformPreparation`）は未。
 - Zoom / scroll / Canvas（#104）。
 - ADR-015 本文（Performance System は main 未収録 — ローカル草案のみ参照可）。
 - Mac 実サンプル視覚 QA、大規模 library 性能計測。

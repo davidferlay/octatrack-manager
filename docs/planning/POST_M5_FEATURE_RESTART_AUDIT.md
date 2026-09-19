@@ -1,5 +1,11 @@
 # Post-M5 Feature Restart Audit
 
+> **HISTORICAL:** Investigation snapshot at GitHub `main` `456db35` (2026-09-12).
+> Current milestone numbers and status:
+> [`MILESTONE_INDEX.md`](./MILESTONE_INDEX.md),
+> [`DEVELOPMENT_STATUS.md`](./DEVELOPMENT_STATUS.md). Do not treat §2.2 “gap” as
+> current — v0.1 plan is ingested under `planning/sources/`.
+
 - Work ID: `MO-POST-M5-FEATURE-RESTART-AUDIT-1`
 - Status: Investigation complete (read-only)
 - Date: 2026-09-12

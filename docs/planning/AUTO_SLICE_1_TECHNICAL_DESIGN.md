@@ -31,7 +31,7 @@ Rustの既存 `ot-audio` を拡張し、元音声のPCMから複数帯域のspec
 | カタログ | `sample_settings` と `sample_slices` はスキャン結果 | ユーザードラフトを別テーブルに保持。rescanで消さない |
 | codec | 新 `ot-codec` はProject参照PATHの部分書換え等が中心 | `.ot` lossless writerは追加設計・fixture検証が必要 |
 | 読取adapter | `.ot` は `SampleSettingsFile`、slot markersは `MarkersFile` から読む | 読めることを安全に再保存できる証明にしない |
-| ロードマップ | `NEXT_GENERATION_ARCHITECTURE.md` ではM6=Portable Project、M7=Slice/Chain | 自動スライスはM7の独立作業線として設計。M6へ無断で取り込まない |
+| ロードマップ | 製品 milestone 番号は [`MILESTONE_INDEX.md`](./MILESTONE_INDEX.md)（旧 NEXT_GEN M7=Slice/Chain は legacy） | 自動スライスは M7-05 / M11 関連。M6 へ無断で取り込まない |
 
 `CODEX_HANDOFF.md` 内の現状SHA表記は調査時mainより古い。マイルストーンの意味・境界として参照し、最新mainの証拠と混同しない。Gate Cの現時点PASS/FAILは今回の調査対象にしていない。
 

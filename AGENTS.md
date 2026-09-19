@@ -12,18 +12,19 @@ User-facing display name is **Masta-Octa**. Internal compatibility IDs remain
 Application Support directory, schemas, journals, backup IDs).
 
 Read `docs/CODEX_HANDOFF.md` before planning or implementing work.
+**Canonical milestone numbers:** `docs/planning/MILESTONE_INDEX.md`.
+**Canonical current status:** `docs/planning/DEVELOPMENT_STATUS.md`.
+**ADR index:** `docs/planning/ADR_INDEX.md`.
 For UI copy and locales, read `docs/I18N.md` and add ja/en keys together.
-For new architecture, API boundaries, data ownership, and migration order, also
-read `docs/NEXT_GENERATION_ARCHITECTURE.md`. New code must not bypass its
-Intent -> Plan -> Apply write boundary.
+For architecture principles (Intent → Plan → Apply, RootRegistry, gates), read
+`docs/NEXT_GENERATION_ARCHITECTURE.md`. New code must not bypass its write boundary.
 Current M5 status is **COMPLETE** (rename / reference-safe) on RC8. Gate C is
 **PASS** (personal / local). Public distribution remains **NOT AUTHORIZED**. Read
 `docs/testing/GATE_C_RC_LEDGER.md` §RC8. Do not rebuild or redispatch RC8. RC7
 Prepare STOP boundaries remain in
 `docs/testing/GATE_C_RC7_PREPARE_ARTIFACT.md`.
-Post-M5 Waveform v2 integration design:
-`docs/planning/WAVEFORM_V2_INTEGRATION.md` (M6 layout #122 merged; WF2 not yet
-implemented). Do not reopen closed PRs #103–#105.
+Post-M5 Waveform v2: `docs/planning/WAVEFORM_V2_INTEGRATION.md` (M6 #122; M7 WF2
+query/range/zoom on main; **WFM2 cache #145 MERGED**). Do not reopen #103–#105.
 
 ## Non-negotiable data-safety rules
 
