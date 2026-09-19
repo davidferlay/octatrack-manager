@@ -188,10 +188,13 @@ Pre-`0f39f50` rows remain **NOT_RUN** in the FIX-1 pass; superseded by the table
 
 ## Operator commands (next)
 
+Run from the **current** checkout that contains this harness (`main` after #142, or this PR worktree). Do **not** `cd` into `.worktrees/ui-workspace-native-acceptance-1` (historical PR #136 / `e1e586f`).
+
 ```bash
-cd .worktrees/ui-workspace-native-acceptance-1
 bash scripts/prepare-ui-workspace-native-acceptance.sh
-# Use printed isolated_home and fixture_root; confirm range_sha256_ok line.
+# Use printed isolated_home and fixture_root; confirm range_sha256_ok line
+# and catalog_sqlite=.../Library/Application Support/MasterOCTa/catalog.sqlite3
+# (no jp.d3nousan.masterocta path segment).
 
 REAL_HOME="${REAL_HOME:-$HOME}" \
   ./scripts/launch-native-acceptance-tauri.sh "<isolated_home>" "$(pwd)"
@@ -221,7 +224,7 @@ No UI product defects found in FIX-1 scope; changes are fixture safety, verifica
 
 | Issue | Root cause | Fix |
 | --- | --- | --- |
-| Catalog path docs | Stale bundle-id Application Support segment | Align with `data_dir()` + `catalog_runtime` and 2026-09-19 `lsof` observation |
+| Catalog path docs + prepare script | Stale bundle-id Application Support segment in docs and `prepare-ui-workspace-native-acceptance.sh` | Align printed/tested path with `data_dir()` + `catalog_runtime` and 2026-09-19 `lsof` observation |
 | Launcher `cargo metadata` failure | `command -v cargo` only when cargo absent from parent PATH; `bash -lc` + `pnpm run tauri:dev` used isolated `$HOME` for cargo path | Resolve cargo from real toolchain homes; `bash -c` + `pnpm exec tauri dev` |
 
 ## Next
