@@ -10,7 +10,7 @@ import { formatPreviewFrameTimeSeconds } from "../waveform/frameMath";
 import type { LibraryCommittedGeometryRange } from "../waveform/WaveformPreview";
 import { frame, frameAt, inRange, position, previewChannels } from "./frames";
 import { SliceErrorAlert } from "./SliceErrorAlert";
-import { normalizeSliceError, type SliceErrorState } from "./sliceErrors";
+import { isAnalysisSessionInvalid, normalizeSliceError, type SliceErrorState } from "./sliceErrors";
 import "./SliceWorkbench.css";
 
 export type SliceWorkbenchLayout = "compact" | "expanded";
@@ -74,6 +74,7 @@ function SliceSession({
   const dragRef = useRef<typeof drag>(null);
   const [playing, setPlaying] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [analysisSessionInvalid, setAnalysisSessionInvalid] = useState(false);
   const alive = useRef(true);
   const generation = useRef(0);
   const jobId = useRef<string | null>(null);
@@ -100,9 +101,20 @@ function SliceSession({
     };
   }, [api, rootId]);
 
+  function noteCommandError(error: unknown, options: { session?: boolean } = {}) {
+    const normalized = normalizeSliceError(error);
+    if (options.session !== false && isAnalysisSessionInvalid(normalized)) {
+      setProposal(null);
+      setAnalysisSessionInvalid(true);
+      setProposing(false);
+    }
+    setError(normalized);
+  }
+
   async function startAnalysis(region?: SliceRange) {
     if (starting) return;
     setError(null);
+    setAnalysisSessionInvalid(false);
     const epoch = ++generation.current;
     stop();
     onRequestStopLibraryPlayback?.();
@@ -161,6 +173,7 @@ function SliceSession({
     stop();
     const id = jobId.current;
     jobId.current = null;
+    setAnalysisSessionInvalid(false);
     setJob(null); setDraft(null); setProposal(null); setView(null); setStarting(false);
     if (id) {
       try { await api.cancel(rootId, id); }
@@ -186,13 +199,14 @@ function SliceSession({
 
   useEffect(() => {
     if (!job || !["reading", "analyzing"].includes(job.phase)) return;
+    const epoch = generation.current;
     let active = true;
     const timer = window.setTimeout(() => {
       api.status(rootId, job.jobId).then(
-        next => { if (active) setJob(next); },
+        next => { if (active && epoch === generation.current) setJob(next); },
         e => {
-          if (!active) return;
-          setError(normalizeSliceError(e));
+          if (!active || epoch !== generation.current) return;
+          noteCommandError(e);
           setJob({ ...job, phase: "failed" });
         },
       );
@@ -201,40 +215,53 @@ function SliceSession({
   }, [api, job, rootId]);
 
   useEffect(() => {
-    if (!readyId) return;
+    if (!readyId || analysisSessionInvalid) return;
+    const epoch = generation.current;
     let active = true;
     api.draft(rootId, readyId).then(next => {
-      if (active) { setDraft(next); setView(next.region); setInsertFrame(next.region.startFrame); }
-    }, e => { if (active) setError(normalizeSliceError(e)); });
+      if (active && epoch === generation.current) {
+        setDraft(next); setView(next.region); setInsertFrame(next.region.startFrame);
+      }
+    }, e => { if (active && epoch === generation.current) noteCommandError(e); });
     return () => { active = false; };
-  }, [api, readyId, rootId]);
+  }, [api, readyId, rootId, analysisSessionInvalid]);
 
   useEffect(() => {
-    if (!readyId || !draft) return;
+    if (!readyId || !draft || analysisSessionInvalid) return;
+    const epoch = generation.current;
     let active = true;
     setProposal(null); setProposing(true);
     const timer = window.setTimeout(() => {
       api.propose(rootId, readyId, draft.revision, parameters).then(
-        next => { if (active) { setProposal(next); setProposing(false); } },
-        e => { if (active) { setError(normalizeSliceError(e)); setProposing(false); } },
+        next => {
+          if (active && epoch === generation.current) {
+            setProposal(next); setProposing(false);
+          }
+        },
+        e => {
+          if (active && epoch === generation.current) {
+            noteCommandError(e); setProposing(false);
+          }
+        },
       );
     }, 180);
     return () => { active = false; window.clearTimeout(timer); };
-  }, [api, draft, parameters, readyId, rootId]);
+  }, [api, draft, parameters, readyId, rootId, analysisSessionInvalid]);
 
   useEffect(() => {
-    if (!readyId || !view) return;
+    if (!readyId || !view || analysisSessionInvalid) return;
+    const epoch = generation.current;
     let active = true;
     setWaveform(null);
     api.waveform(rootId, readyId, view, WIDTH).then(
-      next => { if (active) setWaveform(next); },
-      e => { if (active) setError(normalizeSliceError(e)); },
+      next => { if (active && epoch === generation.current) setWaveform(next); },
+      e => { if (active && epoch === generation.current) noteCommandError(e); },
     );
     return () => { active = false; };
-  }, [api, readyId, rootId, view]);
+  }, [api, readyId, rootId, view, analysisSessionInvalid]);
 
   async function edit(input: SliceEdit) {
-    if (!readyId || !draft || editBusy.current) return;
+    if (!readyId || !draft || editBusy.current || analysisSessionInvalid) return;
     const epoch = generation.current;
     editBusy.current = true; setEditing(true); setError(null); stop();
     try {
@@ -245,9 +272,11 @@ function SliceSession({
       }
     } catch (e) {
       if (alive.current && epoch === generation.current) {
-        setError(normalizeSliceError(e));
+        const normalized = normalizeSliceError(e);
+        noteCommandError(e);
         // A conflict always reloads authoritative data; never retry the mutation.
-        if (typeof e === "object" && e !== null && "code" in e && e.code === "DRAFT_CONFLICT") {
+        // Session-invalid responses must not overwrite the in-memory draft.
+        if (normalized.code === "DRAFT_CONFLICT") {
           try {
             const latest = await api.draft(rootId, readyId);
             if (alive.current && epoch === generation.current) setDraft(latest);
@@ -279,11 +308,17 @@ function SliceSession({
       source.start(context.current.currentTime, 0, buffer.duration);
       setPlaying(true);
     } catch (e) {
-      if (alive.current && epoch === playGeneration.current) setError(normalizeSliceError(e));
+      if (alive.current && epoch === playGeneration.current) {
+        const normalized = normalizeSliceError(e);
+        // Preview-token NOT_FOUND shares ANALYSIS_NOT_FOUND; do not kill the session.
+        if (normalized.code === "ANALYSIS_EXPIRED") noteCommandError(e);
+        else setError(normalized);
+      }
     }
     finally { if (alive.current && epoch === playGeneration.current) setPreviewing(false); }
   }
   function changeParameter(key: keyof OnsetParameters, value: number) {
+    if (analysisSessionInvalid) return;
     setProposal(null);
     setParameters(p => ({ ...p, [key]: value }));
   }
@@ -316,6 +351,7 @@ function SliceSession({
     }
   }
   const busy = starting || job?.phase === "reading" || job?.phase === "analyzing";
+  const mutationDisabled = editing || analysisSessionInvalid;
   const selectedMarker = draft?.markers.find(m => m.markerId === selected);
   const warnings = proposal?.candidates.filter(c => c.warnings.length > 0) ?? [];
   const analysisRegion = job?.region ?? draft?.region ?? null;
@@ -409,11 +445,14 @@ function SliceSession({
         </p>
       )}
       <SliceErrorAlert error={displayedError} t={t} />
+      {analysisSessionInvalid && (
+        <p role="status" className="slice-notice">{t("slicing.reanalyzeRequired")}</p>
+      )}
     </>
   );
 
   const detectionFieldset = readyId && draft ? (
-    <fieldset disabled={editing} className="slice-fields"><legend>{t("slicing.detectionLegend")}</legend>
+    <fieldset disabled={mutationDisabled} className="slice-fields"><legend>{t("slicing.detectionLegend")}</legend>
       <label>{t("slicing.sensitivity")} {parameters.sensitivity}<input type="range" min="0" max="100" value={parameters.sensitivity} onChange={e => changeParameter("sensitivity", Number(e.target.value))} /></label>
       <label>{t("slicing.minimumIntervalMs")}<input type="number" min="10" max="250" value={parameters.minimumIntervalMs} onChange={e => changeParameter("minimumIntervalMs", Number(e.target.value))} /></label>
       <label>{t("slicing.preRollMs")}<input type="number" min="0" max="10" step="0.1" value={parameters.preRollUs / 1000} onChange={e => changeParameter("preRollUs", Math.round(Number(e.target.value) * 1000))} /></label>
@@ -428,7 +467,7 @@ function SliceSession({
       <p className="slice-coordinate">Frames [{view.startFrame}, {view.endExclusive}) · {job?.sampleRate} Hz</p>
       <svg viewBox="0 0 640 160" preserveAspectRatio="xMidYMid meet" width="100%" height="160" className="slice-waveform" aria-label="Slice waveform"
         onDoubleClick={e => {
-          if (editing) return;
+          if (mutationDisabled) return;
           const rect = e.currentTarget.getBoundingClientRect();
           if (rect.width) void edit({ kind: "insert", frame: frameAt((e.clientX - rect.left) / rect.width, view) });
         }}
@@ -448,11 +487,11 @@ function SliceSession({
           const value = drag?.id === m.markerId ? drag.frame : m.startFrame;
           const x = position(value, view) * WIDTH;
           return <g key={m.markerId} className={`slice-marker ${m.locked ? "is-locked" : ""} ${selected === m.markerId ? "is-selected" : ""}`}
-            role="slider" tabIndex={editing ? -1 : 0} aria-label={`Boundary ${m.startFrame}`} aria-valuetext={`Frame ${value}`} aria-valuemin={0} aria-valuemax={Number(frame(draft.region.endExclusive) - frame(draft.region.startFrame) - 1n)} aria-valuenow={Number(frame(value) - frame(draft.region.startFrame))}
+            role="slider" tabIndex={mutationDisabled ? -1 : 0} aria-label={`Boundary ${m.startFrame}`} aria-valuetext={`Frame ${value}`} aria-valuemin={0} aria-valuemax={Number(frame(draft.region.endExclusive) - frame(draft.region.startFrame) - 1n)} aria-valuenow={Number(frame(value) - frame(draft.region.startFrame))}
             onDoubleClick={e => e.stopPropagation()}
-            onPointerDown={e => { if (editing) return; e.preventDefault(); setSelected(m.markerId); dragRef.current = { id: m.markerId, frame: m.startFrame }; setDrag(dragRef.current); e.currentTarget.ownerSVGElement?.setPointerCapture(e.pointerId); }}
+            onPointerDown={e => { if (mutationDisabled) return; e.preventDefault(); setSelected(m.markerId); dragRef.current = { id: m.markerId, frame: m.startFrame }; setDrag(dragRef.current); e.currentTarget.ownerSVGElement?.setPointerCapture(e.pointerId); }}
             onKeyDown={e => {
-              if (editing || !["ArrowLeft", "ArrowRight"].includes(e.key)) return;
+              if (mutationDisabled || !["ArrowLeft", "ArrowRight"].includes(e.key)) return;
               e.preventDefault(); setSelected(m.markerId);
               const current = dragRef.current?.id === m.markerId ? dragRef.current.frame : m.startFrame;
               const next = frame(current) + (e.key === "ArrowRight" ? 1n : -1n) * (e.shiftKey ? 10n : 1n);
@@ -465,7 +504,7 @@ function SliceSession({
         })}
       </svg>
       <p className="slice-hint">Dashed: candidates · orange: draft · blue: fixed. Drag a draft boundary or use ←/→ (Shift: 10 frames). Double-click to insert.</p>
-      <div className="slice-actions"><button disabled={editing} onClick={() => void play(view)}>Play visible region</button><button disabled={!selectedMarker || editing} onClick={() => { if (selectedMarker) void play(selectedMarker); }}>Play selected slice</button><button onClick={stop} disabled={!playing && !previewing}>Stop</button></div>
+      <div className="slice-actions"><button disabled={mutationDisabled} onClick={() => void play(view)}>Play visible region</button><button disabled={!selectedMarker || mutationDisabled} onClick={() => { if (selectedMarker) void play(selectedMarker); }}>Play selected slice</button><button onClick={stop} disabled={!playing && !previewing}>Stop</button></div>
       <p className="slice-hint">Preview supports up to 30 seconds per region. Zoom in for longer slices.</p>
     </>
   ) : null;
@@ -486,16 +525,16 @@ function SliceSession({
       {proposal?.exceedsDraftLimit && <p role="alert">{t("slicing.exceedsDraftLimit")}</p>}
       {warnings.length > 0 && <details><summary>{warnings.length} candidate boundaries need review</summary><ul>{warnings.slice(0, PAGE).map(c => <li key={c.candidateId}>Frame {c.suggestedStartFrame}: {c.warnings.map(w => w === "LEFT_EDGE_TRUNCATED" ? "sound already active at file start" : w === "PRE_ROLL_CLIPPED" ? "pre-roll clipped by region" : "uncertain attack position").join(", ")}</li>)}</ul>{warnings.length > PAGE && <p>Showing the first {PAGE} warnings. Zoom into candidates to inspect their positions.</p>}</details>}
       <div className="slice-actions">
-        <button disabled={editing || proposing || !proposal || proposal.exceedsDraftLimit} onClick={() => { if (proposal) void edit({ kind: "acceptProposal", proposalId: proposal.proposalId }); }}>{t("slicing.applyCandidates")}</button>
-        <button disabled={editing || !draft.canUndo} onClick={() => void edit({ kind: "undo" })}>Undo</button><button disabled={editing || !draft.canRedo} onClick={() => void edit({ kind: "redo" })}>Redo</button>
+        <button disabled={mutationDisabled || proposing || !proposal || proposal.exceedsDraftLimit} onClick={() => { if (proposal) void edit({ kind: "acceptProposal", proposalId: proposal.proposalId }); }}>{t("slicing.applyCandidates")}</button>
+        <button disabled={mutationDisabled || !draft.canUndo} onClick={() => void edit({ kind: "undo" })}>Undo</button><button disabled={mutationDisabled || !draft.canRedo} onClick={() => void edit({ kind: "redo" })}>Redo</button>
       </div>
       <p>{t("slicing.draftSummary", { count: draft.markers.length, revision: draft.revision })}</p>
       {draft.markers.length > 64 && <p className="slice-notice">{t("slicing.exceedsOtLimit")}</p>}
       <form className="slice-actions" onSubmit={e => { e.preventDefault(); try { frame(insertFrame); void edit({ kind: "insert", frame: insertFrame }); } catch (err) { setError(normalizeSliceError(err)); } }}>
-        <label>Insert at frame<input aria-label="Insert at frame" inputMode="numeric" value={insertFrame} onChange={e => setInsertFrame(e.target.value)} disabled={editing} /></label><button disabled={editing}>Insert boundary</button>
+        <label>Insert at frame<input aria-label="Insert at frame" inputMode="numeric" value={insertFrame} onChange={e => setInsertFrame(e.target.value)} disabled={mutationDisabled} /></label><button disabled={mutationDisabled}>Insert boundary</button>
       </form>
       <div className="slice-table"><table><thead><tr><th>Start frame</th><th>End (exclusive)</th><th>Fixed</th><th>Actions</th></tr></thead><tbody>
-        {draft.markers.slice(page * PAGE, (page + 1) * PAGE).map(m => <MarkerRow key={`${m.markerId}:${m.startFrame}`} marker={m} disabled={editing} selected={selected === m.markerId} onSelect={() => setSelected(m.markerId)} edit={edit} />)}
+        {draft.markers.slice(page * PAGE, (page + 1) * PAGE).map(m => <MarkerRow key={`${m.markerId}:${m.startFrame}`} marker={m} disabled={mutationDisabled} selected={selected === m.markerId} onSelect={() => setSelected(m.markerId)} edit={edit} />)}
       </tbody></table></div>
       {draft.markers.length > PAGE && <div className="slice-actions"><button disabled={page === 0} onClick={() => setPage(p => p - 1)}>Previous boundaries</button><span>Page {page + 1} / {Math.ceil(draft.markers.length / PAGE)}</span><button disabled={(page + 1) * PAGE >= draft.markers.length} onClick={() => setPage(p => p + 1)}>Next boundaries</button></div>}
       <p className="slice-notice">

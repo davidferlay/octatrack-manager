@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { tEn, tJa } from "../../i18n/testStrings";
 import {
+  isAnalysisSessionInvalid,
   normalizeSliceError,
   shouldShowDiagnosticDetail,
   sliceErrorSummary,
@@ -50,6 +51,25 @@ describe("sliceErrors", () => {
     });
     expect(shouldShowDiagnosticDetail(state)).toBe(false);
     expect(sliceErrorSummary(tJa, state)).toBe(tJa("slicing.error.ANALYSIS_REGION_MISMATCH"));
+  });
+
+  it("keeps ANALYSIS_NOT_FOUND copy and adds ANALYSIS_EXPIRED as a distinct code", () => {
+    const missing = normalizeSliceError({
+      code: "ANALYSIS_NOT_FOUND",
+      message: "analysis or preview is unavailable",
+    });
+    const expired = normalizeSliceError({
+      code: "ANALYSIS_EXPIRED",
+      message: "the analysis session has expired",
+    });
+    expect(isAnalysisSessionInvalid(missing)).toBe(true);
+    expect(isAnalysisSessionInvalid(expired)).toBe(true);
+    expect(shouldShowDiagnosticDetail(missing)).toBe(false);
+    expect(shouldShowDiagnosticDetail(expired)).toBe(false);
+    expect(sliceErrorSummary(tJa, missing)).toBe(tJa("slicing.error.ANALYSIS_NOT_FOUND"));
+    expect(sliceErrorSummary(tEn, missing)).toBe(tEn("slicing.error.ANALYSIS_NOT_FOUND"));
+    expect(sliceErrorSummary(tJa, expired)).toBe(tJa("slicing.error.ANALYSIS_EXPIRED"));
+    expect(sliceErrorSummary(tEn, expired)).toBe(tEn("slicing.error.ANALYSIS_EXPIRED"));
   });
 
   it("normalizes string and Error inputs", () => {

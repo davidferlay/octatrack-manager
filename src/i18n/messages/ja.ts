@@ -294,6 +294,8 @@ export const jaMessages: Record<MessageKey, string> = {
   'slicing.applyCandidates': '候補を draft に反映',
   'slicing.updatingCandidates': '候補を更新中…',
   'slicing.candidatesUnavailable': '候補を利用できません',
+  'slicing.reanalyzeRequired':
+    '再解析が必要です。保存済みの draft はそのまま残っています。候補の反映は無効です。',
   'slicing.candidatesSummary': '候補 {count} · 抑制 {suppressed}',
   'slicing.noAttacksFound':
     'この設定ではアタックが見つかりませんでした。手動で境界を追加できます。',
@@ -314,6 +316,7 @@ export const jaMessages: Record<MessageKey, string> = {
   'slicing.error.ANALYSIS_BUSY': '別の解析が実行中です。',
   'slicing.error.ANALYSIS_CANCELLED': '解析はキャンセルされました。',
   'slicing.error.ANALYSIS_NOT_FOUND': '解析は利用できません。',
+  'slicing.error.ANALYSIS_EXPIRED': '解析セッションの有効期限が切れました。',
   'slicing.error.DRAFT_CONFLICT': 'draft が変更されました。編集前に再読み込みしてください。',
   'slicing.error.SOURCE_CHANGED': 'ソースが変更されました。再スキャンしてから再解析してください。',
   'slicing.error.AUDIO_LIMIT_EXCEEDED':
