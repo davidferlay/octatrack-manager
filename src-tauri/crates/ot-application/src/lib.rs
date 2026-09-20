@@ -1,5 +1,12 @@
 #![forbid(unsafe_code)]
 
+pub mod derived_trim;
+
+pub use derived_trim::{
+    ApplyTrimDerivation, DerivedAudioPublisher, TrimApplyError, TrimApplyResult, TrimWavProcessor,
+    TrimWavResult,
+};
+
 use ot_codec_ports::{CodecError, ProjectCodec};
 use ot_domain::{
     AssetDerivation, ContentHash, LibrarySnapshot, ManualAssetMetadata, ProjectDocument, RootId,
@@ -521,7 +528,14 @@ mod tests {
             source.clone(),
             ot_domain::DerivationKind::Trim,
             ot_domain::ProcessorIdentity::new("trim", "1").unwrap(),
-            ot_domain::DerivationParameterEnvelope::empty(),
+            ot_domain::DerivationParameterEnvelope::trim(
+                ot_domain::slicing::FrameRange::new(
+                    ot_domain::slicing::PcmFrame::new(0),
+                    ot_domain::slicing::PcmFrame::new(1),
+                )
+                .unwrap(),
+            )
+            .unwrap(),
             source.clone(),
             "2026-09-20T00:00:00.000Z",
         )

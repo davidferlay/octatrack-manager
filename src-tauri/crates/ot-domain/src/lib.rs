@@ -3,6 +3,7 @@
 use std::fmt;
 
 pub mod derivation;
+pub mod derived_trim;
 pub mod onsets;
 pub mod reference_identity;
 pub mod slice_draft;
@@ -12,6 +13,11 @@ pub use derivation::{
     validate_new_derivation, would_create_cycle, AssetDerivation, DerivationEdge, DerivationKind,
     DerivationParameterEnvelope, DerivationParameters, InvalidDerivation, ProcessorIdentity,
     StemRole,
+};
+pub use derived_trim::{
+    standard_trim_processor, ExpectedTrimOutput, TrimIntent, TrimPlan,
+    DERIVED_AUDIO_PUBLISHED_PREFIX, MAC_DERIVED_AUDIO_ROOT_FINGERPRINT,
+    MAC_DERIVED_AUDIO_ROOT_LABEL, TRIM_PROCESSOR_NAME, TRIM_PROCESSOR_REVISION,
 };
 
 pub use reference_identity::{
@@ -233,6 +239,7 @@ pub enum SampleStorageScope {
     SetAudioPool,
     ProjectLocal,
     Unclassified,
+    MacDerived,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -742,9 +749,10 @@ mod tests {
             SampleStorageScope::SetAudioPool,
             SampleStorageScope::ProjectLocal,
             SampleStorageScope::Unclassified,
+            SampleStorageScope::MacDerived,
         ];
 
-        assert_eq!(scopes.len(), 3);
+        assert_eq!(scopes.len(), 4);
         assert_ne!(scopes[0], scopes[1]);
         assert_ne!(scopes[0], scopes[2]);
         assert_ne!(scopes[1], scopes[2]);

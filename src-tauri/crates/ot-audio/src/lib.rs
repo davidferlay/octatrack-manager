@@ -2,6 +2,7 @@
 
 pub mod onsets;
 pub mod pcm;
+pub mod wav_trim;
 
 use ot_domain::ContentHash;
 use serde::{Deserialize, Serialize};
@@ -21,6 +22,15 @@ use symphonia::core::probe::Hint;
 
 pub mod waveform_v2;
 pub mod wfm2;
+
+pub use wav_trim::trim_wav_integer_pcm;
+
+pub use wav_trim::test_minimal_wav;
+
+pub fn content_hash_for_bytes(bytes: &[u8]) -> ContentHash {
+    ContentHash::parse(format!("sha256:{:x}", Sha256::digest(bytes)))
+        .expect("sha256 digest is always canonical")
+}
 
 pub use waveform_v2::{
     parse_decimal_frame, FrameRange, WaveformCacheV2, WaveformQueryResult,

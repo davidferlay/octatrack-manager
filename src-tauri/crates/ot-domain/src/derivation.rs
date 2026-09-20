@@ -1,3 +1,4 @@
+use crate::slicing::{FrameRange, PcmFrame};
 use crate::ContentHash;
 use std::collections::HashSet;
 use std::fmt;
@@ -93,6 +94,7 @@ impl StemRole {
 pub enum DerivationParameters {
     Empty,
     Stem { role: StemRole },
+    Trim { range: FrameRange },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -113,6 +115,15 @@ impl DerivationParameterEnvelope {
         }
     }
 
+    pub fn trim(range: FrameRange) -> Result<Self, InvalidDerivation> {
+        if range.frame_count() == 0 {
+            return Err(InvalidDerivation::InvalidParameters);
+        }
+        Ok(Self {
+            parameters: DerivationParameters::Trim { range },
+        })
+    }
+
     pub fn parameters(&self) -> &DerivationParameters {
         &self.parameters
     }
@@ -123,6 +134,11 @@ impl DerivationParameterEnvelope {
             DerivationParameters::Stem { role } => {
                 format!("{ENVELOPE_VERSION}|kind=stem|role={}", role.token())
             }
+            DerivationParameters::Trim { range } => format!(
+                "{ENVELOPE_VERSION}|kind=trim|start={}|end={}",
+                range.start(),
+                range.end_exclusive()
+            ),
         }
     }
 
@@ -134,6 +150,8 @@ impl DerivationParameterEnvelope {
         }
         let mut kind = None;
         let mut role = None;
+        let mut start = None;
+        let mut end = None;
         for part in parts {
             let Some((key, val)) = part.split_once('=') else {
                 return Err(InvalidDerivation::InvalidParameters);
@@ -141,19 +159,40 @@ impl DerivationParameterEnvelope {
             match key {
                 "kind" => kind = Some(val),
                 "role" => role = Some(val),
+                "start" => start = Some(val),
+                "end" => end = Some(val),
                 _ => return Err(InvalidDerivation::InvalidParameters),
             }
         }
         match kind.ok_or(InvalidDerivation::InvalidParameters)? {
             "empty" => {
-                if role.is_some() {
+                if role.is_some() || start.is_some() || end.is_some() {
                     return Err(InvalidDerivation::InvalidParameters);
                 }
                 Ok(Self::empty())
             }
-            "stem" => Ok(Self::stem(StemRole::parse_token(
-                role.ok_or(InvalidDerivation::InvalidParameters)?,
-            )?)),
+            "stem" => {
+                if start.is_some() || end.is_some() {
+                    return Err(InvalidDerivation::InvalidParameters);
+                }
+                Ok(Self::stem(StemRole::parse_token(
+                    role.ok_or(InvalidDerivation::InvalidParameters)?,
+                )?))
+            }
+            "trim" => {
+                if role.is_some() {
+                    return Err(InvalidDerivation::InvalidParameters);
+                }
+                let start =
+                    PcmFrame::parse_decimal(start.ok_or(InvalidDerivation::InvalidParameters)?)
+                        .map_err(|_| InvalidDerivation::InvalidParameters)?;
+                let end = PcmFrame::parse_decimal(end.ok_or(InvalidDerivation::InvalidParameters)?)
+                    .map_err(|_| InvalidDerivation::InvalidParameters)?;
+                Self::trim(
+                    FrameRange::new(start, end)
+                        .map_err(|_| InvalidDerivation::InvalidParameters)?,
+                )
+            }
             _ => Err(InvalidDerivation::InvalidParameters),
         }
     }
@@ -299,10 +338,25 @@ fn validate_kind_parameters(
     kind: DerivationKind,
     envelope: &DerivationParameterEnvelope,
 ) -> Result<(), InvalidDerivation> {
-    match (kind, envelope.parameters()) {
-        (DerivationKind::Stem, DerivationParameters::Stem { .. }) => Ok(()),
-        (_, DerivationParameters::Empty) => Ok(()),
-        _ => Err(InvalidDerivation::InvalidParameters),
+    match kind {
+        DerivationKind::Stem => match envelope.parameters() {
+            DerivationParameters::Stem { .. } => Ok(()),
+            DerivationParameters::Empty | DerivationParameters::Trim { .. } => {
+                Err(InvalidDerivation::InvalidParameters)
+            }
+        },
+        DerivationKind::Trim => match envelope.parameters() {
+            DerivationParameters::Trim { .. } => Ok(()),
+            DerivationParameters::Empty | DerivationParameters::Stem { .. } => {
+                Err(InvalidDerivation::InvalidParameters)
+            }
+        },
+        _ => match envelope.parameters() {
+            DerivationParameters::Empty => Ok(()),
+            DerivationParameters::Stem { .. } | DerivationParameters::Trim { .. } => {
+                Err(InvalidDerivation::InvalidParameters)
+            }
+        },
     }
 }
 
@@ -427,17 +481,51 @@ mod tests {
     #[test]
     fn rejects_self_reference() {
         let same = hash(1);
+        let range = FrameRange::new(PcmFrame::new(0), PcmFrame::new(1)).unwrap();
         let error = AssetDerivation::new(
             same.clone(),
             same.clone(),
             DerivationKind::Trim,
             ProcessorIdentity::new("trim", "1").unwrap(),
-            DerivationParameterEnvelope::empty(),
+            DerivationParameterEnvelope::trim(range).unwrap(),
             same,
             "2026-09-20T00:00:00.000Z",
         )
         .unwrap_err();
         assert_eq!(error, InvalidDerivation::SelfReference);
+    }
+
+    #[test]
+    fn trim_envelope_round_trips() {
+        let range = FrameRange::new(PcmFrame::new(100), PcmFrame::new(250)).unwrap();
+        let envelope = DerivationParameterEnvelope::trim(range).unwrap();
+        assert_eq!(
+            envelope.encode(),
+            "v1|kind=trim|start=100|end=250".to_string()
+        );
+        assert_eq!(
+            DerivationParameterEnvelope::decode(&envelope.encode()).unwrap(),
+            envelope
+        );
+    }
+
+    #[test]
+    fn rejects_trim_with_empty_envelope() {
+        let source = hash(1);
+        let output = hash(2);
+        assert_eq!(
+            AssetDerivation::new(
+                output,
+                source.clone(),
+                DerivationKind::Trim,
+                ProcessorIdentity::new("trim", "1").unwrap(),
+                DerivationParameterEnvelope::empty(),
+                source,
+                "2026-09-20T00:00:00.000Z",
+            )
+            .unwrap_err(),
+            InvalidDerivation::InvalidParameters
+        );
     }
 
     #[test]

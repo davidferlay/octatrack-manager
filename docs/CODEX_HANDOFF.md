@@ -335,9 +335,9 @@ Application Supportへ、ファイルの相対パス・サイズ・mtime・conte
 **Canonical milestone source:** `docs/planning/MILESTONE_INDEX.md`
 **Canonical current status:** `docs/planning/DEVELOPMENT_STATUS.md`
 
-**進行中 Work ID:** `MO-M7-DERIVED-AUDIOASSET-1`（M7-06 lineage foundation、branch
-`feat/m7-derived-audioasset-1`）。正本: [`docs/planning/M7_DERIVED_AUDIOASSET.md`](docs/planning/M7_DERIVED_AUDIOASSET.md)。
-次候補は DEVELOPMENT_STATUS § Recommended next product Work ID。
+**進行中 Work ID:** `MO-M7-DERIVED-AUDIOASSET-2`（M7-06 TRIM derived WAV 垂直 slice、branch
+`feat/m7-derived-audioasset-2`）。正本: [`docs/planning/M7_DERIVED_AUDIOASSET.md`](docs/planning/M7_DERIVED_AUDIOASSET.md)。
+#147 lineage は `main` 取り込み済み。次候補: `MO-M7-DERIVED-QUERY-API-1` 等（DEVELOPMENT_STATUS § Recommended next）。
 
 **M7-05 native:** 統合受入 **PASS**（`main` `0f39f50`、
 `docs/testing/MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md` § post-#142）。

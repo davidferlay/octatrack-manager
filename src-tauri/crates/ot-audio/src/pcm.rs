@@ -348,6 +348,53 @@ fn inspect_container(
     ))
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WavLayout {
+    pub info: PcmInfo,
+    pub fmt_chunk: Vec<u8>,
+    pub pcm_payload: Vec<u8>,
+}
+
+/// Integer PCM RIFF/WAVE layout for lossless trim/export (44.1/48 kHz, 16/24-bit).
+pub fn inspect_wav_layout(bytes: &[u8], cancelled: &AtomicBool) -> Result<WavLayout, PcmError> {
+    if bytes.len() < 12 || &bytes[..4] != b"RIFF" || &bytes[8..12] != b"WAVE" {
+        return Err(AudioError::UnsupportedFormat.into());
+    }
+    let (info, _) = inspect_container(bytes, cancelled)?;
+    let u32_at = |slice: &[u8]| u32::from_le_bytes([slice[0], slice[1], slice[2], slice[3]]);
+    let mut format = None;
+    let mut data = None;
+    let mut offset = 12;
+    while offset < bytes.len() {
+        check_cancel(cancelled)?;
+        if bytes.len() - offset < 8 {
+            return Err(corrupt("truncated chunk header"));
+        }
+        let id = &bytes[offset..offset + 4];
+        let length = u32_at(&bytes[offset + 4..offset + 8]) as usize;
+        offset += 8;
+        if length > bytes.len() - offset {
+            return Err(corrupt("chunk exceeds container"));
+        }
+        let payload = &bytes[offset..offset + length];
+        if id == b"fmt " {
+            if format.replace(payload.to_vec()).is_some() {
+                return Err(corrupt("duplicate format chunk"));
+            }
+        } else if id == b"data" && data.replace(payload.to_vec()).is_some() {
+            return Err(corrupt("duplicate audio chunk"));
+        }
+        offset += length + length % 2;
+    }
+    let fmt_chunk = format.ok_or_else(|| corrupt("missing format chunk"))?;
+    let pcm_payload = data.ok_or_else(|| corrupt("missing audio chunk"))?;
+    Ok(WavLayout {
+        info,
+        fmt_chunk,
+        pcm_payload,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

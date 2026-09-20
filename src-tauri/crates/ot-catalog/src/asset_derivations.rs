@@ -48,6 +48,15 @@ impl StoredDerivationRow {
     }
 }
 
+fn lineage_semantically_equal(left: &AssetDerivation, right: &AssetDerivation) -> bool {
+    left.output() == right.output()
+        && left.source() == right.source()
+        && left.kind() == right.kind()
+        && left.processor() == right.processor()
+        && left.parameters() == right.parameters()
+        && left.source_hash_evidence() == right.source_hash_evidence()
+}
+
 impl SqliteCatalog {
     fn audio_asset_row_id(
         connection: &rusqlite::Connection,
@@ -101,6 +110,14 @@ impl AssetDerivationCatalog for SqliteCatalog {
         &mut self,
         derivation: &AssetDerivation,
     ) -> Result<(), CatalogError> {
+        if let Some(existing) = self.load_asset_derivation(derivation.output())? {
+            if lineage_semantically_equal(&existing, derivation) {
+                return Ok(());
+            }
+            return Err(CatalogError::Derivation(
+                InvalidDerivation::ConflictingLineage,
+            ));
+        }
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -357,12 +374,21 @@ mod tests {
         source: ContentHash,
         kind: DerivationKind,
     ) -> AssetDerivation {
+        use ot_domain::slicing::{FrameRange, PcmFrame};
+        let parameters = match kind {
+            DerivationKind::Trim => DerivationParameterEnvelope::trim(
+                FrameRange::new(PcmFrame::new(0), PcmFrame::new(1)).unwrap(),
+            )
+            .unwrap(),
+            DerivationKind::Stem => DerivationParameterEnvelope::stem(StemRole::Kick),
+            _ => DerivationParameterEnvelope::empty(),
+        };
         AssetDerivation::new(
             output,
             source.clone(),
             kind,
             ProcessorIdentity::new("processor", "1").unwrap(),
-            DerivationParameterEnvelope::empty(),
+            parameters,
             source,
             "2026-09-20T00:00:00.000Z",
         )

@@ -90,7 +90,7 @@ Judged by **responsibility**, not exact v0.1 widget names.
 | M7-03 stereo/channel representation | **COMPLETE** | #124 | Tests | — | Per-channel peaks in v2 query |
 | M7-04 zoom / range / scroll UI | **IN_PROGRESS** | #129, #130 | CI + frontend tests | — | Button zoom/pan/drag range; **Canvas renderer / scroll** not implemented (WAVEFORM_V2 §13.5) |
 | M7-05 transient analysis | **IMPLEMENTED_NOT_FULLY_ACCEPTED** | #102, #131, #141/#142 | Rust/UI tests | Range→slice native **PASS** on `main` `0f39f50` (integrated; see below) | Onsets + Library range→analysis. [`M7_RANGE_TO_SLICE_NATIVE_ACCEPTANCE.md`](../testing/M7_RANGE_TO_SLICE_NATIVE_ACCEPTANCE.md) A–D **NOT_RUN** at #131 head is **superseded** by [`MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md`](../testing/MO_UI_WORKSPACE_NATIVE_ACCEPTANCE.md) post-#142. v0.1 “non-blocking job” for all analysis still open |
-| M7-06 derived AudioAsset framework | **IN_PROGRESS** | `MO-M7-DERIVED-AUDIOASSET-1` (branch) | ot-domain / ot-catalog v12 / ot-application tests | — | Lineage registration + SQLite persistence; no derived audio generation or query IPC yet |
+| M7-06 derived AudioAsset framework | **IN_PROGRESS** | #147 + `MO-M7-DERIVED-AUDIOASSET-2` (branch) | ot-domain / ot-catalog v13 / ot-audio / ot-application / integration test | — | Lineage (#147); Mac TRIM derived WAV → catalog `mac_derived` + lineage (no query IPC / operator UI) |
 | M7-07 stem separation adapter spike | **PLANNED** | — | — | — | Explicitly out of AUTO-SLICE-1 scope |
 | M7-08 optional stem separation workflow | **PLANNED** | — | — | — | — |
 
@@ -166,9 +166,9 @@ Aligned with v0.1 §23; stem separation does not precede M7-06 without explicit 
 
 ## Recommended next product Work ID
 
-**Candidate:** `MO-M7-DERIVED-AUDIOASSET-2` (derived file generation + lineage hookup) or `MO-M7-DERIVED-QUERY-API-1` (read-only IPC) after #147 lands.
+**Candidate:** `MO-M7-DERIVED-QUERY-API-1` (read-only lineage/query IPC) after TRIM slice lands, or stem/normalize follow-ups.
 
-**Reason:** M7-06 foundation (`MO-M7-DERIVED-AUDIOASSET-1`) adds catalog lineage; generation and UI query remain open.
+**Reason:** M7-06 TRIM vertical slice (`MO-M7-DERIVED-AUDIOASSET-2`) proves generation + catalog + lineage; UI query and broader processors remain open.
 
 **Dependencies:** M5 COMPLETE; M7-01–03 and M7-02 on `main`; Gate C boundaries unchanged.
 

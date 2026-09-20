@@ -137,6 +137,20 @@ pub trait AssetMetadataCatalog {
     ) -> Result<(), CatalogError>;
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DerivedFileUpsert {
+    pub content_hash: ContentHash,
+    pub byte_size: u64,
+    pub relative_path: String,
+    pub modified_at_unix_ns: Option<i64>,
+}
+
+pub trait DerivedAudioCatalog {
+    fn ensure_derived_root(&mut self) -> Result<CatalogRootIdentity, CatalogError>;
+
+    fn upsert_derived_file(&mut self, upsert: &DerivedFileUpsert) -> Result<(), CatalogError>;
+}
+
 pub trait AssetDerivationCatalog {
     fn register_asset_derivation(
         &mut self,

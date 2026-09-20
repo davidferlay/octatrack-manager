@@ -350,6 +350,7 @@ fn storage_scope_name(scope: SampleStorageScope) -> &'static str {
         SampleStorageScope::SetAudioPool => "set_audio_pool",
         SampleStorageScope::ProjectLocal => "project_local",
         SampleStorageScope::Unclassified => "unclassified",
+        SampleStorageScope::MacDerived => "mac_derived",
     }
 }
 
@@ -2027,7 +2028,10 @@ fn plan_additive_copy_sync(
     let snapshot = load_library_snapshot(catalog, &identity)?;
     ensure_write_eligible(&snapshot)?;
     let source = file_for_instance_id(&identity, &snapshot, source_file_instance_id)?;
-    if source.storage_scope == SampleStorageScope::Unclassified {
+    if matches!(
+        source.storage_scope,
+        SampleStorageScope::Unclassified | SampleStorageScope::MacDerived
+    ) {
         return Err(ApiError::new(
             "WRITE_NOT_SUPPORTED",
             "unclassified sample locations remain read-only",
@@ -2147,7 +2151,10 @@ pub(crate) fn plan_rename_sample_sync(
     ensure_catalog_projection_trusted(catalog, &identity)?;
     let snapshot = load_library_snapshot(catalog, &identity)?;
     let source = file_for_instance_id(&identity, &snapshot, source_file_instance_id)?;
-    if source.storage_scope == SampleStorageScope::Unclassified {
+    if matches!(
+        source.storage_scope,
+        SampleStorageScope::Unclassified | SampleStorageScope::MacDerived
+    ) {
         return Err(ApiError::new(
             "WRITE_NOT_SUPPORTED",
             "unclassified sample locations remain read-only",

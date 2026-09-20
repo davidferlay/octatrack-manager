@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod asset_derivations;
+mod derived_audio;
 mod slice_drafts;
 
 use ot_domain::{
@@ -22,7 +23,7 @@ use rusqlite::{
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
-const LATEST_SCHEMA_VERSION: u64 = 12;
+const LATEST_SCHEMA_VERSION: u64 = 13;
 const PROJECTION_REPAIR_META_KEY: &str = "observational_projection_repair_applied";
 const MIGRATION_REQUIRES_FOREIGN_KEYS_OFF: u64 = 8;
 const MIGRATIONS: &[(u64, &str)] = &[
@@ -63,6 +64,10 @@ const MIGRATIONS: &[(u64, &str)] = &[
         include_str!("../migrations/0011_projection_trust_repair.sql"),
     ),
     (12, include_str!("../migrations/0012_asset_derivations.sql")),
+    (
+        13,
+        include_str!("../migrations/0013_mac_derived_storage_scope.sql"),
+    ),
 ];
 
 type StateProjection = (
@@ -1802,6 +1807,7 @@ fn storage_scope_to_database(scope: SampleStorageScope) -> &'static str {
         SampleStorageScope::SetAudioPool => "set_audio_pool",
         SampleStorageScope::ProjectLocal => "project_local",
         SampleStorageScope::Unclassified => "unclassified",
+        SampleStorageScope::MacDerived => "mac_derived",
     }
 }
 
@@ -1810,6 +1816,7 @@ fn storage_scope_from_database(value: &str) -> Result<SampleStorageScope, Catalo
         "set_audio_pool" => Ok(SampleStorageScope::SetAudioPool),
         "project_local" => Ok(SampleStorageScope::ProjectLocal),
         "unclassified" => Ok(SampleStorageScope::Unclassified),
+        "mac_derived" => Ok(SampleStorageScope::MacDerived),
         _ => Err(CatalogError::InvalidStoredData {
             field: "storage_scope",
         }),
@@ -2236,7 +2243,7 @@ fn apply_migration(
     version: u64,
     sql: &str,
 ) -> Result<(), CatalogError> {
-    let foreign_keys_off = version == MIGRATION_REQUIRES_FOREIGN_KEYS_OFF;
+    let foreign_keys_off = version == MIGRATION_REQUIRES_FOREIGN_KEYS_OFF || version == 13;
     let previous_foreign_keys = if foreign_keys_off {
         Some(set_foreign_keys(connection, false)?)
     } else {

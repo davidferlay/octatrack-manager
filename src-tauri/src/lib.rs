@@ -6,6 +6,8 @@ mod audio_runtime;
 mod bank_validation;
 mod catalog_runtime;
 mod clone_runtime;
+#[cfg(test)]
+mod derived_audio_runtime;
 mod device_detection;
 mod host_metadata_policy;
 mod legacy_command_gate;
