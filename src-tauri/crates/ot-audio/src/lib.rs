@@ -23,9 +23,10 @@ use symphonia::core::probe::Hint;
 pub mod waveform_v2;
 pub mod wfm2;
 
-pub use wav_trim::trim_wav_integer_pcm;
-
 pub use wav_trim::test_minimal_wav;
+pub use wav_trim::trim_wav_integer_pcm;
+pub use wav_trim::verify_trim_wav_output;
+pub use wav_trim::TrimVerifyError;
 
 pub fn content_hash_for_bytes(bytes: &[u8]) -> ContentHash {
     ContentHash::parse(format!("sha256:{:x}", Sha256::digest(bytes)))

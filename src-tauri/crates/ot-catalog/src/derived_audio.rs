@@ -174,4 +174,85 @@ mod tests {
         );
         assert_eq!(snapshot.file_instances[0].content_hash, asset);
     }
+
+    #[test]
+    fn octatrack_rescan_preserves_mac_derived_projection_and_lineage() {
+        use ot_domain::slicing::{FrameRange, PcmFrame};
+        use ot_domain::{
+            AssetDerivation, AudioAsset, ContentHashFreshness, DerivationKind,
+            DerivationParameterEnvelope, FileInstance, LibrarySnapshot, ProcessorIdentity,
+            RootRelativePath, SampleStorageScope,
+        };
+        use ot_storage_ports::{
+            AssetDerivationCatalog, CatalogRootIdentity, CatalogRootObservation,
+        };
+
+        let directory = TempDir::new().unwrap();
+        let mut catalog = SqliteCatalog::open(database_path(&directory)).unwrap();
+        let octatrack = CatalogRootIdentity::new(format!("rootfp:v1:{}", "c".repeat(64))).unwrap();
+        let observation = CatalogRootObservation {
+            identity: octatrack.clone(),
+            identity_is_stable: true,
+            display_name: "Octatrack".into(),
+            observed_revision: 1,
+        };
+        let source = hash(11);
+        let output = hash(12);
+        let source_snapshot = LibrarySnapshot {
+            file_instances: vec![FileInstance {
+                relative_path: RootRelativePath::parse("SET/AUDIO/source.wav").unwrap(),
+                content_hash: source.clone(),
+                byte_size: 100,
+                modified_at_unix_ns: None,
+                storage_scope: SampleStorageScope::SetAudioPool,
+                hash_freshness: ContentHashFreshness::ComputedThisScan,
+            }],
+            audio_assets: vec![AudioAsset {
+                content_hash: source.clone(),
+                byte_size: 100,
+            }],
+            ..LibrarySnapshot::default()
+        };
+        catalog
+            .store_snapshot(&observation, &source_snapshot)
+            .unwrap();
+        catalog
+            .upsert_derived_file(&DerivedFileUpsert {
+                content_hash: output.clone(),
+                byte_size: 64,
+                relative_path: "v1/1200000000000000000000000000000000000000000000000000000000000000.wav"
+                    .into(),
+                modified_at_unix_ns: None,
+            })
+            .unwrap();
+        let range = FrameRange::new(PcmFrame::new(0), PcmFrame::new(1)).unwrap();
+        let derivation = AssetDerivation::new(
+            output.clone(),
+            source.clone(),
+            DerivationKind::Trim,
+            ProcessorIdentity::new("masterocta-trim", "pcm-wav-v1").unwrap(),
+            DerivationParameterEnvelope::trim(range).unwrap(),
+            source.clone(),
+            "2026-09-20T00:00:00.000Z",
+        )
+        .unwrap();
+        catalog.register_asset_derivation(&derivation).unwrap();
+
+        catalog
+            .store_snapshot(&observation, &LibrarySnapshot::default())
+            .unwrap();
+
+        assert!(catalog.load_asset_derivation(&output).unwrap().is_some());
+        let derived_identity = catalog.ensure_derived_root().unwrap();
+        let derived_snapshot = catalog
+            .load_latest_snapshot(&derived_identity)
+            .unwrap()
+            .unwrap();
+        assert_eq!(derived_snapshot.file_instances.len(), 1);
+        assert_eq!(
+            derived_snapshot.file_instances[0].storage_scope,
+            SampleStorageScope::MacDerived
+        );
+        assert_eq!(derived_snapshot.file_instances[0].content_hash, output);
+    }
 }

@@ -3,8 +3,8 @@
 pub mod derived_trim;
 
 pub use derived_trim::{
-    ApplyTrimDerivation, DerivedAudioPublisher, TrimApplyError, TrimApplyResult, TrimWavProcessor,
-    TrimWavResult,
+    ApplyTrimDerivation, DerivedAudioPublisher, TrimApplyError, TrimApplyResult,
+    TrimDerivationVerifier, TrimVerificationKind, TrimWavProcessor, TrimWavResult,
 };
 
 use ot_codec_ports::{CodecError, ProjectCodec};

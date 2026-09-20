@@ -1,6 +1,6 @@
 # M7 derived AudioAsset
 
-- Work IDs: `MO-M7-DERIVED-AUDIOASSET-1` (lineage), `MO-M7-DERIVED-AUDIOASSET-2` (TRIM generation slice)
+- Work IDs: `MO-M7-DERIVED-AUDIOASSET-1` (lineage), `MO-M7-DERIVED-AUDIOASSET-2` (TRIM generation slice), `MO-M7-DERIVED-AUDIOASSET-2-VERIFY-FIX-1` (verification / cleanup)
 - Status: **IN_PROGRESS** (M7-06 — lineage + Mac TRIM vertical slice; query IPC / operator workflow open)
 - Updated: 2026-09-20
 
@@ -42,6 +42,45 @@ and absolute paths are not exposed to the UI.
 
 Idempotency: same source + TRIM parameters → same output hash → reuse published file;
 semantically equal lineage → registration no-op.
+
+## Verification boundary (processor not trusted)
+
+`TrimWavProcessor` output is **not** a trust boundary. Before publish, the runtime
+(`ApplyTrimDerivation` + `OtAudioTrimVerifier` / `verify_trim_wav_output`) independently:
+
+1. Recomputes source `ContentHash` from bytes.
+2. Validates output WAV structure (integer PCM contract).
+3. Checks `ExpectedTrimOutput` against the output layout.
+4. Compares source PCM slice `[start, end)` to output PCM payload **byte-for-byte**
+   (WAV header bytes are not compared wholesale).
+5. Recomputes `SHA256(output_wav_bytes)` and requires equality with the planned output hash.
+
+Mismatch → fail-closed: no publish, no catalog upsert, no lineage. Publish path also
+rechecks hash immediately before writing.
+
+## Staging cleanup
+
+Publish writes to `staging/*.part`, then renames into `published/v1/{hex}.wav`. A
+`StagingPartGuard` removes the **process-local** `.part` on failure (including rename
+failure). Cleanup failure does not mask the original publish error. Unrelated staging
+files and existing published objects are not deleted.
+
+## Failure residue (not atomic FS+SQLite)
+
+| Stage failed after | Typical residue |
+| --- | --- |
+| Verify / pre-publish | Original only |
+| Publish | Original only (no `.part`, no new published file) |
+| Publish OK, catalog fail | Original + **recoverable orphan** under `published/v1/` |
+| Catalog OK, lineage fail | Original + published file + catalog projection, no lineage row |
+
+Retry completes catalog/lineage without duplicating files when content hash matches.
+
+## Production wiring
+
+TRIM pipeline is a **backend vertical proof** (`derived_audio_runtime` under `#[cfg(test)]`).
+**Production IPC / Tauri commands are NOT_CONNECTED** — operators cannot run TRIM from the
+product UI yet. This does **not** satisfy M7-06 COMPLETE.
 
 ## Provenance
 
