@@ -3578,8 +3578,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <div className="tools-fix-missing-layout">
           <div className="tools-description-pane">
             <p>
-              Scans Project for files the Octatrack can't play (wrong sample
-                rate, bit depth or format).<br />
+              Scans Project for files that don't conform to Elektron's specification
+                (wrong sample rate, bit depth, format, or a non-standard header).<br />
               Handles audio files referenced by Sample Slots. Optionally also scans
               this project's own directory for other, un-referenced audio files.<br />
               Execute converts audio files in place and updates all references.

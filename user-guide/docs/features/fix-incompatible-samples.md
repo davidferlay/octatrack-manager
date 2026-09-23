@@ -18,6 +18,19 @@ This feature finds any incompatible files and converts them in place, wherever t
 
 ---
 
+## What gets flagged
+
+The scan checks whether a file conforms to Elektron's specification, not whether the Octatrack happens to cope with it. A file is listed when any of these is true:
+
+| Reason | Compat badge | Plays on the device? |
+|--------|--------------|----------------------|
+| Sample rate is not 44.1 kHz | straight face | Yes, at the wrong speed and pitch |
+| Bit depth is not 16 or 24 | sad face | Usually not |
+| A format the Octatrack cannot read (MP3, FLAC, OGG, M4A, AAC) | `??` | No |
+| A WAV or AIFF whose header cannot be parsed | `??` | Often yes |
+
+---
+
 ## Health Indicators
 
 Both scopes are scanned automatically in the background, when opening either:

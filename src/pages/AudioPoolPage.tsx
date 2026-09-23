@@ -1694,8 +1694,8 @@ export function AudioPoolPage() {
           <div className="tools-fix-missing-layout">
             <div className="tools-description-pane">
               <p>
-                Scans Audio Pool of Set for files the Octatrack can't play (wrong sample
-                rate, bit depth or format).
+                Scans Audio Pool of Set for files that don't conform to Elektron's
+                specification (wrong sample rate, bit depth, format, or a non-standard header).
                 <br />
                 Optionally scans every project of Set too (directory and referenced samples).
                 Execute converts audio files in place and updates all references.
