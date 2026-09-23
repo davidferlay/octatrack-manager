@@ -22022,6 +22022,37 @@ mod tests {
         assert_eq!(n.ot_size_bytes, 0);
     }
 
+    /// The two buckets the UI labels "Bit depth" and "Header" in its Reason column.
+    /// Both end in the fix list, but only the first is certainly unplayable - a WAV
+    /// whose header we cannot parse may still play on the device.
+    #[test]
+    fn test_inspect_audio_file_bit_depth_and_unreadable_header_buckets() {
+        let dir = TempDir::new().unwrap();
+
+        // 8-bit at the right rate: readable, but not a depth the Octatrack takes.
+        let low = write_minimal_wav(dir.path(), "low.wav", 1, 44100, 8, 100);
+        assert_eq!(inspect_audio_file(&low).compatibility, "incompatible");
+
+        // 32-bit is equally out of range on the other side.
+        let high = write_minimal_wav(dir.path(), "high.wav", 1, 44100, 32, 100);
+        assert_eq!(inspect_audio_file(&high).compatibility, "incompatible");
+
+        // A .wav extension decides nothing: an unparsable header reads as "unknown",
+        // which is what puts an otherwise fine file in front of the user.
+        let broken = dir.path().join("broken.wav");
+        fs::write(
+            &broken,
+            b"NOTRIFFjust some bytes that are not a wave header",
+        )
+        .unwrap();
+        assert_eq!(inspect_audio_file(&broken).compatibility, "unknown");
+
+        // Wrong rate AND wrong depth is reported as the depth problem, not the rate:
+        // a resample alone would not make it playable.
+        let both = write_minimal_wav(dir.path(), "both.wav", 2, 48000, 8, 100);
+        assert_eq!(inspect_audio_file(&both).compatibility, "incompatible");
+    }
+
     #[test]
     fn test_ot_pcm_data_size_none_when_unparsable() {
         let dir = TempDir::new().unwrap();

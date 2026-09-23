@@ -291,3 +291,31 @@ describe('Reason and Action columns', () => {
     expect(first).toHaveTextContent('Bit depth')
   })
 })
+
+describe('Escape', () => {
+  it('closes the review screen', async () => {
+    const onClose = vi.fn()
+    render(<FixProjectFilesModal projectPath="/set/MyProject" files={files} onClose={onClose} />)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('is ignored mid-conversion, so a run in flight cannot be dismissed', async () => {
+    // A fix that never settles keeps the modal in its converting phase
+    invokeMock.mockImplementation(() => new Promise(() => {}))
+    const onClose = vi.fn()
+    render(<FixProjectFilesModal projectPath="/set/MyProject" files={files} skipReview onClose={onClose} />)
+    await waitFor(() => expect(screen.getByText(/Fixing/)).toBeInTheDocument())
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('closes the read-only list modal', () => {
+    const onClose = vi.fn()
+    render(<ProjectIncompatibleListModal projectPath="/set/MyProject" files={files} onClose={onClose} />)
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+})
+

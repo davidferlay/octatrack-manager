@@ -850,6 +850,19 @@ test.describe('Tools Tab - Destination Modal Browse', () => {
     await browseBtn(page).click()
     await expect(page.locator('.error-modal')).toContainText('No Octatrack project found in the selected folder')
   })
+
+  test('Escape closes the status modal and keeps the project open', async ({ page }) => {
+    await page.evaluate(() => {
+      ;(window as any).__browseDialogResult__ = '/browse/empty'
+      ;(window as any).__scanCustomResult__ = { locations: [], standalone_projects: [] }
+    })
+    await browseBtn(page).click()
+    await expect(page.locator('.error-modal')).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.error-modal')).toHaveCount(0)
+    expect(page.url()).toContain('/project?')
+  })
 })
 
 test.describe('Tools Tab - Copy Sample Slots Not Same Set', () => {

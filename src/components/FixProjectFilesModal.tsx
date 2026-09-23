@@ -14,6 +14,7 @@ import {
   type PoolSortColumn,
 } from './FixPoolFilesModal';
 import type { PoolUsageEntry } from '../types/audioFile';
+import { useEscapeClose } from '../hooks/useEscapeClose';
 
 /**
  * Read-only list of a project's incompatible audio files (referenced-slot
@@ -29,6 +30,7 @@ export function ProjectIncompatibleListModal({ projectPath, files, onClose, usag
   usageLoading?: boolean;
 }) {
   const table = usePoolTable(files, projectPath, false, ['size'], usageMap, usageLoading, true);
+  useEscapeClose(onClose);
   const [copyFeedback, copy] = useCopyFeedback();
   const { modalRef, style, handles } = useModalResize();
 

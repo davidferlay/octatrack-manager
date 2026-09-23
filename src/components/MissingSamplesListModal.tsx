@@ -82,7 +82,9 @@ export function MissingSamplesListModal({
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
-  const visibleColumns = LIST_COLUMNS.filter(c => !hiddenCols.has(c.id) && (withProject || c.id !== "project"));
+  // Project only exists at Set scope - it must not show up in the toggle menu otherwise
+  const availableColumns = LIST_COLUMNS.filter(c => withProject || c.id !== "project");
+  const visibleColumns = availableColumns.filter(c => !hiddenCols.has(c.id));
   const [modalWidth, setModalWidth] = useState<number | null>(null);
   const [modalHeight, setModalHeight] = useState<number | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -439,7 +441,7 @@ export function MissingSamplesListModal({
             >
               {copyFeedback === "copied" ? "✓" : "⧉"}
             </button>
-            <ColumnToggle columns={LIST_COLUMNS} hiddenCols={hiddenCols} onToggle={toggleCol} />
+            <ColumnToggle columns={availableColumns} hiddenCols={hiddenCols} onToggle={toggleCol} />
           </div>
           <button className="modal-close" onClick={onClose}>
             &times;

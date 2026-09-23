@@ -18,6 +18,7 @@ import { PathContextMenu, PurgeFilesModal, purgeAudioFileCount, purgeNonAudioFil
 import { audioKind, usageKey } from "./AudioFileTable";
 import { normalizePath } from "./SampleSlotsTable";
 import { isUnderBackupsDir } from "../utils/purgeBackups";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 import {
   applyItemClick,
   destRangeFrom,
@@ -386,6 +387,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [showProgress, setShowProgress] = useState<boolean>(false);
   const [executingDetails, setExecutingDetails] = useState<string>("");
   const [statusMessage, setStatusMessage] = useState<string>("");
+  // The success/error/info modal is dismissible - Escape closes it like the × does.
+  useEscapeClose(() => setStatusMessage(""), !!statusMessage);
   const [statusType, setStatusType] = useState<"success" | "error" | "info" | "">("");
   // Which pane the project picker was opened for, or null when it is closed.
   const [showProjectSelector, setShowProjectSelector] = useState<"source" | "dest" | null>(null);

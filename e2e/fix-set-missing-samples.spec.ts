@@ -151,6 +151,54 @@ test.describe('Audio Pool - Fix Missing Samples across the Set', () => {
     await expect(modal.locator('tbody tr')).toHaveCount(2)
   })
 
+  test('projects whose slots all resolve are left out of the count and the list', async ({ page }) => {
+    // PROJ3 is in the Set but misses nothing - list_missing_samples returns [] for it
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args: any) => {
+        if (cmd === 'list_set_projects') {
+          return [
+            { name: 'PROJ1', path: '/test/set/PROJ1' },
+            { name: 'PROJ2', path: '/test/set/PROJ2' },
+            { name: 'PROJ3', path: '/test/set/PROJ3' },
+          ]
+        }
+        return orig(cmd, args)
+      }
+    })
+    await openTools(page)
+
+    const summary = page.locator('.tools-missing-files-summary')
+    await expect(summary).toContainText('across 2 projects')
+    await summary.click()
+    await expect(page.locator('.missing-samples-list-modal tbody')).not.toContainText('PROJ3')
+  })
+
+  test('Escape closes the Set list modal and stays on the Audio Pool page', async ({ page }) => {
+    await openTools(page)
+    await page.locator('.tools-missing-files-summary').click()
+    const list = page.locator('.missing-samples-list-modal')
+    await expect(list).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(list).toHaveCount(0)
+    expect(page.url()).toContain('/audio-pool')
+    await expect(page.locator('.pool-tools-panel')).toBeVisible()
+  })
+
+  test('Escape closes the fix modal once the search is done, not while it runs', async ({ page }) => {
+    await openTools(page)
+    await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
+    const modal = page.locator('.fix-missing-modal')
+    await expect(modal.getByRole('button', { name: 'Review changes' })).toBeEnabled()
+
+    await page.keyboard.press('Escape')
+    await expect(modal).toHaveCount(0)
+    // Back on the Tools tab, not navigated away
+    await expect(page.locator('.pool-tools-panel')).toBeVisible()
+  })
+
   test('Apply fixes each project on its own, backing it up first', async ({ page }) => {
     await openTools(page)
     await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()

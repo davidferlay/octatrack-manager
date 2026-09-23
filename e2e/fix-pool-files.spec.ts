@@ -352,6 +352,29 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(modal.locator('tbody tr', { hasText: 'loop.mp3' })).toContainText('Format')
   })
 
+  test('Escape closes the incompatible list modal and stays on the Audio Pool page', async ({ page }) => {
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await page.locator('.tools-missing-files-summary').click()
+    const list = page.locator('.missing-samples-list-modal')
+    await expect(list).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(list).toHaveCount(0)
+    expect(page.url()).toContain('/audio-pool')
+  })
+
+  test('Escape closes the review modal, but not the done summary until it is read', async ({ page }) => {
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
+    const modal = page.locator('.fix-pool-modal')
+    await expect(modal.getByText('Review planned changes')).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(modal).toHaveCount(0)
+    // No conversion was started by dismissing the review
+    expect(await page.evaluate(() => (window as any).__fixCalls.length)).toBe(0)
+  })
+
   test('the pane health glyph reports the background scan and opens the Tools tab', async ({ page }) => {
     // The pool is scanned in the background on page load; the pane title gets a warning glyph
     const glyph = page.locator('.pool-health-glyph')
