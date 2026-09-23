@@ -2657,10 +2657,24 @@ h1 {
 .filter-badge {
   background-color: var(--elektron-medium-gray);
   border: 1px solid var(--elektron-border-gray);
-  padding: 0.25rem 0.5rem;
+  padding: 0.2rem 0.5rem;
   border-radius: 3px;
   font-size: 0.75rem;
   color: var(--elektron-orange);
+  /* A chip states one whole phrase - it shrinks the row before it breaks a line */
+  display: inline-flex;
+  align-items: baseline;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+/* Which filter this is, kept quiet so the eye lands on the value in force */
+.filter-badge-key {
+  color: var(--elektron-muted-text);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-right: 0.35rem;
 }
 
 .ram-info {
@@ -2674,9 +2688,11 @@ h1 {
   background: none;
   border: 1px solid var(--elektron-border-gray);
   color: var(--elektron-orange);
-  padding: 0.25rem 0.5rem;
+  padding: 0.2rem 0.5rem;
   border-radius: 3px;
   font-size: 0.75rem;
+  line-height: 1.3;
+  white-space: nowrap;
   cursor: pointer;
   transition: background-color 0.15s ease, color 0.15s ease;
 }
@@ -6028,6 +6044,15 @@ th.col-usage .header-content .sort-indicator {
   gap: 0.5rem;
 }
 
+/* One line, always: the title is the only part allowed to give up space, and
+   the chips beside it never wrap mid-phrase. */
+.missing-samples-header h3 {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .missing-samples-header-info {
   display: flex;
   align-items: center;
@@ -6036,6 +6061,8 @@ th.col-usage .header-content .sort-indicator {
   color: var(--elektron-text-secondary);
   position: relative;
   top: 1px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .missing-samples-header-actions {

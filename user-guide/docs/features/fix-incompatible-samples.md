@@ -29,6 +29,8 @@ The scan checks whether a file conforms to Elektron's specification, not whether
 | A format the Octatrack cannot read (MP3, FLAC, OGG, M4A, AAC) | `??` | No |
 | A WAV or AIFF whose header cannot be parsed | `??` | Often yes |
 
+The review screen carries the same information per file in a Reason column.
+
 ---
 
 ## Health Indicators

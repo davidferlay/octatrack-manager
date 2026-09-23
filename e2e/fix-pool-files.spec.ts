@@ -215,7 +215,7 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(modal.locator('tbody tr')).toHaveCount(2)
 
     // Bold title carries the count; the table has the Format/Bit/kHz columns
-    await expect(modal.locator('.modal-header h3')).toContainText('Review planned changes - 2 incompatible audio files')
+    await expect(modal.locator('.modal-header h3')).toContainText('Review planned changes')
     await expect(modal.locator('thead')).toContainText('Format')
     await expect(modal.locator('thead')).toContainText('Bit')
     await expect(modal.locator('thead')).toContainText('kHz')
@@ -249,7 +249,7 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await expect(modal.locator('.copy-table-btn')).toHaveText('✓')
     const clip = await page.evaluate(() => navigator.clipboard.readText())
     // TSV mirrors the visible columns (Location and Size hidden by default, Usage shown)
-    expect(clip).toContain('File\tFormat\tBit\tkHz\tUsage\tAction')
+    expect(clip).toContain('File\tFormat\tBit\tkHz\tUsage\tReason\tAction')
     expect(clip).toContain('snare48.wav')
     expect(clip).not.toContain('loop.mp3')
 
@@ -259,7 +259,7 @@ test.describe('Audio Pool — fix incompatible files', () => {
     await modal.locator('.filterable-header', { hasText: 'Format' }).locator('.filter-icon').click()
     await page.locator('.filter-dropdown .dropdown-option', { hasText: 'MP3' }).click()
     await expect(modal.locator('tbody tr')).toHaveCount(1)
-    await expect(modal.locator('.filter-badge')).toContainText('Format: MP3')
+    await expect(modal.locator('.filter-badge')).toContainText('MP3')
     await page.locator('.reset-filters-btn').click()
     await expect(modal.locator('tbody tr')).toHaveCount(2)
   })
@@ -341,6 +341,15 @@ test.describe('Audio Pool — fix incompatible files', () => {
 
     const calls = await page.evaluate(() => (window as any).__fixCalls)
     expect(calls[0].filePaths).toEqual(['/test/set/AUDIO/snare48.wav', '/test/set/AUDIO/loop.mp3'])
+  })
+
+  test('the review table says why each file was listed', async ({ page }) => {
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
+
+    const modal = page.locator('.fix-pool-modal')
+    await expect(modal.locator('tbody tr', { hasText: 'snare48.wav' })).toContainText('Sample rate')
+    await expect(modal.locator('tbody tr', { hasText: 'loop.mp3' })).toContainText('Format')
   })
 
   test('the pane health glyph reports the background scan and opens the Tools tab', async ({ page }) => {

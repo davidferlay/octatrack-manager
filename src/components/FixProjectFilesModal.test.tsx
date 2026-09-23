@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { render as rtlRender, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render as rtlRender, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { ProjectIncompatibleListModal, FixProjectFilesModal } from './FixProjectFilesModal'
@@ -38,7 +38,8 @@ describe('FixProjectFilesModal', () => {
   it('shows the review screen listing planned changes before applying', () => {
     render(<FixProjectFilesModal projectPath="/set/MyProject" files={files} onClose={vi.fn()} />)
     expect(screen.getByText(/Review planned changes/)).toBeInTheDocument()
-    expect(screen.getByText(/2 incompatible audio files/)).toBeInTheDocument()
+    // The count lives in the header's "Showing N of M files" chip, not in the title
+    expect(screen.getByText('Showing 2 of 2 files')).toBeInTheDocument()
   })
 
   it('review table right-click offers Open in file explorer but never Go to project', () => {
@@ -236,5 +237,57 @@ describe('PoolFilesTable - row context menu', () => {
     fireEvent.contextMenu(screen.getByText('kick.mp3').closest('tr')!)
     await userEvent.click(screen.getByText('Go to project'))
     expect(screen.getByTestId('location').textContent).toBe('/project?path=%2Fset%2FPROJ1&name=PROJ1')
+  })
+})
+
+describe('Reason and Action columns', () => {
+  const mixed: IncompatibleFile[] = [
+    { path: '/proj/rate.wav', compatibility: 'wrong_rate', source: 'project' },
+    { path: '/proj/depth.wav', compatibility: 'incompatible', source: 'project' },
+    { path: '/proj/tune.mp3', compatibility: 'unsupported_format', source: 'project' },
+    { path: '/proj/odd.wav', compatibility: 'unknown', source: 'project' },
+  ]
+
+  it('labels each row with why the scan listed it', () => {
+    render(<TestHarness files={mixed} />)
+    expect(screen.getByText('rate.wav').closest('tr')!).toHaveTextContent('Sample rate')
+    expect(screen.getByText('depth.wav').closest('tr')!).toHaveTextContent('Bit depth')
+    expect(screen.getByText('tune.mp3').closest('tr')!).toHaveTextContent('Format')
+    expect(screen.getByText('odd.wav').closest('tr')!).toHaveTextContent('Header')
+  })
+
+  it('spells out in the cell title that an unparseable header may still play', () => {
+    render(<TestHarness files={mixed} />)
+    const cell = screen.getByText('odd.wav').closest('tr')!.querySelector('td[title*="header"]')
+    expect(cell?.getAttribute('title')).toMatch(/may still play on the device/)
+  })
+
+  /** Opens one header's filter dropdown and picks an option. */
+  async function filterBy(column: string, option: string) {
+    const header = screen.getByText(column).closest('.header-content')!
+    fireEvent.mouseDown(header.querySelector('.filter-icon')!)
+    const dropdown = document.querySelector('.filter-dropdown')!
+    await userEvent.click(within(dropdown as HTMLElement).getByText(option))
+  }
+
+  it('filters the view by reason', async () => {
+    render(<TestHarness files={mixed} />)
+    await filterBy('Reason', 'Header')
+    expect(screen.getByText('odd.wav')).toBeInTheDocument()
+    expect(screen.queryByText('rate.wav')).not.toBeInTheDocument()
+  })
+
+  it('filters the view by action', async () => {
+    render(<TestHarness files={mixed} />)
+    await filterBy('Action', 'Rewrite as WAV')
+    expect(screen.getByText('tune.mp3')).toBeInTheDocument()
+    expect(screen.queryByText('rate.wav')).not.toBeInTheDocument()
+  })
+
+  it('sorts by reason from the header label', async () => {
+    render(<TestHarness files={mixed} />)
+    await userEvent.click(screen.getByText('Reason'))
+    const first = screen.getAllByRole('row')[1]
+    expect(first).toHaveTextContent('Bit depth')
   })
 })

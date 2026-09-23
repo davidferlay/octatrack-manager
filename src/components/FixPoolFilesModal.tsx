@@ -76,6 +76,28 @@ function actionFor(name: string, bit: number | null, khz: number | null): { labe
   return { label, title };
 }
 
+/** Why the scan listed this file, as a short column label. */
+function reasonLabel(compatibility: string): string {
+  switch (compatibility) {
+    case 'wrong_rate': return 'Sample rate';
+    case 'incompatible': return 'Bit depth';
+    case 'unsupported_format': return 'Format';
+    case 'unknown': return 'Header';
+    default: return compatibility;
+  }
+}
+
+/** Longer explanation behind a Reason cell - the "Header" case is the one worth spelling out. */
+function reasonTitle(compatibility: string): string {
+  switch (compatibility) {
+    case 'wrong_rate': return 'Sample rate is not 44.1 kHz - plays at the wrong speed on the Octatrack';
+    case 'incompatible': return 'Bit depth is not 16 or 24 bit';
+    case 'unsupported_format': return 'Audio format the Octatrack cannot read';
+    case 'unknown': return 'WAV/AIFF header could not be parsed - the audio itself may still play on the device';
+    default: return compatibility;
+  }
+}
+
 /** Shared modal-header search box + copy-table button (fix-missing style). */
 export function HeaderActions({ searchText, setSearchText, onCopy, copyFeedback, columnToggle }: {
   searchText: string;
@@ -215,6 +237,8 @@ interface PoolRow {
   khz: number | null;
   size: number | null;
   location: string;
+  /** Raw compatibility bucket the scan put this file in - drives the Reason column and filter. */
+  reason: string;
   action: string;
   actionTitle: string;
   usageEntries: PoolUsageEntry[];
@@ -224,7 +248,7 @@ interface PoolRow {
   projectName: string | null;
 }
 
-export type PoolSortColumn = 'file' | 'format' | 'bit' | 'khz' | 'size' | 'location' | 'action' | 'usage' | 'slot';
+export type PoolSortColumn = 'file' | 'format' | 'bit' | 'khz' | 'size' | 'location' | 'reason' | 'action' | 'usage' | 'slot';
 
 const POOL_COLUMNS: { id: PoolSortColumn; label: string }[] = [
   { id: 'slot', label: 'Slot' },
@@ -235,6 +259,7 @@ const POOL_COLUMNS: { id: PoolSortColumn; label: string }[] = [
   { id: 'usage', label: 'Usage' },
   { id: 'size', label: 'Size' },
   { id: 'location', label: 'Location' },
+  { id: 'reason', label: 'Reason' },
   { id: 'action', label: 'Action' },
 ];
 
@@ -259,6 +284,8 @@ export function usePoolTable(
   const [bitFilter, setBitFilter] = useState('all');
   const [khzFilter, setKhzFilter] = useState('all');
   const [usageFilter, setUsageFilter] = useState('all');
+  const [reasonFilter, setReasonFilter] = useState('all');
+  const [actionFilter, setActionFilter] = useState('all');
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
   const [usagePopover, setUsagePopover] = useState<(PopoverAnchor & { path: string; scope: UsagePopoverScope }) | null>(null);
@@ -357,6 +384,7 @@ export function usePoolTable(
       khz,
       size: meta[f.path]?.size ?? null,
       location: poolLocation(f.path, poolPath),
+      reason: f.compatibility,
       action: label,
       actionTitle: title,
       usageEntries: usageMap?.[usageKey(f.path)] ?? [],
@@ -372,6 +400,8 @@ export function usePoolTable(
       if (formatFilter !== 'all' && r.format !== formatFilter) return false;
       if (bitFilter !== 'all' && String(r.bit ?? '') !== bitFilter) return false;
       if (khzFilter !== 'all' && String(r.khz ?? '') !== khzFilter) return false;
+      if (reasonFilter !== 'all' && r.reason !== reasonFilter) return false;
+      if (actionFilter !== 'all' && r.action !== actionFilter) return false;
       if (usageFilter !== 'all') {
         const audibleCount = r.usageEntries.filter(e => e.audible).length;
         if (usageFilter === 'used' && audibleCount === 0) return false;
@@ -398,6 +428,7 @@ export function usePoolTable(
           case 'khz': return r.khz ?? -1;
           case 'size': return r.size ?? -1;
           case 'location': return r.location.toLowerCase();
+          case 'reason': return reasonLabel(r.reason);
           case 'action': return r.action;
           case 'usage': return r.usageEntries.filter(e => e.audible).length * 1000 + r.usageEntries.length;
         }
@@ -423,12 +454,15 @@ export function usePoolTable(
   const unique = (get: (r: PoolRow) => string) =>
     Array.from(new Set(allRows.map(get).filter(v => v !== ''))).sort();
 
-  const hasActiveFilters = formatFilter !== 'all' || bitFilter !== 'all' || khzFilter !== 'all' || usageFilter !== 'all';
+  const hasActiveFilters = formatFilter !== 'all' || bitFilter !== 'all' || khzFilter !== 'all' || usageFilter !== 'all'
+    || reasonFilter !== 'all' || actionFilter !== 'all';
   const resetFilters = () => {
     setFormatFilter('all');
     setBitFilter('all');
     setKhzFilter('all');
     setUsageFilter('all');
+    setReasonFilter('all');
+    setActionFilter('all');
   };
 
   /** Sortable header with a ⋮ filter dropdown, same markup as the fix-missing review table. */
@@ -509,6 +543,7 @@ export function usePoolTable(
     rows, allRows, searchText, setSearchText,
     formatFilter, setFormatFilter, bitFilter, setBitFilter, khzFilter, setKhzFilter,
     usageFilter, setUsageFilter, usageLoading,
+    reasonFilter, setReasonFilter, actionFilter, setActionFilter,
     usagePopover, setUsagePopover,
     hasActiveFilters, resetFilters, unique,
     renderFilterableHeader, renderSortableHeader,
@@ -574,10 +609,10 @@ export function ColumnToggle({ columns, hiddenCols, onToggle }: {
 /** Default column widths (px) before the user resizes anything.
     List modal: File takes the rest; review modal: Action takes the rest. */
 const POOL_COL_DEFAULTS: Record<string, number | undefined> = {
-  slot: 70, file: undefined, format: 95, bit: 72, khz: 78, usage: 120, size: 89, location: 185, action: 190,
+  slot: 70, file: undefined, format: 95, bit: 72, khz: 78, usage: 120, size: 89, location: 185, reason: 110, action: 190,
 };
 const REVIEW_COL_DEFAULTS: Record<string, number | undefined> = {
-  slot: 70, file: 260, format: 93, bit: 80, khz: 78, usage: 120, size: 90, location: 185, action: undefined,
+  slot: 70, file: 260, format: 93, bit: 80, khz: 78, usage: 120, size: 90, location: 185, reason: 110, action: undefined,
 };
 
 // Also defined in AudioFileTable.tsx - see that file's comment for why.
@@ -606,6 +641,7 @@ export function PoolFilesTable({ table, showGoToProject = false }: { table: Retu
   const {
     rows, visibleColumns, formatFilter, setFormatFilter, bitFilter, setBitFilter, khzFilter, setKhzFilter,
     usageFilter, setUsageFilter, usageLoading, usagePopover, setUsagePopover,
+    reasonFilter, setReasonFilter, actionFilter, setActionFilter,
     unique, renderFilterableHeader, renderSortableHeader, colWidths, tableRef,
   } = table;
 
@@ -656,8 +692,12 @@ export function PoolFilesTable({ table, showGoToProject = false }: { table: Retu
       case 'usage':
         return renderFilterableHeader('usage', label, usageFilter !== 'all',
           usageFilterOptions, usageFilter, setUsageFilter, resizeIndex);
+      case 'reason':
+        return renderFilterableHeader('reason', label, reasonFilter !== 'all',
+          filterOptions(unique(r => r.reason), reasonLabel), reasonFilter, setReasonFilter, resizeIndex);
       case 'action':
-        return <th key="action">Action</th>;
+        return renderFilterableHeader('action', label, actionFilter !== 'all',
+          filterOptions(unique(r => r.action)), actionFilter, setActionFilter, resizeIndex);
       default:
         return renderSortableHeader(id, label, resizeIndex);
     }
@@ -671,6 +711,7 @@ export function PoolFilesTable({ table, showGoToProject = false }: { table: Retu
       case 'khz': return <td key={id}>{r.khz != null ? (r.khz / 1000).toFixed(1) : ''}</td>;
       case 'size': return <td key={id}>{r.size != null ? formatFileSize(r.size) : ''}</td>;
       case 'location': return <td key={id} className="fix-location-cell" title={r.location}>{r.location}</td>;
+      case 'reason': return <td key={id} title={reasonTitle(r.reason)}>{reasonLabel(r.reason)}</td>;
       case 'action': return <td key={id} title={r.actionTitle}>{r.action}</td>;
       case 'slot': return <td key={id} className="col-slot">{r.slots.length > 0 ? r.slots.join(', ') : <span className="usage-none">—</span>}</td>;
       case 'usage': {
@@ -808,6 +849,7 @@ export function poolTableTsv(table: ReturnType<typeof usePoolTable>): string {
       case 'khz': return r.khz != null ? (r.khz / 1000).toFixed(1) : '';
       case 'size': return r.size != null ? formatFileSize(r.size) : '';
       case 'location': return r.location;
+      case 'reason': return reasonLabel(r.reason);
       case 'action': return r.action;
       case 'slot': return r.slots.join(', ');
       case 'usage': {
@@ -824,16 +866,28 @@ export function poolTableTsv(table: ReturnType<typeof usePoolTable>): string {
   ].join('\n');
 }
 
+/** One active filter, as a chip: muted key, then the value that is actually in force. */
+function FilterBadge({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="filter-badge">
+      <span className="filter-badge-key">{label}</span>
+      {value}
+    </span>
+  );
+}
+
 /** Filter badges + reset button shown in the modal header when filters are active. */
 export function FilterBadges({ table }: { table: ReturnType<typeof usePoolTable> }) {
-  const { formatFilter, bitFilter, khzFilter, usageFilter, hasActiveFilters, resetFilters } = table;
+  const { formatFilter, bitFilter, khzFilter, usageFilter, reasonFilter, actionFilter, hasActiveFilters, resetFilters } = table;
   if (!hasActiveFilters) return null;
   return (
     <>
-      {formatFilter !== 'all' && <span className="filter-badge">Format: {formatFilter}</span>}
-      {bitFilter !== 'all' && <span className="filter-badge">Bit: {bitFilter}</span>}
-      {khzFilter !== 'all' && <span className="filter-badge">kHz: {(Number(khzFilter) / 1000).toFixed(1)}</span>}
-      {usageFilter !== 'all' && <span className="filter-badge">Usage: {usageFilter === 'used' ? 'Used' : usageFilter === 'referenced' ? 'Referenced' : 'Unused'}</span>}
+      {formatFilter !== 'all' && <FilterBadge label="Format" value={formatFilter} />}
+      {bitFilter !== 'all' && <FilterBadge label="Bit" value={bitFilter} />}
+      {khzFilter !== 'all' && <FilterBadge label="kHz" value={(Number(khzFilter) / 1000).toFixed(1)} />}
+      {usageFilter !== 'all' && <FilterBadge label="Usage" value={usageFilter === 'used' ? 'Used' : usageFilter === 'referenced' ? 'Referenced' : 'Unused'} />}
+      {reasonFilter !== 'all' && <FilterBadge label="Reason" value={reasonLabel(reasonFilter)} />}
+      {actionFilter !== 'all' && <FilterBadge label="Action" value={actionFilter} />}
       <button className="reset-filters-btn" onClick={resetFilters} title="Reset all filters">✕ Reset</button>
     </>
   );
@@ -997,7 +1051,7 @@ export function FixSamplesModal({
         {handles}
         <div className={`modal-header${phase === 'review' ? ' missing-samples-header' : ''}`}>
           <h3>
-            {phase === 'review' && <><i className="fas fa-clipboard-check"></i> Review planned changes - {files.length} incompatible audio file{files.length === 1 ? '' : 's'}</>}
+            {phase === 'review' && <><i className="fas fa-clipboard-check"></i> Review planned changes</>}
             {phase === 'converting' && <><i className="fas fa-wrench" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>{progressingLabel}</>}
             {phase === 'done' && <><i className="fas fa-wrench" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>{doneLabel}</>}
             {phase === 'error' && 'Error'}
