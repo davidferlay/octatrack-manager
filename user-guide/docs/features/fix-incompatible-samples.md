@@ -75,6 +75,16 @@ In **Fix Project Samples:**
 
 ---
 
+## Stopping and resuming
+
+A large pool can take a while to convert. The run can be stopped at any point with the Cancel button, and it stops at a file boundary, so no file is left half-converted.
+
+Everything converted before the stop is kept, and Sample Slots references are repointed for those files as usual, so no project is left pointing at a name that no longer exists.
+
+Nothing needs to be resumed later. Re-opening the tool runs a fresh scan: files converted earlier now conform and no longer show up, so what comes back is exactly what is left to do. Files added, removed or edited in the meantime are picked up by that same scan.
+
+---
+
 ## Compatibility fix
 
 - Each file is converted to **44.1 kHz 16/24-bit WAV** — the same high-quality conversion used during import into the pool.
