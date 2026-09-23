@@ -17,6 +17,8 @@ import {
 import { Version } from "../components/Version";
 import { AudioFileTable, audioKind } from "../components/AudioFileTable";
 import { FixPoolFilesModal, PoolIncompatibleListModal, type IncompatibleFile, type PoolFixResult, type CopyProgressEvent } from "../components/FixPoolFilesModal";
+import { FixSetMissingSamplesModal, type ProjectMissing } from "../components/FixSetMissingSamplesModal";
+import { MissingSamplesListModal } from "../components/MissingSamplesListModal";
 import { PathContextMenu, PurgeFilesModal, purgeAudioFileCount, purgeNonAudioFileCount, PurgeUnusedListModal, type ClearableSlot, type PurgeUnit } from "../components/PurgeFilesModal";
 import { isUnderBackupsDir } from "../utils/purgeBackups";
 import { OverwriteModal } from "../components/OverwriteModal";
@@ -28,6 +30,17 @@ import { SamplePlayerBar } from "../components/SamplePlayerBar";
 import type { AudioFile, RenameResult } from "../types/audioFile";
 import { RenameFileModal } from "../components/RenameFileModal";
 import { readPoolDir, writePoolDir } from "../utils/poolDir";
+
+type PoolOperation = 'fix_audio_pool' | 'fix_missing_samples' | 'purge_pool_samples';
+
+/** What a project's slots point at but cannot find - shape of `list_missing_samples`. */
+interface MissingSample {
+  filename: string;
+  original_path: string;
+  slot_type: string;
+  flex_slot_ids: number[];
+  static_slot_ids: number[];
+}
 import "./AudioPoolPage.css";
 
 // Droppable wrapper for the Audio Pool (destination) pane. Uses @dnd-kit (pointer-based)
@@ -375,7 +388,43 @@ export function AudioPoolPage() {
 
   // Tools tab: which operation is selected. "fix_audio_pool" is the scan
   // above; "purge_pool_samples" is the unused-files scan/state below.
-  const [poolOperation, setPoolOperation] = useState<'fix_audio_pool' | 'purge_pool_samples'>('fix_audio_pool');
+  const [poolOperation, setPoolOperation] = useState<PoolOperation>('fix_audio_pool');
+  // Set-wide Fix Missing Samples: scanned on demand, since nothing else on this page needs it
+  const [missingByProject, setMissingByProject] = useState<ProjectMissing[] | null>(null);
+  const [missingScanKey, setMissingScanKey] = useState(0);
+  const [missingPoolOption, setMissingPoolOption] = useState<'use_from_pool' | 'copy_to_project'>('use_from_pool');
+  const [missingOtherOption, setMissingOtherOption] = useState<'move_to_pool' | 'copy_to_project'>('copy_to_project');
+  const [missingReview, setMissingReview] = useState(true);
+  // Snapshot of what to fix, taken at Execute: the scan behind it is re-run on
+  // success, and a live binding would tear the modal down before its summary shows.
+  const [missingModal, setMissingModal] = useState<ProjectMissing[] | null>(null);
+  const [showMissingListModal, setShowMissingListModal] = useState(false);
+  const missingTotal = (missingByProject ?? []).reduce((n, p) => n + p.missing.length, 0);
+  // Same Flex/Static breakdown the project-scope tool shows, summed over the Set
+  const missingAll = (missingByProject ?? []).flatMap(p => p.missing);
+  const missingFlex = missingAll.filter(m => m.slot_type === 'flex' || m.slot_type === 'both').length;
+  const missingStatic = missingAll.filter(m => m.slot_type === 'static' || m.slot_type === 'both').length;
+  const missingBoth = missingAll.filter(m => m.slot_type === 'both').length;
+
+  // One list_missing_samples per project of the Set - the same scan the per-project
+  // tool runs, just fanned out so the whole Set is covered in one go.
+  useEffect(() => {
+    if (poolOperation !== 'fix_missing_samples' || !audioPoolPath) return;
+    let cancelled = false;
+    setMissingByProject(null);
+    (async () => {
+      const projects = (await invoke<{ name: string; path: string }[]>('list_set_projects', { poolPath: audioPoolPath }).catch(() => [])) ?? [];
+      if (cancelled) return;
+      const scanned = await Promise.all(projects.map(async p => ({
+        name: p.name,
+        path: p.path,
+        missing: (await invoke<MissingSample[]>('list_missing_samples', { projectPath: p.path }).catch(() => [])) ?? [],
+      })));
+      if (cancelled) return;
+      setMissingByProject(scanned.filter(p => p.missing.length > 0));
+    })();
+    return () => { cancelled = true; };
+  }, [poolOperation, audioPoolPath, missingScanKey]);
   const [purgeIncludeAllProjects, setPurgeIncludeAllProjects] = useState(false);
   // Same three-way scope as the project Tools tab - see ToolsPanel. Slot
   // clearing always acts on the Set's projects (that is where slots live),
@@ -1684,9 +1733,10 @@ export function AudioPoolPage() {
             <select
               className="tools-select"
               value={poolOperation}
-              onChange={(e) => setPoolOperation(e.target.value as 'fix_audio_pool' | 'purge_pool_samples')}
+              onChange={(e) => setPoolOperation(e.target.value as PoolOperation)}
             >
               <option value="fix_audio_pool">Fix Incompatible Samples</option>
+              <option value="fix_missing_samples">Fix Missing Samples</option>
               <option value="purge_pool_samples">Purge Audio Pool Samples</option>
             </select>
           </div>
@@ -1761,6 +1811,117 @@ export function AudioPoolPage() {
                   className="tools-execute-btn"
                   onClick={() => setFixModal({ files: scopedIncompatibleFiles, skipReview: !reviewBeforeApply })}
                   disabled={poolScanLoading}
+                >
+                  <i className="fas fa-wrench"></i>
+                  Execute
+                </button>
+              </div>
+            )}
+          </div>
+          )}
+
+          {poolOperation === 'fix_missing_samples' && (
+          <div className="tools-fix-missing-layout">
+            <div className="tools-description-pane">
+              <p>
+                Scans every project of Set for Sample Slots pointing at an audio file that
+                no longer exists, then looks for each one in the project's own directory,
+                the Audio Pool and the other projects of Set.
+                <br />
+                Same tool as a project's Fix Missing Samples, run across the whole Set in one pass.
+              </p>
+            </div>
+            {(missingByProject === null || missingTotal > 0) && (
+              <div className="tools-options-panel">
+                <h3>Options</h3>
+                <div className="tools-field">
+                  <label>When samples are found in Audio Pool</label>
+                  <div className="tools-toggle-group">
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${missingPoolOption === 'use_from_pool' ? 'selected' : ''}`}
+                      onClick={() => setMissingPoolOption('use_from_pool')}
+                      title="Update Sample Slots to reference the audio file from the Audio Pool (../AUDIO/)"
+                    >
+                      Use from Pool
+                    </button>
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${missingPoolOption === 'copy_to_project' ? 'selected' : ''}`}
+                      onClick={() => setMissingPoolOption('copy_to_project')}
+                      title="Copy the audio file from the Audio Pool into each project's own directory"
+                    >
+                      Copy to Project
+                    </button>
+                  </div>
+                </div>
+                <div className="tools-field">
+                  <label>When samples are found in another project of Set</label>
+                  <div className="tools-toggle-group">
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${missingOtherOption === 'copy_to_project' ? 'selected' : ''}`}
+                      onClick={() => setMissingOtherOption('copy_to_project')}
+                      title="Copy the audio file into the project that is missing it"
+                    >
+                      Copy to Project
+                    </button>
+                    <button
+                      type="button"
+                      className={`tools-toggle-btn ${missingOtherOption === 'move_to_pool' ? 'selected' : ''}`}
+                      onClick={() => setMissingOtherOption('move_to_pool')}
+                      title="Move the audio file to the Audio Pool and update every project of Set that references it"
+                    >
+                      Move to Pool
+                    </button>
+                  </div>
+                </div>
+                <div className="tools-field tools-checkbox">
+                  <label title="Show the review screen listing what was found, and where, before applying">
+                    <input
+                      type="checkbox"
+                      checked={missingReview}
+                      onChange={(e) => setMissingReview(e.target.checked)}
+                    />
+                    Review before applying changes
+                  </label>
+                </div>
+              </div>
+            )}
+            <div className="tools-fix-status-panel">
+              <h3>Status</h3>
+              {missingByProject === null ? (
+                <div className="tools-fix-status loading">
+                  <span className="loading-spinner-small"></span>
+                  <span>Scanning every project of Set...</span>
+                </div>
+              ) : missingTotal === 0 ? (
+                <div className="tools-fix-status all-good">
+                  <div className="tools-fix-status-count">0</div>
+                  <div className="tools-fix-status-label">missing sample files - every Sample Slot of Set references an existing file</div>
+                </div>
+              ) : (
+                <button
+                  className="tools-missing-files-summary"
+                  onClick={() => setShowMissingListModal(true)}
+                  title="Click to view missing samples list"
+                >
+                  <span className="tools-fix-status-count">{missingTotal}</span>
+                  {' '}missing sample file{missingTotal === 1 ? '' : 's'}
+                  <span className="tools-fix-status-detail">
+                    {' - '}{missingFlex} Flex, {missingStatic} Static
+                    {missingBoth > 0 && ` (${missingBoth} in both)`}
+                    {' across '}{missingByProject.length} project{missingByProject.length === 1 ? '' : 's'}
+                  </span>
+                </button>
+              )}
+            </div>
+            {missingTotal > 0 && (
+              <div className="tools-actions">
+                <button
+                  className="tools-execute-btn"
+                  onClick={() => setMissingModal(missingByProject)}
+                  disabled={missingByProject === null}
                 >
                   <i className="fas fa-wrench"></i>
                   Execute
@@ -2206,6 +2367,29 @@ export function AudioPoolPage() {
           usageLoading={poolUsageLoading}
           onClose={() => setFixModal(null)}
           onFixed={() => { loadDestinationFiles(destinationPath); setPoolScanKey(k => k + 1); invalidatePoolUsage(audioPoolPath); }}
+        />
+      )}
+
+      {showMissingListModal && missingByProject && (
+        <MissingSamplesListModal
+          byProject={missingByProject.map(p => ({ name: p.name, missing: p.missing }))}
+          onClose={() => setShowMissingListModal(false)}
+        />
+      )}
+
+      {missingModal && missingModal.length > 0 && (
+        <FixSetMissingSamplesModal
+          projects={missingModal}
+          poolOption={missingPoolOption}
+          otherProjectOption={missingOtherOption}
+          skipReview={!missingReview}
+          onClose={() => setMissingModal(null)}
+          onApplied={() => {
+            // Files may have moved into the pool, and every fixed slot changes usage
+            setMissingScanKey(k => k + 1);
+            loadDestinationFiles(destinationPath);
+            invalidatePoolUsage(audioPoolPath);
+          }}
         />
       )}
 

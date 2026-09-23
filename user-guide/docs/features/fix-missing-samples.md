@@ -4,7 +4,16 @@ sidebar_position: 13
 
 # Fix Missing Samples
 
-**Fix Missing Samples** scans your project for sample slot references that point to missing audio files, then searches multiple locations to find and reconnect them automatically.
+**Fix Missing Samples** scans for sample slot references that point to missing audio files, then searches multiple locations to find and reconnect them automatically.
+
+It runs at two scopes, from the **Tools** tab of either page:
+
+| Opened from | What it scans |
+|-------------|---------------|
+| A project | That project's 256 sample slots |
+| [Audio Pool](audio-pool.md) | Every project of the Set, in one pass |
+
+The rest of this page describes the project scope; [Across the whole Set](#across-the-whole-set) covers what differs at Set scope.
 
 ![Tools - Fix Missing Samples](/img/screenshots/tools-fix-samples-notok.png)
 
@@ -110,6 +119,20 @@ Once changes are applied, the tool:
 The done screen shows a summary of all search steps and the final result.
 
 ![Tools - Fix Missing Samples - All ok](/img/screenshots/tools-fix-samples-ok.png)
+
+---
+
+## Across the whole Set
+
+Selecting **Fix Missing Samples** from the [Audio Pool](audio-pool.md)'s **Tools** tab runs the same tool over every project of the Set at once, instead of opening each project in turn.
+
+- The status pane totals the missing files across the Set and names each project with its own count.
+- The same two options apply, and apply identically to every project.
+- Execute searches each project's own directory, then the Audio Pool, then the other projects of Set - three passes over the Set rather than one full search per project.
+- The review screen is a single table with a **Project** column, so the whole Set is one list. Files nothing turned up are listed as **Not found**, and **Browse** searches one more directory for every project that still needs something, in one go.
+- Applying fixes each project separately and backs each one up first, exactly as the project-scope tool does. A project whose files were all found is fixed; one where nothing was found is left untouched.
+
+The same file missing in two projects is two rows, not one: where it ends up (or what its slot path becomes) is decided per project.
 
 :::tip
 - **Both slot types are updated:** If a missing file is referenced by both a Static and a Flex slot, both are fixed in a single operation.

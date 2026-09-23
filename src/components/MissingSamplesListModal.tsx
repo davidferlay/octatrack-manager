@@ -16,17 +16,23 @@ interface MissingSampleRow {
   filename: string;
   original_path: string;
   source: string; // "Project" or "Audio Pool"
+  /** Owning project - only set (and only shown) at Set scope. */
+  project?: string;
 }
 
 interface MissingSamplesListModalProps {
-  missingSamples: MissingSample[];
+  /** Project scope: this project's missing samples. */
+  missingSamples?: MissingSample[];
+  /** Set scope: one entry per project of the Set - adds a Project column. */
+  byProject?: { name: string; missing: MissingSample[] }[];
   onClose: () => void;
 }
 
-type SortColumn = "slot" | "file" | "source" | "type";
+type SortColumn = "project" | "slot" | "file" | "source" | "type";
 type SortDirection = "asc" | "desc";
 
 const LIST_COLUMNS: { id: SortColumn; label: string }[] = [
+  { id: "project", label: "Project" },
   { id: "slot", label: "Slot" },
   { id: "file", label: "File" },
   { id: "source", label: "Source" },
@@ -49,13 +55,18 @@ function getSource(path: string): string {
 
 export function MissingSamplesListModal({
   missingSamples,
+  byProject,
   onClose,
 }: MissingSamplesListModalProps) {
+  // Set scope gains a Project column; project scope is exactly as before.
+  const groups = byProject ?? [{ name: "", missing: missingSamples ?? [] }];
+  const withProject = byProject !== undefined;
   const [sortColumn, setSortColumn] = useState<SortColumn>("slot");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [searchText, setSearchText] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
+  const [projectFilter, setProjectFilter] = useState<string>("all");
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{
     top: number;
@@ -69,7 +80,7 @@ export function MissingSamplesListModal({
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
-  const visibleColumns = LIST_COLUMNS.filter(c => !hiddenCols.has(c.id));
+  const visibleColumns = LIST_COLUMNS.filter(c => !hiddenCols.has(c.id) && (withProject || c.id !== "project"));
   const [modalWidth, setModalWidth] = useState<number | null>(null);
   const [modalHeight, setModalHeight] = useState<number | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -79,27 +90,17 @@ export function MissingSamplesListModal({
   const dragStartWidth = useRef(0);
   const dragStartHeight = useRef(0);
 
-  // Flatten MissingSample[] into one row per slot
+  // Flatten into one row per slot, keeping which project each slot belongs to
   const rows: MissingSampleRow[] = [];
-  for (const sample of missingSamples) {
-    const source = getSource(sample.original_path);
-    for (const id of sample.flex_slot_ids) {
-      rows.push({
-        slot_id: id,
-        slot_type: "Flex",
-        filename: sample.filename,
-        original_path: sample.original_path,
-        source,
-      });
-    }
-    for (const id of sample.static_slot_ids) {
-      rows.push({
-        slot_id: id,
-        slot_type: "Static",
-        filename: sample.filename,
-        original_path: sample.original_path,
-        source,
-      });
+  for (const group of groups) {
+    for (const sample of group.missing) {
+      const source = getSource(sample.original_path);
+      for (const id of sample.flex_slot_ids) {
+        rows.push({ slot_id: id, slot_type: "Flex", filename: sample.filename, original_path: sample.original_path, source, project: group.name });
+      }
+      for (const id of sample.static_slot_ids) {
+        rows.push({ slot_id: id, slot_type: "Static", filename: sample.filename, original_path: sample.original_path, source, project: group.name });
+      }
     }
   }
 
@@ -190,10 +191,10 @@ export function MissingSamplesListModal({
   const filterRows = (rowsToFilter: MissingSampleRow[]) => {
     return rowsToFilter.filter((row) => {
       if (searchText) {
-        if (!row.filename.toLowerCase().includes(searchText.toLowerCase())) {
-          return false;
-        }
+        const haystack = `${row.project ?? ""} ${row.filename}`.toLowerCase();
+        if (!haystack.includes(searchText.toLowerCase())) return false;
       }
+      if (projectFilter !== "all" && row.project !== projectFilter) return false;
       if (typeFilter !== "all") {
         if (row.slot_type !== typeFilter) return false;
       }
@@ -210,6 +211,10 @@ export function MissingSamplesListModal({
       let compareB: string | number;
 
       switch (sortColumn) {
+        case "project":
+          compareA = (a.project ?? "").toLowerCase();
+          compareB = (b.project ?? "").toLowerCase();
+          break;
         case "slot":
           compareA = (a.slot_type === "Flex" ? 0 : 1000) + a.slot_id;
           compareB = (b.slot_type === "Flex" ? 0 : 1000) + b.slot_id;
@@ -239,12 +244,18 @@ export function MissingSamplesListModal({
   const filteredRows = filterRows(rows);
   const sortedRows = sortRows(filteredRows);
 
-  const hasActiveFilters = typeFilter !== "all" || sourceFilter !== "all";
+  const hasActiveFilters = typeFilter !== "all" || sourceFilter !== "all" || projectFilter !== "all";
 
   const resetAllFilters = () => {
     setTypeFilter("all");
     setSourceFilter("all");
+    setProjectFilter("all");
   };
+
+  const projectOptions = [
+    { value: "all", label: "All" },
+    ...groups.map(g => ({ value: g.name, label: g.name })),
+  ];
 
   const getUniqueSources = () => {
     const sources = new Set<string>();
@@ -256,6 +267,7 @@ export function MissingSamplesListModal({
     // TSV mirrors the visible columns
     const cellValue = (row: MissingSampleRow, id: SortColumn): string => {
       switch (id) {
+        case "project": return row.project ?? "";
         case "slot": return `${row.slot_type === "Flex" ? "F" : "S"}${row.slot_id}`;
         case "file": return row.filename;
         case "source": return row.source;
@@ -349,7 +361,7 @@ export function MissingSamplesListModal({
     <div className="modal-overlay" onClick={onClose}>
       <div
         ref={modalRef}
-        className="modal-content missing-samples-list-modal"
+        className={`modal-content missing-samples-list-modal${withProject ? " set-scope" : ""}`}
         onClick={(e) => e.stopPropagation()}
         style={{
           ...(modalWidth ? { width: modalWidth, maxWidth: "95vw" } : {}),
@@ -374,12 +386,15 @@ export function MissingSamplesListModal({
         <div className="modal-header missing-samples-header">
           <h3>
             <i className="fas fa-list"></i>
-            Missing Samples
+            {withProject ? "Missing Samples across Set" : "Missing Samples"}
           </h3>
           <div className="missing-samples-header-info">
             <span className="missing-samples-header-count">
               Showing {sortedRows.length} of {rows.length} slots
             </span>
+            {projectFilter !== "all" && (
+              <span className="filter-badge">Project: {projectFilter}</span>
+            )}
             {typeFilter !== "all" && (
               <span className="filter-badge">Type: {typeFilter}</span>
             )}
@@ -435,6 +450,10 @@ export function MissingSamplesListModal({
                 <table className="samples-table">
                   <thead>
                     <tr>
+                      {withProject && !hiddenCols.has("project") && renderFilterableHeader(
+                        "project", "Project", "project", projectFilter !== "all", "col-source",
+                        projectOptions, projectFilter, setProjectFilter,
+                      )}
                       {!hiddenCols.has("slot") && (
                         <th
                           onClick={() => handleSort("slot")}
@@ -489,7 +508,10 @@ export function MissingSamplesListModal({
                   </thead>
                   <tbody>
                     {sortedRows.map((row) => (
-                      <tr key={`${row.slot_type}-${row.slot_id}`}>
+                      <tr key={`${row.project ?? ""}-${row.slot_type}-${row.slot_id}-${row.filename}`}>
+                        {withProject && !hiddenCols.has("project") && (
+                          <td className="col-source">{row.project}</td>
+                        )}
                         {!hiddenCols.has("slot") && (
                           <td className="col-slot">
                             {row.slot_type === "Flex" ? "F" : "S"}

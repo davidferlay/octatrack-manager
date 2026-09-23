@@ -118,12 +118,14 @@ test.describe('Purge Audio Pool Samples', () => {
     await page.locator('.header-tab', { hasText: 'Tools' }).click()
 
     const select = page.locator('.tools-section .tools-select')
-    await expect(select.locator('option')).toHaveCount(2)
+    await expect(select.locator('option')).toHaveCount(3)
     const options = select.locator('option')
     await expect(options.nth(0)).toHaveText('Fix Incompatible Samples')
     await expect(options.nth(0)).toHaveAttribute('value', 'fix_audio_pool')
-    await expect(options.nth(1)).toHaveText('Purge Audio Pool Samples')
-    await expect(options.nth(1)).toHaveAttribute('value', 'purge_pool_samples')
+    await expect(options.nth(1)).toHaveText('Fix Missing Samples')
+    await expect(options.nth(1)).toHaveAttribute('value', 'fix_missing_samples')
+    await expect(options.nth(2)).toHaveText('Purge Audio Pool Samples')
+    await expect(options.nth(2)).toHaveAttribute('value', 'purge_pool_samples')
   })
 
   test('scanning shows a live percentage that advances as each of the 5 background steps resolves', async ({ page }) => {

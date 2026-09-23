@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { ColumnToggle } from "./FixPoolFilesModal";
 
-interface MissingSample {
+export interface MissingSample {
   filename: string;
   original_path: string;
   slot_type: string;
@@ -11,28 +11,28 @@ interface MissingSample {
   static_slot_ids: number[];
 }
 
-interface FoundSample {
+export interface FoundSample {
   filename: string;
   found_path: string;
   source_project: string | null;
 }
 
-interface SampleResolution {
+export interface SampleResolution {
   filename: string;
   found_path: string;
   action: string;
   new_slot_path: string;
 }
 
-interface FixResult {
+export interface FixResult {
   resolved_count: number;
   files_copied: number;
   files_moved: number;
   projects_updated: string[];
 }
 
-type PoolOption = "use_from_pool" | "copy_to_project";
-type OtherProjectOption = "move_to_pool" | "copy_to_project";
+export type PoolOption = "use_from_pool" | "copy_to_project";
+export type OtherProjectOption = "move_to_pool" | "copy_to_project";
 
 type ModalPhase = "searching" | "search_done" | "confirming" | "applying" | "done";
 
@@ -43,7 +43,7 @@ interface SearchStep {
   fullPath?: string; // Full path for user-selected directories (used in tooltip)
 }
 
-interface ResolvedFile {
+export interface ResolvedFile {
   filename: string;
   found_path: string;
   source: string; // "project", "pool", "other_project", "user_dir"
@@ -51,6 +51,92 @@ interface ResolvedFile {
   action: string;
   new_slot_path: string;
   color: string; // CSS class for color coding
+}
+
+/**
+ * What to do with a file the search turned up: which action the backend should take
+ * and the path the sample slot must end up pointing at. Pure, and keyed only on the
+ * project it belongs to - so the Set-wide tool can call it once per project.
+ */
+export function resolveFoundSample(
+  projectPath: string,
+  poolOption: PoolOption,
+  otherProjectOption: OtherProjectOption,
+  filename: string,
+  found_path: string,
+  source: string,
+  source_project?: string,
+): ResolvedFile {
+  let action: string;
+  let new_slot_path: string;
+  let color: string;
+
+  switch (source) {
+    case "project": {
+      // Found in project dir — compute relative path from project root
+      const projectPrefix = projectPath.endsWith("/")
+        ? projectPath
+        : projectPath + "/";
+      const relativePath = found_path.startsWith(projectPrefix)
+        ? found_path.slice(projectPrefix.length)
+        : filename;
+      action = "update_path";
+      new_slot_path = relativePath;
+      color = "green";
+      break;
+    }
+    case "pool": {
+      if (poolOption === "use_from_pool") {
+        action = "update_path";
+        // Compute relative path from project dir to found file in pool
+        // e.g. project=/Set/Project, found=/Set/AUDIO/sub/file.wav → ../AUDIO/sub/file.wav
+        const setDir = projectPath.substring(
+          0,
+          projectPath.lastIndexOf("/")
+        );
+        const setPrefix = setDir.endsWith("/") ? setDir : setDir + "/";
+        const relFromSet = found_path.startsWith(setPrefix)
+          ? found_path.slice(setPrefix.length)
+          : `AUDIO/${filename}`;
+        new_slot_path = `../${relFromSet}`;
+        color = "green";
+      } else {
+        action = "copy_to_project";
+        new_slot_path = filename;
+        color = "blue";
+      }
+      break;
+    }
+    case "other_project": {
+      if (otherProjectOption === "move_to_pool") {
+        action = "move_to_pool";
+        new_slot_path = `../AUDIO/${filename}`;
+        color = "purple";
+      } else {
+        action = "copy_to_project";
+        new_slot_path = filename;
+        color = "blue";
+      }
+      break;
+    }
+    case "user_dir":
+    default: {
+      action = "copy_to_project";
+      new_slot_path = filename;
+      color = "blue";
+      break;
+    }
+  }
+
+  return {
+    filename,
+    found_path,
+    source,
+    source_project,
+    action,
+    new_slot_path,
+    color,
+  };
 }
 
 interface Props {
@@ -331,84 +417,12 @@ export function FixMissingSamplesModal({
     []
   );
 
-  // Determine action and path for a found file based on its source and options
-  function resolveAction(
+  const resolveAction = (
     filename: string,
     found_path: string,
     source: string,
-    source_project?: string
-  ): ResolvedFile {
-    let action: string;
-    let new_slot_path: string;
-    let color: string;
-
-    switch (source) {
-      case "project": {
-        // Found in project dir — compute relative path from project root
-        const projectPrefix = projectPath.endsWith("/")
-          ? projectPath
-          : projectPath + "/";
-        const relativePath = found_path.startsWith(projectPrefix)
-          ? found_path.slice(projectPrefix.length)
-          : filename;
-        action = "update_path";
-        new_slot_path = relativePath;
-        color = "green";
-        break;
-      }
-      case "pool": {
-        if (poolOption === "use_from_pool") {
-          action = "update_path";
-          // Compute relative path from project dir to found file in pool
-          // e.g. project=/Set/Project, found=/Set/AUDIO/sub/file.wav → ../AUDIO/sub/file.wav
-          const setDir = projectPath.substring(
-            0,
-            projectPath.lastIndexOf("/")
-          );
-          const setPrefix = setDir.endsWith("/") ? setDir : setDir + "/";
-          const relFromSet = found_path.startsWith(setPrefix)
-            ? found_path.slice(setPrefix.length)
-            : `AUDIO/${filename}`;
-          new_slot_path = `../${relFromSet}`;
-          color = "green";
-        } else {
-          action = "copy_to_project";
-          new_slot_path = filename;
-          color = "blue";
-        }
-        break;
-      }
-      case "other_project": {
-        if (otherProjectOption === "move_to_pool") {
-          action = "move_to_pool";
-          new_slot_path = `../AUDIO/${filename}`;
-          color = "purple";
-        } else {
-          action = "copy_to_project";
-          new_slot_path = filename;
-          color = "blue";
-        }
-        break;
-      }
-      case "user_dir":
-      default: {
-        action = "copy_to_project";
-        new_slot_path = filename;
-        color = "blue";
-        break;
-      }
-    }
-
-    return {
-      filename,
-      found_path,
-      source,
-      source_project,
-      action,
-      new_slot_path,
-      color,
-    };
-  }
+    source_project?: string,
+  ) => resolveFoundSample(projectPath, poolOption, otherProjectOption, filename, found_path, source, source_project);
 
   // Helper to update a step by label
   function updateStep(label: string, update: Partial<SearchStep>) {

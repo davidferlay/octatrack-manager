@@ -92,6 +92,14 @@ See [Fix Incompatible Samples](fix-incompatible-samples.md) for the full walkthr
 
 ---
 
+## Fixing Missing Samples
+
+The **Tools** tab's **Fix Missing Samples** operation covers every project of the Set in one pass: it finds the sample slots pointing at files that no longer exist, searches each project's own directory, the pool and the other projects of Set, and repoints what it finds.
+
+See [Fix Missing Samples](fix-missing-samples.md#across-the-whole-set) for the Set-scope walkthrough.
+
+---
+
 ## Purging Unused Samples
 
 Pools tend to accumulate samples that no project references anymore. The **Tools** tab's **Purge Audio Pool Samples** operation finds every unused audio file in the pool — optionally across every project of the Set too — and removes it, either to the OS Trash Bin or moved into a folder of your choice.

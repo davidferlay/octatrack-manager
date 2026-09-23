@@ -6198,7 +6198,7 @@ th.col-usage .header-content .sort-indicator {
    default, since its table has more columns (Usage, Slot) than Fix Missing
    Samples' own review table. */
 .modal-content.fix-pool-modal {
-  max-width: 920px;
+  max-width: 1200px;
 }
 
 /* Converting/done/error phases (Fix Audio Pool/Project Samples): narrower
@@ -6207,6 +6207,23 @@ th.col-usage .header-content .sort-indicator {
 .modal-content.fix-pool-modal-narrow {
   max-width: 560px;
   width: 90%;
+}
+
+/* Set-wide Fix Missing Samples: one more column than the project-scope table
+   (Project), so its review screen gets the same room as the pool review. */
+.modal-content.fix-set-missing-modal {
+  max-width: 1100px;
+}
+
+/* Its search screen stays narrow, but not so narrow that a Set-wide count like
+   "612/797 missing files found - 185 still missing" wraps onto a second line. */
+.modal-content.fix-set-missing-modal.fix-pool-modal-narrow {
+  max-width: 700px;
+}
+
+/* The Set-wide missing list has the same extra Project column. */
+.modal-content.missing-samples-list-modal.set-scope {
+  max-width: 1100px;
 }
 
 /* Converting has more rows (step label + filename + Cancel) than the done
