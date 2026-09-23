@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getFileFormat, formatFileSize, usageKey, UsagePopoverBox, UsagePopoverEntry, type PopoverAnchor, type UsagePopoverScope } from './AudioFileTable';
 import type { PoolUsageEntry } from '../types/audioFile';
+import { useEscapeClose } from '../hooks/useEscapeClose';
 
 export interface IncompatibleFile {
   path: string;
@@ -905,6 +906,7 @@ export function PoolIncompatibleListModal({ poolPath, files, onClose, usageMap, 
   usageLoading?: boolean;
 }) {
   const table = usePoolTable(files, poolPath, false, ['size'], usageMap, usageLoading);
+  useEscapeClose(onClose);
   const [copyFeedback, copy] = useCopyFeedback();
   const { modalRef, style, handles } = useModalResize();
 
@@ -989,6 +991,8 @@ export function FixSamplesModal({
   const [result, setResult] = useState<PoolFixResult | null>(null);
   const transferIdRef = useRef<string>(`${transferIdPrefix}-${Date.now()}`);
   const startedRef = useRef(false);
+  // Escape dismisses, except mid-conversion - the same state that hides the close button.
+  useEscapeClose(onClose, phase !== 'converting');
 
   // Location and Size are hidden by default here - the Action column matters most for review
   const table = usePoolTable(files, scopePath, true, ['location', 'size'], usageMap, usageLoading, withSlot);

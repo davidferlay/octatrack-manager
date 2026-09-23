@@ -17,6 +17,7 @@ import { TrackBadge } from "../components/TrackBadge";
 import { ScrollToTop } from "../components/ScrollToTop";
 import { Version } from "../components/Version";
 import { formatMixerLevel, formatMetronomePitch } from "../utils/format";
+import { isModalOpen } from "../hooks/useEscapeClose";
 import "../App.css";
 
 // Most type definitions are now imported from ProjectsContext via Bank and ProjectMetadata types
@@ -701,6 +702,8 @@ export function ProjectDetail() {
       if (e.key === 'Escape') {
         // Mid-drag Escape cancels the drag (handled natively); don't leave the project.
         if (isDraggingRef.current) return;
+        // A dialog is open: Escape belongs to it, not to the page behind it.
+        if (isModalOpen()) return;
         leaveToProjectList();
       }
     }

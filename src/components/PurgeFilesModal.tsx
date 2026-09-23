@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { ColumnToggle, compareSlotLists, HeaderActions, useCopyFeedback, useModalResize } from './FixPoolFilesModal';
+import { useEscapeClose } from '../hooks/useEscapeClose';
 
 /** Matches the Rust `PurgeFileEntry` struct exactly. */
 export interface PurgeFileEntry {
@@ -736,6 +737,7 @@ export function PurgeUnusedListModal({ units, scope, slotsToClear = [], actionVe
   actionVerb?: 'Delete' | 'Move' | null;
   onClose: () => void;
 }) {
+  useEscapeClose(onClose);
   const table = usePurgeTable(units, slotsToClear, actionVerb);
   const [copyFeedback, copy] = useCopyFeedback();
   const { modalRef, style, handles } = useModalResize();
@@ -831,6 +833,8 @@ export interface PurgeFilesModalProps {
  */
 export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsToClear = [], onClose, onPurged, runPurge }: PurgeFilesModalProps) {
   const [phase, setPhase] = useState<Phase>(skipReview ? 'removing' : 'review');
+  // Escape dismisses, except mid-removal - the same state that hides the close button.
+  useEscapeClose(onClose, phase !== 'removing');
   const [errorMsg, setErrorMsg] = useState('');
   const [result, setResult] = useState<PurgeResult | null>(null);
   const isDeleteMode = mode === 'delete';

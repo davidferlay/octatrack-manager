@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ColumnToggle } from "./FixPoolFilesModal";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 interface MissingSample {
   filename: string;
@@ -62,6 +63,7 @@ export function MissingSamplesListModal({
   const groups = byProject ?? [{ name: "", missing: missingSamples ?? [] }];
   const withProject = byProject !== undefined;
   const [sortColumn, setSortColumn] = useState<SortColumn>("slot");
+  useEscapeClose(onClose);
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [searchText, setSearchText] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");

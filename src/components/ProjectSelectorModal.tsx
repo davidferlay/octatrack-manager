@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import "../App.css";
 import { filterProjects } from "../utils/filterProjects";
 import { useSearchShortcut } from "../hooks/useSearchShortcut";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 import type { OctatrackLocation, OctatrackProject } from "../types/projectManagement";
 
 /** Natural sort: "Project_2" < "Project_10". */
@@ -57,6 +58,7 @@ export function ProjectSelectorModal({
   onCreateProject,
   onCreateElsewhere,
 }: ProjectSelectorModalProps) {
+  useEscapeClose(onClose);
   // Open on whatever is most relevant: the set holding the current project if it
   // lives in one, otherwise the locations list, or the individual projects when
   // there are no locations at all.

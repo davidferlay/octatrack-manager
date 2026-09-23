@@ -15,7 +15,7 @@ These shortcuts work across the entire application:
 | <kbd>Tab</kbd> | Move focus to the next button or control. |
 | <kbd>Shift</kbd> + <kbd>Tab</kbd> | Move focus to the previous button or control. |
 | <kbd>Enter</kbd> | Click the focused button or select the focused item. |
-| <kbd>Escape</kbd> | Close a modal, cancel a dialog, or deselect all items. |
+| <kbd>Escape</kbd> | Close a modal, cancel a dialog, or deselect all items. Whatever is on top closes first: a dialog takes it before the page behind it does. |
 
 ---
 

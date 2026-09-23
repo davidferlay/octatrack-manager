@@ -19,6 +19,7 @@ import { AudioFileTable, audioKind } from "../components/AudioFileTable";
 import { FixPoolFilesModal, PoolIncompatibleListModal, type IncompatibleFile, type PoolFixResult, type CopyProgressEvent } from "../components/FixPoolFilesModal";
 import { FixSetMissingSamplesModal, type ProjectMissing } from "../components/FixSetMissingSamplesModal";
 import { MissingSamplesListModal } from "../components/MissingSamplesListModal";
+import { isModalOpen } from "../hooks/useEscapeClose";
 import { PathContextMenu, PurgeFilesModal, purgeAudioFileCount, purgeNonAudioFileCount, PurgeUnusedListModal, type ClearableSlot, type PurgeUnit } from "../components/PurgeFilesModal";
 import { isUnderBackupsDir } from "../utils/purgeBackups";
 import { OverwriteModal } from "../components/OverwriteModal";
@@ -1355,6 +1356,8 @@ export function AudioPoolPage() {
     function handleKeyDown(e: KeyboardEvent) {
       // Don't handle if modal is open or user is typing in an input
       if (overwriteModal.isOpen) return;
+      // Any dialog on screen owns the keyboard - Escape in particular belongs to it
+      if (isModalOpen()) return;
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
 
       // Shift+1/2: switch between the page tabs (works from any tab)

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { HeaderActions, useCopyFeedback, useModalResize } from "./FixPoolFilesModal";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 import {
   resolveFoundSample,
   type MissingSample,
@@ -100,6 +101,9 @@ export function FixSetMissingSamplesModal({
   const [copyFeedback, copy] = useCopyFeedback();
   const { modalRef, style, handles } = useModalResize();
   const appliedRef = useRef(false);
+  // Escape dismisses, except while the search or the apply pass is running -
+  // the same states that hide the close button.
+  useEscapeClose(onClose, phase !== "searching" && phase !== "applying");
 
   useEffect(() => {
     if (!openDropdown) return;

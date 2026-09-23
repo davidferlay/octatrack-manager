@@ -301,6 +301,22 @@ test.describe('Fix Project Samples - Tools tab', () => {
     await expect(page.locator('.context-menu-item', { hasText: 'Go to project' })).toHaveCount(0)
   })
 
+  test('Escape closes the review modal and stays in the project, instead of leaving for the project list', async ({ page }) => {
+    await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
+    const modal = page.locator('.fix-pool-modal')
+    await expect(modal.getByText('Review planned changes')).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(modal).toHaveCount(0)
+    // Still on the project, not bounced back to the project list
+    expect(page.url()).toContain('/project?')
+    await expect(page.locator('.tools-panel')).toBeVisible()
+
+    // With no modal left, Escape reaches the page again and leaves the project
+    await page.keyboard.press('Escape')
+    await expect.poll(() => page.url()).not.toContain('/project?')
+  })
+
   test('Execute opens the review modal, and Apply Changes calls fix_project_samples with the project path and file paths', async ({ page }) => {
     await page.getByLabel('Include un-referenced samples of project').check()
     await expect(page.getByLabel('Review before applying changes')).toBeChecked()

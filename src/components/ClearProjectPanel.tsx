@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { applyItemClick, type SelectionState } from "../utils/multiSelect";
 import { invalidatePoolUsage } from "../hooks/usePoolUsage";
 import { formatBankName } from "./BankSelector";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 /** What the tool resets. Each scope maps to one backend command. */
 export type ClearScope = "banks" | "parts" | "patterns" | "tracks" | "sample_slots";
@@ -197,6 +198,7 @@ export function ClearProjectPanel({
   const [slotTo, setSlotTo] = useState(128);
 
   const [confirming, setConfirming] = useState(false);
+  useEscapeClose(() => setConfirming(false), confirming);
   const [isExecuting, setIsExecuting] = useState(false);
   const [status, setStatus] = useState<{ kind: "ok" | "error"; message: string } | null>(null);
 

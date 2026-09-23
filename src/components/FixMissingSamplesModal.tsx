@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { ColumnToggle } from "./FixPoolFilesModal";
+import { useEscapeClose } from "../hooks/useEscapeClose";
 
 export interface MissingSample {
   filename: string;
@@ -163,6 +164,8 @@ export function FixMissingSamplesModal({
   onApplied,
 }: Props) {
   const [phase, setPhase] = useState<ModalPhase>("searching");
+  // Escape dismisses, except mid-apply when there is nothing safe to cancel to.
+  useEscapeClose(onClose, phase !== "applying");
   const [steps, setSteps] = useState<SearchStep[]>(() => {
     const initial: SearchStep[] = [
       { label: "Project directory", status: "pending", foundCount: 0 },
