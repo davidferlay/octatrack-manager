@@ -38,10 +38,10 @@ function renderPanel(props: Partial<React.ComponentProps<typeof ToolsPanel>> = {
 }
 
 describe('ToolsPanel - Fix Project Samples', () => {
-  it('lists "Fix Project Samples" as an operation option', async () => {
+  it('lists "Fix Incompatible Samples" as an operation option', async () => {
     invokeMock.mockResolvedValue(null)
     renderPanel()
-    expect(screen.getByRole('option', { name: 'Fix Project Samples' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Fix Incompatible Samples' })).toBeInTheDocument()
     // Flush the unrelated mount-time audio-pool-status effect so its state
     // update settles inside an act() boundary before the test ends.
     await waitFor(() => {})

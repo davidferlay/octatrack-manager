@@ -120,7 +120,7 @@ test.describe('Purge Audio Pool Samples', () => {
     const select = page.locator('.tools-section .tools-select')
     await expect(select.locator('option')).toHaveCount(2)
     const options = select.locator('option')
-    await expect(options.nth(0)).toHaveText('Fix Audio Pool Samples')
+    await expect(options.nth(0)).toHaveText('Fix Incompatible Samples')
     await expect(options.nth(0)).toHaveAttribute('value', 'fix_audio_pool')
     await expect(options.nth(1)).toHaveText('Purge Audio Pool Samples')
     await expect(options.nth(1)).toHaveAttribute('value', 'purge_pool_samples')

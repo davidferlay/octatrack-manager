@@ -86,7 +86,7 @@ If you try to add a file with the same name as one that already exists in your p
 
 ## Fixing Incompatible Files
 
-Automatic conversion covers files imported **through the app** — but a pool that was filled by hand (or by other tools) can contain MP3s, 48 kHz WAVs and other files the Octatrack silently refuses to play. The Audio Pool pane's health glyph (next to the file count) flags this at a glance, and the **Tools** tab's **Fix Audio Pool Samples** operation finds and fixes every incompatible file in the pool (and optionally every project of the Set) in one pass, with the same right-click **Convert to Octatrack format** available for a single file too. Not everything it flags is unplayable - see [What gets flagged](fix-incompatible-samples.md#what-gets-flagged).
+Automatic conversion covers files imported **through the app** — but a pool that was filled by hand (or by other tools) can contain MP3s, 48 kHz WAVs and other files the Octatrack silently refuses to play. The Audio Pool pane's health glyph (next to the file count) flags this at a glance, and the **Tools** tab's **Fix Incompatible Samples** operation finds and fixes every incompatible file in the pool (and optionally every project of the Set) in one pass, with the same right-click **Convert to Octatrack format** available for a single file too. Not everything it flags is unplayable - see [What gets flagged](fix-incompatible-samples.md#what-gets-flagged).
 
 See [Fix Incompatible Samples](fix-incompatible-samples.md) for the full walkthrough — scanning, the review screen, the row context menu, and what a fix actually does to your files.
 

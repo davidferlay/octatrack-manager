@@ -1186,8 +1186,8 @@ export function FixPoolFilesModal({ poolPath, files, skipReview = false, onClose
       usageLoading={usageLoading}
       showGoToProject
       transferIdPrefix="fix-pool"
-      progressingLabel="Fixing Audio Pool Samples..."
-      doneLabel="Fix Audio Pool Samples"
+      progressingLabel="Fixing Incompatible Samples..."
+      doneLabel="Fix Incompatible Samples"
       runFix={(filePaths, transferId) => invoke<PoolFixResult>('fix_pool_files', { poolPath, filePaths, transferId })}
     />
   );

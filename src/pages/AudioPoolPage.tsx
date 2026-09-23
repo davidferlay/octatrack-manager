@@ -1686,7 +1686,7 @@ export function AudioPoolPage() {
               value={poolOperation}
               onChange={(e) => setPoolOperation(e.target.value as 'fix_audio_pool' | 'purge_pool_samples')}
             >
-              <option value="fix_audio_pool">Fix Audio Pool Samples</option>
+              <option value="fix_audio_pool">Fix Incompatible Samples</option>
               <option value="purge_pool_samples">Purge Audio Pool Samples</option>
             </select>
           </div>

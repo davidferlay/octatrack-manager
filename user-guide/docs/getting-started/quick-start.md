@@ -117,9 +117,9 @@ It searches the project directory, Audio Pool, and sibling projects, with the op
 
 The Tools tab includes a **[Fix Incompatible Samples](../features/fix-incompatible-samples.md)** operation which will bulk fix any incompatible audio files the Octatrack can't read (wrong sample rate, wrong bit depth, or a format like MP3).
 
-This can be done from either:
-- **Fix Audio Pool Samples** (the whole Set's shared pool)
-- **Fix Project Samples** (this project's own files)
+It is the same operation in both places, scoped by where it is opened from:
+- the **Audio Pool**'s Tools tab (the whole Set's shared pool)
+- a **project**'s Tools tab (this project's own files)
 
 Both convert affected files to 44.1 kHz 16/24-bit WAV in place and repoint every sample slot that referenced them, across the whole Set.
 

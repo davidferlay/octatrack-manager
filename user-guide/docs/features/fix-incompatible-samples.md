@@ -11,10 +11,12 @@ This feature finds any incompatible files and converts them in place, wherever t
 - in **Audio Pool**
 - in individual **project's own directory**
 
-| Tool | What | Opens from |
-|------|-------|------------|
-| **Fix Audio Pool Samples** | The Set's shared `AUDIO/` pool, optionally every project's own directory too | [Audio Pool](audio-pool.md)'s **Tools** tab |
-| **Fix Project Samples** | This project's own directory, plus any pool file its slots reference | [Projects](navigation.md) **Tools** tab |
+The tool is called **Fix Incompatible Samples** in both places; where it is opened from decides what it scans:
+
+| Opened from | What it scans |
+|-------------|---------------|
+| [Audio Pool](audio-pool.md)'s **Tools** tab | The Set's shared `AUDIO/` pool, optionally every project's own directory too |
+| A project's [**Tools**](navigation.md) tab | This project's own directory, plus any pool file its slots reference |
 
 ---
 
@@ -43,7 +45,7 @@ Both scopes are scanned automatically in the background, when opening either:
 
 Once the scan is complete, a health glyph appears. It can either indicate:
 - The number of incompatible files found
-    - Click it to go to **Fix Audio Pool Samples** or **Fix Project Samples**
+    - Click it to go to **Fix Incompatible Samples** for that scope
 - Or a green check if all audio files are playable by the Octatrack
 
 
@@ -67,11 +69,11 @@ Every slot reference across all projects of Set is updated to reference the new 
 
 ## Fixing all files in bulk
 
-In **Fix Audio Pool Samples:**
+Opened from the **Audio Pool**:
 
 - Option "**Include all projects of Set**" can be enabled to include incompatible files found in any project's own directory, not just Audio Pool.
 
-In **Fix Project Samples:**
+Opened from a **project**:
 
 - Option "**Include un-referenced samples of project**" can be enblaed to also include files found in the project's own directory that aren't assigned to any Sample Slot.
 

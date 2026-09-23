@@ -198,7 +198,7 @@ Three more operations can be found when right-clicking on Sample Slots, availabl
 
 ### Fixing Incompatible Project Samples
 
-Each Flex/Static tab's toolbar shows a health glyph next to the slot count (hidden while the Audio Pool pane is open): an orange badge with a wrench icon and the number of slots referencing an audio file the Octatrack can't play, or a green check when every referenced file is compatible. Click it - or select **Fix Project Samples** from the **Tools** tab operation dropdown - to fix every incompatible file this project touches in one pass. To fix a single slot without leaving the tab, right-click it (in Edit mode) and choose **Convert to Octatrack format** - see [Managing existing assignments](#managing-existing-assignments) above.
+Each Flex/Static tab's toolbar shows a health glyph next to the slot count (hidden while the Audio Pool pane is open): an orange badge with a wrench icon and the number of slots referencing an audio file the Octatrack can't play, or a green check when every referenced file is compatible. Click it - or select **Fix Incompatible Samples** from the **Tools** tab operation dropdown - to fix every incompatible file this project touches in one pass. To fix a single slot without leaving the tab, right-click it (in Edit mode) and choose **Convert to Octatrack format** - see [Managing existing assignments](#managing-existing-assignments) above.
 
 See [Fix Incompatible Samples](fix-incompatible-samples.md) for the full walkthrough of both tools.
 

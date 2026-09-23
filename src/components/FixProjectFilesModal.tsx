@@ -100,8 +100,8 @@ export function FixProjectFilesModal({ projectPath, files, skipReview = false, o
       usageLoading={usageLoading}
       withSlot
       transferIdPrefix="fix-project"
-      progressingLabel="Fixing Project Samples..."
-      doneLabel="Fix Project Samples"
+      progressingLabel="Fixing Incompatible Samples..."
+      doneLabel="Fix Incompatible Samples"
       runFix={(filePaths, transferId) => invoke<PoolFixResult>('fix_project_samples', { projectPath, filePaths, transferId })}
     />
   );

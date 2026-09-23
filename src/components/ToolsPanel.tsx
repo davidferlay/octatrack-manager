@@ -1416,7 +1416,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           <option value="copy_sample_slots">Copy Sample Slots</option>
           <option value="clear_project">Clear Project</option>
           <option value="fix_missing_samples">Fix Missing Samples</option>
-          <option value="fix_project_samples">Fix Project Samples</option>
+          <option value="fix_project_samples">Fix Incompatible Samples</option>
           <option value="purge_project_samples">Purge Project Samples</option>
         </select>
       </div>
