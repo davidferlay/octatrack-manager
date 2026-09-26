@@ -25,10 +25,21 @@ pub struct SliceDraft {
 #[derive(Clone, Debug)]
 pub enum SliceEdit {
     AcceptProposal(OnsetProposal),
-    Move { marker_id: String, frame: PcmFrame },
-    Insert { marker_id: String, frame: PcmFrame },
-    Delete { marker_id: String },
-    SetLock { marker_id: String, locked: bool },
+    Move {
+        marker_id: String,
+        frame: PcmFrame,
+    },
+    Insert {
+        marker_id: String,
+        frame: PcmFrame,
+    },
+    Delete {
+        marker_id: String,
+    },
+    SetLock {
+        marker_id: String,
+        locked: bool,
+    },
     /// Clears markers and binds the draft to a new analysis region (revision CAS at persistence).
     ReplaceRegion(FrameRange),
 }

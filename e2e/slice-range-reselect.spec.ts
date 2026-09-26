@@ -1,7 +1,46 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
 import { clickCatalogFileRow } from "./catalogFileRow";
 import { uiText } from "./i18n";
 import { installDerivationIpcDefaults } from "./derivationIpcMocks";
+
+const RANGE_A = { startFrame: "11025", endExclusive: "22050" };
+
+function parseFramesLine(text: string): { startFrame: string; endExclusive: string } | null {
+  const match = text.match(/(?:Frames|フレーム) \[(\d+), (\d+)\)/);
+  if (!match) return null;
+  return { startFrame: match[1], endExclusive: match[2] };
+}
+
+async function dragPendingRangeOnSliceWaveform(slice: Locator) {
+  const waveform = slice.getByLabel("Slice waveform");
+  await expect(waveform).toBeVisible();
+  const box = await waveform.boundingBox();
+  expect(box).not.toBeNull();
+  const y = box!.y + box!.height / 2;
+  const xStart = box!.x + box!.width * 0.2;
+  const xEnd = box!.x + box!.width * 0.8;
+  await waveform.evaluate(
+    (svg, coords) => {
+      const fire = (type: string, clientX: number) => {
+        svg.dispatchEvent(
+          new PointerEvent(type, {
+            clientX,
+            clientY: coords.y,
+            pointerId: 1,
+            pointerType: "mouse",
+            bubbles: true,
+            cancelable: true,
+            buttons: type === "pointerup" ? 0 : 1,
+          }),
+        );
+      };
+      fire("pointerdown", coords.xStart);
+      fire("pointermove", coords.xEnd);
+      fire("pointerup", coords.xEnd);
+    },
+    { xStart, xEnd, y },
+  );
+}
 
 test("slice workspace supports pending range reselection and re-analysis", async ({ page }) => {
   await installDerivationIpcDefaults(page);
@@ -9,7 +48,6 @@ test("slice workspace supports pending range reselection and re-analysis", async
     const source = window as any;
     source.__E2E_ROOT_PATH__ = "/tmp/synthetic-range-reselect-root";
     let analysisRegion = { startFrame: "11025", endExclusive: "22050" };
-    const pendingRegion = { startFrame: "22050", endExclusive: "33075" };
     let revision = 0;
     let markers: any[] = [];
     let jobSeq = 0;
@@ -89,15 +127,16 @@ test("slice workspace supports pending range reselection and re-analysis", async
           return { range: args.range, peaks: [[[-0.5, 0.5]]] };
         }
         if (cmd === "v2_slice_proposal_create") {
-          const isSecondRegion = analysisRegion.startFrame === pendingRegion.startFrame;
+          const isFirstRegion =
+            analysisRegion.startFrame === "11025" && analysisRegion.endExclusive === "22050";
           return {
-            proposalId: `proposal-${revision}-${isSecondRegion ? "b" : "a"}`,
+            proposalId: `proposal-${revision}-${isFirstRegion ? "a" : "b"}`,
             expectedRevision: revision,
             candidateCount: 1,
             suppressedCount: 0,
             exceedsDraftLimit: false,
             candidates: [{
-              candidateId: isSecondRegion ? "candidate-b" : "candidate-a",
+              candidateId: isFirstRegion ? "candidate-a" : "candidate-b",
               noveltyPeakFrame: analysisRegion.startFrame,
               estimatedAttackFrame: analysisRegion.startFrame,
               suggestedStartFrame: analysisRegion.startFrame,
@@ -150,23 +189,41 @@ test("slice workspace supports pending range reselection and re-analysis", async
   await page.getByRole("button", { name: uiText("ja", "sources.chooseRoot") }).click();
   await clickCatalogFileRow(page, "ja", "RANGE.wav");
 
-  await page.getByLabel(uiText("ja", "waveform.startFrame")).fill("11025");
-  await page.getByLabel(uiText("ja", "waveform.endFrame")).fill("22050");
+  await page.getByLabel(uiText("ja", "waveform.startFrame")).fill(RANGE_A.startFrame);
+  await page.getByLabel(uiText("ja", "waveform.endFrame")).fill(RANGE_A.endExclusive);
   await page.getByRole("tab", { name: uiText("ja", "inspector.tabSlice") }).click();
   const slice = page.getByRole("region", { name: uiText("ja", "slicing.ariaFor", { displayName: "RANGE.wav" }) });
   await slice.getByRole("button", { name: uiText("ja", "slicing.analyzeSelectedRange") }).click();
   await expect(slice.getByRole("button", { name: uiText("ja", "slicing.applyCandidates") })).toBeEnabled();
   await slice.getByRole("button", { name: uiText("ja", "slicing.applyCandidates") }).click();
-  await expect(slice.getByLabel("Start frame candidate-a")).toHaveValue("11025");
+  await expect(slice.getByLabel("Start frame candidate-a")).toHaveValue(RANGE_A.startFrame);
+  await expect(slice.getByLabel(uiText("ja", "slicing.analysisRegionHeading"))).toContainText(RANGE_A.startFrame);
 
-  await page.getByLabel(uiText("ja", "waveform.startFrame")).fill("22050");
-  await page.getByLabel(uiText("ja", "waveform.endFrame")).fill("33075");
-  await slice.getByRole("button", { name: uiText("ja", "slicing.copyLibrarySelectionToPending") }).click();
+  await slice.getByRole("button", { name: uiText("ja", "slicing.enterRangeReselect") }).click();
+  await dragPendingRangeOnSliceWaveform(slice);
+
+  const pendingBlock = slice.getByRole("region", { name: uiText("ja", "slicing.pendingRangeHeading") });
+  const pendingCoord = pendingBlock.locator(".slice-coordinate").filter({ hasText: /\[\d+, \d+\)/ });
+  await expect(pendingCoord).toBeVisible();
+  const pendingText = await pendingCoord.innerText();
+  const pendingRange = parseFramesLine(pendingText);
+  expect(pendingRange).not.toBeNull();
+  expect(pendingRange!.startFrame).not.toBe(RANGE_A.startFrame);
+  expect(pendingRange!.endExclusive).not.toBe(RANGE_A.endExclusive);
+
+  const callsBeforeReanalyze = await page.evaluate(() => (window as any).__E2E_SLICE_CALLS__);
+  const startsBefore = callsBeforeReanalyze.filter((c: any) => c.cmd === "v2_audio_onsets_start");
+  const replaceBefore = callsBeforeReanalyze.filter(
+    (c: any) => c.cmd === "v2_slice_draft_update" && c.args.edit?.kind === "replaceRegion",
+  );
+  expect(startsBefore).toHaveLength(1);
+  expect(replaceBefore).toHaveLength(0);
+  await expect(slice.getByLabel("Start frame candidate-a")).toHaveValue(RANGE_A.startFrame);
+
   await slice.getByRole("button", { name: uiText("ja", "slicing.reanalyzePendingRange") }).click();
-
   await expect(slice.getByRole("button", { name: uiText("ja", "slicing.applyCandidates") })).toBeEnabled();
   await slice.getByRole("button", { name: uiText("ja", "slicing.applyCandidates") }).click();
-  await expect(slice.getByLabel("Start frame candidate-b")).toHaveValue("22050");
+  await expect(slice.getByLabel("Start frame candidate-b")).toHaveValue(pendingRange!.startFrame);
   await expect(slice.getByLabel("Start frame candidate-a")).toHaveCount(0);
 
   const updates = await page.evaluate(() =>
@@ -177,5 +234,5 @@ test("slice workspace supports pending range reselection and re-analysis", async
     (window as any).__E2E_SLICE_CALLS__.filter((c: any) => c.cmd === "v2_audio_onsets_start"),
   );
   expect(starts.length).toBeGreaterThanOrEqual(2);
-  expect(starts.at(-1)?.args.region).toEqual(pendingRegion);
+  expect(starts.at(-1)?.args.region).toEqual(pendingRange);
 });

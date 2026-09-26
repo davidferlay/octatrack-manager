@@ -793,7 +793,7 @@ function SliceSession({
           if (rect.width) void edit({ kind: "insert", frame: frameAt((e.clientX - rect.left) / rect.width, view) });
         }}
         onPointerDown={e => {
-          if (!rangeReselectMode || mutationDisabled) return;
+          if (!rangeReselectMode || editing || analysisSessionInvalid) return;
           e.preventDefault();
           beginRangeSelect(e.clientX, e.currentTarget);
           e.currentTarget.setPointerCapture(e.pointerId);
