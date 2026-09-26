@@ -20,7 +20,10 @@ import { preparedRenameCount } from "../workspace/operationsStatus";
 import { ManualAssetMetadataEditor } from "../metadata/ManualAssetMetadataEditor";
 import { SliceWorkbench } from "../slicing/SliceWorkbench";
 import { UsageGraphPanel } from "../usage";
-import type { LibraryCommittedGeometryRange } from "../waveform/WaveformPreview";
+import type {
+  LibraryCommittedGeometryRange,
+  LibraryRangePlaybackRequest,
+} from "../waveform/WaveformPreview";
 import { WaveformPreview } from "../waveform/WaveformPreview";
 import { InspectorSampleInfo } from "./InspectorSampleInfo";
 import { InspectorSampleDerivation } from "./InspectorSampleDerivation";
@@ -51,6 +54,8 @@ export interface InspectorTabbedAssetPanelProps {
     typeof WaveformPreview
   >[0]["onCommittedGeometryRangeChange"];
   onRequestStopLibraryPlayback: () => void;
+  onRequestPreviewLibraryRange?: (range: LibraryCommittedGeometryRange) => void;
+  libraryRangePlaybackRequest?: LibraryRangePlaybackRequest | null;
   /** When set, slice UI is owned by RootRegistryPanel (portal host + single session). */
   sliceCompactHostRef?: (element: HTMLDivElement | null) => void;
   sliceWorkspaceExpanded?: boolean;
@@ -89,6 +94,8 @@ export function InspectorTabbedAssetPanel({
   onCopy,
   onCommittedGeometryRangeChange,
   onRequestStopLibraryPlayback,
+  onRequestPreviewLibraryRange,
+  libraryRangePlaybackRequest = null,
   sliceCompactHostRef,
   sliceWorkspaceExpanded = false,
   sliceAnalysisBusy: sliceAnalysisBusyProp,
@@ -256,6 +263,7 @@ export function InspectorTabbedAssetPanel({
             displayName={file.displayName}
             onCommittedGeometryRangeChange={onCommittedGeometryRangeChange}
             stopPlaybackToken={stopPlaybackToken}
+            libraryRangePlaybackRequest={libraryRangePlaybackRequest}
             layoutVisible={activeTab === "preview"}
             onPlaybackActivityChange={setPlaybackActive}
           />
@@ -292,6 +300,7 @@ export function InspectorTabbedAssetPanel({
               librarySelectionRange={librarySelectionRange}
               librarySourceSampleRate={librarySourceSampleRate}
               onRequestStopLibraryPlayback={onRequestStopLibraryPlayback}
+              onRequestPreviewLibraryRange={onRequestPreviewLibraryRange}
               onAnalysisBusyChange={setInlineSliceAnalysisBusy}
               registerAnalysisCancel={registerInlineSliceCancel}
             />

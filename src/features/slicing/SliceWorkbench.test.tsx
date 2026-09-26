@@ -770,34 +770,21 @@ describe("attack slicing workbench", () => {
     expect(screen.getByRole("button", { name: tJa("slicing.applyCandidates") })).toBeEnabled();
   });
 
-  it("replaces region with CAS then starts analysis for pending range", async () => {
+  it("starts analysis for pending range without clearing the draft first", async () => {
     const api = client();
     const pending = { startFrame: "5000", endExclusive: "10000" };
-    vi.mocked(api.edit).mockImplementation(async (_r, _j, rev, edit) => {
-      if (edit.kind === "replaceRegion") {
-        return {
-          ...empty,
-          revision: rev + 1,
-          region: pending,
-          markers: [],
-          canUndo: false,
-          canRedo: false,
-        };
-      }
-      return { ...empty, revision: 1, markers: [], canUndo: true };
-    });
     mount(api, {
       librarySelectionRange: { startFrame: "5000", endFrameExclusive: "10000" },
     });
     await detect();
     fireEvent.click(screen.getByRole("button", { name: tJa("slicing.copyLibrarySelectionToPending") }));
     fireEvent.click(screen.getByRole("button", { name: tJa("slicing.reanalyzePendingRange") }));
-    await waitFor(() => expect(api.edit).toHaveBeenCalledWith(
-      "root-1",
-      "job-1",
-      0,
-      { kind: "replaceRegion", startFrame: "5000", endExclusive: "10000" },
-    ));
     await waitFor(() => expect(api.start).toHaveBeenCalledWith("root-1", "file-1", pending));
+    expect(api.edit).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ kind: "replaceRegion" }),
+    );
   });
 });

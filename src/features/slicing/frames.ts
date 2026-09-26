@@ -9,6 +9,23 @@ export function frame(value: string): bigint {
 export function inRange(value: string, range: SliceRange): boolean {
   return frame(value) >= frame(range.startFrame) && frame(value) < frame(range.endExclusive);
 }
+/** Map a viewport X coordinate into [0, 1] along the drawn SVG content (meet letterboxing). */
+export function pointerRatioInMeetSvg(
+  clientX: number,
+  svg: SVGSVGElement,
+  viewBoxWidth: number,
+  viewBoxHeight: number,
+): number | null {
+  const rect = svg.getBoundingClientRect();
+  if (!rect.width || !rect.height || viewBoxWidth <= 0 || viewBoxHeight <= 0) return null;
+  const scale = Math.min(rect.width / viewBoxWidth, rect.height / viewBoxHeight);
+  const drawnWidth = scale * viewBoxWidth;
+  if (drawnWidth <= 0) return null;
+  const offsetX = (rect.width - drawnWidth) / 2;
+  const x = clientX - rect.left - offsetX;
+  return Math.min(1, Math.max(0, x / drawnWidth));
+}
+
 export function frameAt(ratio: number, range: SliceRange): string {
   const start = frame(range.startFrame);
   const size = frame(range.endExclusive) - start;

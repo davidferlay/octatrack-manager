@@ -43,6 +43,10 @@ import { applyWideSourcesNavTransition, resetWideSourcesNav } from "./wideSource
 import { WorkspaceStatusBar } from "../workspace/WorkspaceStatusBar";
 import { WorkspaceTopBar } from "../workspace/WorkspaceTopBar";
 import { useLibraryGeometrySelection } from "../waveform/libraryGeometrySelection";
+import type {
+  LibraryCommittedGeometryRange,
+  LibraryRangePlaybackRequest,
+} from "../waveform/WaveformPreview";
 import "./RootRegistryPanel.css";
 
 export type RootDirectoryPicker = () => Promise<string | null>;
@@ -128,6 +132,35 @@ export function RootRegistryPanel({
   const requestStopLibraryPlayback = useCallback(() => {
     setStopLibraryPlaybackToken((token) => token + 1);
   }, []);
+  const [libraryRangePlaybackRequest, setLibraryRangePlaybackRequest] =
+    useState<LibraryRangePlaybackRequest | null>(null);
+  const requestPreviewLibraryRange = useCallback((range: LibraryCommittedGeometryRange) => {
+    if (session === null || selectedAsset === null) return;
+    handleLibraryGeometryRange(range, {
+      rootId: session.rootId,
+      fileInstanceId: selectedAsset.fileInstanceId,
+      assetId: selectedAsset.assetId,
+      selectionGeneration: geometrySelectionGeneration,
+      range: {
+        startFrame: range.startFrame,
+        endFrameExclusive: range.endFrameExclusive,
+      },
+      sampleRate: librarySourceSampleRate,
+    });
+    setLibraryRangePlaybackRequest((prev) => ({
+      token: (prev?.token ?? 0) + 1,
+      range: {
+        startFrame: range.startFrame,
+        endFrameExclusive: range.endFrameExclusive,
+      },
+    }));
+  }, [
+    session,
+    selectedAsset,
+    geometrySelectionGeneration,
+    librarySourceSampleRate,
+    handleLibraryGeometryRange,
+  ]);
   const [derivationRefreshGeneration, setDerivationRefreshGeneration] = useState(0);
   const handleDerivedExportApplied = useCallback(() => {
     setDerivationRefreshGeneration((generation) => generation + 1);
@@ -851,6 +884,8 @@ export function RootRegistryPanel({
                     onCopy={() => openCopyForSelection()}
                     onCommittedGeometryRangeChange={handleLibraryGeometryRange}
                     onRequestStopLibraryPlayback={requestStopLibraryPlayback}
+                    onRequestPreviewLibraryRange={requestPreviewLibraryRange}
+                    libraryRangePlaybackRequest={libraryRangePlaybackRequest}
                     sliceCompactHostRef={setCompactSliceHost}
                     derivationRefreshGeneration={derivationRefreshGeneration}
                   />
@@ -902,6 +937,7 @@ export function RootRegistryPanel({
               hostElement={sliceWorkspaceExpanded ? expandedSliceHost : compactSliceHost}
               narrowExpanded={narrowWorkspace && sliceWorkspaceExpanded}
               onRequestStopLibraryPlayback={requestStopLibraryPlayback}
+              onRequestPreviewLibraryRange={requestPreviewLibraryRange}
               onAnalysisBusyChange={setSliceAnalysisBusy}
               registerAnalysisCancel={registerSliceAnalysisCancel}
               onDerivedExportApplied={handleDerivedExportApplied}

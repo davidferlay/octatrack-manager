@@ -102,7 +102,15 @@ test("slice workspace supports pending range reselection and re-analysis", async
         if (cmd === "v2_audio_onsets_start") {
           jobSeq += 1;
           if (args.region) {
-            analysisRegion = args.region;
+            const next = args.region;
+            const regionChanged =
+              next.startFrame !== analysisRegion.startFrame
+              || next.endExclusive !== analysisRegion.endExclusive;
+            analysisRegion = next;
+            if (regionChanged) {
+              markers = [];
+              revision += 1;
+            }
           }
           return {
             jobId: `job-range-${jobSeq}`,
@@ -226,10 +234,12 @@ test("slice workspace supports pending range reselection and re-analysis", async
   await expect(slice.getByLabel("Start frame candidate-b")).toHaveValue(pendingRange!.startFrame);
   await expect(slice.getByLabel("Start frame candidate-a")).toHaveCount(0);
 
-  const updates = await page.evaluate(() =>
-    (window as any).__E2E_SLICE_CALLS__.filter((c: any) => c.cmd === "v2_slice_draft_update"),
+  const replaceUpdates = await page.evaluate(() =>
+    (window as any).__E2E_SLICE_CALLS__.filter(
+      (c: any) => c.cmd === "v2_slice_draft_update" && c.args.edit?.kind === "replaceRegion",
+    ),
   );
-  expect(updates.some((c: any) => c.args.edit?.kind === "replaceRegion")).toBe(true);
+  expect(replaceUpdates).toHaveLength(0);
   const starts = await page.evaluate(() =>
     (window as any).__E2E_SLICE_CALLS__.filter((c: any) => c.cmd === "v2_audio_onsets_start"),
   );

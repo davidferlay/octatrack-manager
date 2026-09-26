@@ -8,7 +8,9 @@ import {
 import { useTranslate } from "../../i18n";
 import { durationLabelForFrame, formatPreviewFrameTimeSeconds } from "../waveform/frameMath";
 import type { LibraryCommittedGeometryRange } from "../waveform/WaveformPreview";
-import { frame, frameAt, inRange, position, previewChannels } from "./frames";
+import { frame, frameAt, inRange, pointerRatioInMeetSvg, position, previewChannels } from "./frames";
+
+const SLICE_WAVEFORM_VIEWBOX = { width: 640, height: 160 };
 import { SliceErrorAlert } from "./SliceErrorAlert";
 import { isAnalysisSessionInvalid, normalizeSliceError, type SliceErrorState } from "./sliceErrors";
 import "./SliceWorkbench.css";
@@ -255,34 +257,15 @@ function SliceSession({
   }
 
   async function reanalyzeWithPendingRange() {
-    if (!pendingPreviewRange || !draft || !readyId || busy || editing) return;
-    const region = pendingPreviewRange;
-    const epoch = generation.current;
-    setError(null);
-    stop();
-    onRequestStopLibraryPlayback?.();
-    editBusy.current = true;
-    setEditing(true);
-    try {
-      await api.edit(rootId, readyId, draft.revision, {
-        kind: "replaceRegion",
-        startFrame: region.startFrame,
-        endExclusive: region.endExclusive,
-      });
-      if (!alive.current || epoch !== generation.current) return;
-      setPendingPreviewRange(null);
-      setRangeReselectMode(false);
-      setRangeSelectDrag(null);
-      rangeSelectDragRef.current = null;
-      await startAnalysis(region);
-    } catch (e) {
-      if (alive.current && epoch === generation.current) noteCommandError(e);
-    } finally {
-      if (epoch === generation.current) {
-        editBusy.current = false;
-        if (alive.current) setEditing(false);
-      }
+    if (!pendingPreviewRange || !draft || !readyId || busy || editing || analysisSessionInvalid) {
+      return;
     }
+    const region = pendingPreviewRange;
+    setPendingPreviewRange(null);
+    setRangeReselectMode(false);
+    setRangeSelectDrag(null);
+    rangeSelectDragRef.current = null;
+    await startAnalysis(region);
   }
 
   async function playPendingRange() {
@@ -305,11 +288,21 @@ function SliceSession({
     });
   }
 
+  function frameAtPointer(clientX: number, svg: SVGSVGElement, range: SliceRange): string | null {
+    const ratio = pointerRatioInMeetSvg(
+      clientX,
+      svg,
+      SLICE_WAVEFORM_VIEWBOX.width,
+      SLICE_WAVEFORM_VIEWBOX.height,
+    );
+    if (ratio === null) return null;
+    return frameAt(ratio, range);
+  }
+
   function beginRangeSelect(clientX: number, svg: SVGSVGElement) {
     if (!view) return;
-    const rect = svg.getBoundingClientRect();
-    if (!rect.width) return;
-    const at = frameAt((clientX - rect.left) / rect.width, view);
+    const at = frameAtPointer(clientX, svg, view);
+    if (at === null) return;
     const next = { anchor: at, active: at };
     rangeSelectDragRef.current = next;
     setRangeSelectDrag(next);
@@ -317,9 +310,8 @@ function SliceSession({
 
   function updateRangeSelect(clientX: number, svg: SVGSVGElement) {
     if (!rangeSelectDragRef.current || !view) return;
-    const rect = svg.getBoundingClientRect();
-    if (!rect.width) return;
-    const at = frameAt((clientX - rect.left) / rect.width, view);
+    const at = frameAtPointer(clientX, svg, view);
+    if (at === null) return;
     const next = { ...rangeSelectDragRef.current, active: at };
     rangeSelectDragRef.current = next;
     setRangeSelectDrag(next);
@@ -777,7 +769,9 @@ function SliceSession({
           </button>
           <button
             type="button"
-            disabled={busy || editing || !pendingPreviewRange || !pendingDiffersFromAnalysis}
+            disabled={
+              busy || editing || analysisSessionInvalid || !pendingPreviewRange || !pendingDiffersFromAnalysis
+            }
             onClick={() => void reanalyzeWithPendingRange()}
           >
             {t("slicing.reanalyzePendingRange")}
@@ -789,8 +783,8 @@ function SliceSession({
       <svg viewBox="0 0 640 160" preserveAspectRatio="xMidYMid meet" width="100%" height="160" className="slice-waveform" aria-label="Slice waveform"
         onDoubleClick={e => {
           if (mutationDisabled || rangeReselectMode) return;
-          const rect = e.currentTarget.getBoundingClientRect();
-          if (rect.width) void edit({ kind: "insert", frame: frameAt((e.clientX - rect.left) / rect.width, view) });
+          const at = frameAtPointer(e.clientX, e.currentTarget, view);
+          if (at !== null) void edit({ kind: "insert", frame: at });
         }}
         onPointerDown={e => {
           if (!rangeReselectMode || editing || analysisSessionInvalid) return;
@@ -804,9 +798,9 @@ function SliceSession({
             return;
           }
           if (!dragRef.current) return;
-          const rect = e.currentTarget.getBoundingClientRect();
-          if (!rect.width) return;
-          const next = { ...dragRef.current, frame: frameAt((e.clientX - rect.left) / rect.width, view) };
+          const at = frameAtPointer(e.clientX, e.currentTarget, view);
+          if (at === null) return;
+          const next = { ...dragRef.current, frame: at };
           dragRef.current = next; setDrag(next);
         }}
         onPointerUp={() => {

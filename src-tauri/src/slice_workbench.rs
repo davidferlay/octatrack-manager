@@ -564,6 +564,9 @@ impl SliceWorkbench {
                 let start = parse_frame(&start_frame)?;
                 let end = parse_frame(&end_exclusive)?;
                 let region = FrameRange::new(start, end).map_err(|_| invalid("invalid region"))?;
+                region
+                    .within(ready.binding.frame_count)
+                    .map_err(|_| invalid("region exceeds source frame count"))?;
                 Some(SliceEdit::ReplaceRegion(region))
             }
         };
@@ -753,11 +756,22 @@ fn build_job(
         .map_err(storage_error)?;
     let full = FrameRange::new(PcmFrame::new(0), PcmFrame::new(info.frame_count))
         .map_err(|_| invalid("empty source"))?;
-    let region = region
+    let explicit_region = region;
+    let region = explicit_region
         .or_else(|| saved.as_ref().map(|d| d.region))
         .unwrap_or(full);
-    if saved.as_ref().is_some_and(|d| d.region != region) {
+    let replacing_saved_region = explicit_region.is_some_and(|requested| {
+        saved
+            .as_ref()
+            .is_none_or(|draft| draft.region != requested)
+    });
+    if !replacing_saved_region && saved.as_ref().is_some_and(|d| d.region != region) {
         return Err(region_mismatch());
+    }
+    if replacing_saved_region {
+        region
+            .within(info.frame_count)
+            .map_err(|_| invalid("region exceeds source frame count"))?;
     }
     let pcm = snapshot
         .analysis_region(region, &job.cancelled)
@@ -772,10 +786,33 @@ fn build_job(
     let analysis = OnsetAnalysis::build(pcm, region, binding.source_hash.as_str(), &job.cancelled)
         .map_err(pcm_error)?;
     registry.resolve(&job.root)?;
+    if replacing_saved_region {
+        persist_replaced_region(catalog, &binding, region, binding.sample_rate)?;
+    }
     Ok(Ready {
         analysis: Arc::new(analysis),
         binding,
     })
+}
+fn persist_replaced_region(
+    catalog: &SharedCatalog,
+    binding: &SliceDraftBinding,
+    region: FrameRange,
+    sample_rate: u32,
+) -> Result<(), ApiError> {
+    let mut catalog = catalog.lock().map_err(|_| internal())?;
+    let draft = catalog
+        .load_slice_draft(binding)
+        .map_err(storage_error)?
+        .unwrap_or_else(|| SliceDraft::empty(region));
+    let expected_revision = draft.revision;
+    let updated = draft
+        .edited(SliceEdit::ReplaceRegion(region), sample_rate)
+        .map_err(invalid)?;
+    catalog
+        .save_slice_draft(binding, &updated, expected_revision)
+        .map_err(storage_error)?;
+    Ok(())
 }
 fn same_file(a: &std::fs::Metadata, b: &std::fs::Metadata) -> bool {
     #[cfg(unix)]
@@ -1048,6 +1085,32 @@ mod tests {
         assert_eq!(replaced.region.start_frame, "1000");
         assert_eq!(replaced.region.end_exclusive, "20000");
         assert_eq!(catalog_draft_revision(&catalog, &job), replaced.revision);
+    }
+
+    #[test]
+    fn replace_region_edit_rejects_region_beyond_source_frame_count() {
+        let (workbench, job, catalog, _dir) = fixture();
+        let accepted = accept_first_proposal(&workbench, &catalog, &job);
+        let err = workbench
+            .edit(
+                &catalog,
+                &job.root,
+                "main",
+                &job.id,
+                accepted.revision,
+                SliceEditDto::ReplaceRegion {
+                    start_frame: "0".into(),
+                    end_exclusive: "50000".into(),
+                },
+            )
+            .unwrap_err();
+        assert_eq!(
+            serde_json::to_value(&err)
+                .unwrap()
+                .get("code")
+                .and_then(|value| value.as_str()),
+            Some("INVALID_SLICE_REQUEST"),
+        );
     }
 
     #[test]
