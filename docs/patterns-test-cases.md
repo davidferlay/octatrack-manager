@@ -31,8 +31,8 @@
 | PT22 | Filters | Legend badge is per pattern | With All Patterns displayed, click an indicator badge in one pattern's legend | Indicator disappears only in that pattern; other patterns keep it; badge appears dimmed |
 | PT23 | Filters | Legend badge restores | Click the dimmed legend badge again | Indicator reappears in that pattern |
 | PT24 | Filters | Globally hidden leaves legends | Hide an indicator via the global chip | It is removed from every pattern legend (no dead per-pattern toggle) |
-| PT33 | Filters | Absent indicators disabled | Display patterns that contain no trig of a given kind (e.g. no slide trigs anywhere) | That chip is grayed out and not clickable; it becomes active again when the bank/pattern/track selection includes such a trig |
-| PT34 | Filters | MIDI Note/Chord chip gated by track type | Display an audio track, then switch to a MIDI track or All MIDI Tracks | The "MIDI Note/Chord" chip is absent for audio tracks and appears for MIDI tracks |
+| PT33 | Pattern header | Chain after when the pattern carries its own value | Open the Patterns tab on a bank whose pattern has USE PRJ SET off | The badge reads "Chain after: N (pattern)" with N the pattern's own value, and the tooltip says USE PRJ SET is off and names the project's value too |
+| PT34 | Pattern header | Chain after when the pattern follows the project | Look at a pattern with USE PRJ SET on (the device stores 255) | The badge reads "Chain after: X (project)" with X the project's CHAIN AFTER, and the tooltip says USE PRJ SET is on |
 | **Trig View** | | | | |
 | PT35 | Trig View | Recorder grid separated | Open a pattern whose track has both sample trigs and recorder trigs | Two grids without captions: the track grid, then the recorder grid below it; R indicators appear only on the recorder grid |
 | PT36 | Trig View | Track view | Set the Trigs control to "Track" | Only the track grid is displayed, no recorder grid or caption |
@@ -51,3 +51,8 @@
 | PT30 | Keyboard | Right past last step jumps pattern | Single-pattern view, select the last step, press Right | Next pattern is selected with step 1 active |
 | PT31 | Keyboard | Left before step 1 jumps back | Single-pattern view, select step 1, press Left | Previous pattern is selected with its last step active |
 | PT32 | Keyboard | No hijack while typing | Focus a selector or input, press arrow keys | Normal control behavior; step selection does not move |
+| PT33 | Pattern header | Chain after shows the pattern's own value | Open the Patterns tab on a bank whose pattern defines its own chain behaviour | The badge reads "Chain after: Pattern (N)" with N the stored value, and its tooltip says the pattern sets its own value |
+| PT34 | Pattern header | Chain after for a pattern following the project | Look at a pattern that has no chain setting of its own (the device stores 255 = N/A) | The badge reads "Chain after: Project" with no number, and the tooltip says it follows the project setting |
+| PT35 | Pattern header | The PAT.LEN default is named, not shown as 0 | Open a project whose CHAIN AFTER is at the device default | The badge reads "Chain after: PLEN (project)" - never "0" |
+| PT36 | Pattern header | The badge follows the project setting | Change CHAIN AFTER on the device (or open two projects with different values) and compare patterns that follow the project | Each project's patterns show that project's own value, not a fixed word |
+

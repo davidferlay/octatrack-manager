@@ -6,6 +6,9 @@ export interface ProjectContextMenuProps {
   y: number
   target: ContextTarget
   clipboard: ClipboardState | null
+  /** Whether the right-clicked project is already bookmarked (project targets only). */
+  isBookmarked?: boolean
+  onToggleBookmark: () => void
   onCopy: () => void
   onCopySet: () => void
   onRename: () => void
@@ -60,6 +63,11 @@ export function ProjectContextMenu(props: ProjectContextMenuProps) {
     >
       {target.kind === 'project' && (
         <>
+          <button className="context-menu-item" onClick={fire(props.onToggleBookmark)}>
+            <i className={props.isBookmarked ? 'fas fa-bookmark' : 'far fa-bookmark'}></i>
+            {props.isBookmarked ? ' Unbookmark' : ' Bookmark'}
+          </button>
+          <div className="context-menu-separator"></div>
           <button className="context-menu-item" onClick={fire(props.onCopy)}>
             <i className="fas fa-copy"></i> Copy
           </button>

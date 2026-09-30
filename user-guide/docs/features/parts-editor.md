@@ -42,11 +42,11 @@ The Parts Editor is organized into several pages, mirroring exactly the Octatrac
 
 ### Audio Track Pages (T1–T8)
 
-- **SRC Page:** Configure the core parameters (Pitch, Start, Length, Rate, etc.) of selected machine (Flex, Static, Thru, Neighbor, etc).
+- **SRC Page:** Configure the core parameters (Pitch, Start, Length, Rate, etc.) of selected machine (Flex, Static, Thru, Neighbor, etc). A Static or Flex track also shows which Sample Slot it plays - see [Changing the Sample a track plays](#changing-the-sample-a-track-plays) below.
 
 ![Parts Editor - SRC page](/img/screenshots/parts-editor-src.png)
 
-- **AMP Page:** Adjust the envelope (Attack, Hold, Release), Volume, and Balance for the track.
+- **AMP Page:** Adjust the envelope (Attack, Hold, Release), Volume, and Balance for the track, plus the mixer's own Track and Cue levels - see [Track and Cue levels](#track-and-cue-levels) below.
 
 ![Parts Editor - AMP page](/img/screenshots/parts-editor-amp.png)
 
@@ -57,6 +57,37 @@ The Parts Editor is organized into several pages, mirroring exactly the Octatrac
 - **LFO Pages:** Configure the three LFOs per track, including speed, depth, and destination.
 
 ![Parts Editor - LFO page](/img/screenshots/parts-editor-lfo.png)
+
+#### Changing the Sample a track plays
+
+On the SRC and ALL pages, a track running a Static or Flex machine shows the slot it plays in the track header, next to its machine type, as a labelled `SLOT F002` field - the same shape as the TRK and CUE controls on the other side. Only the slot number is shown: a filename in a header either truncates to nothing useful or shoves the rest of the row around. Hovering names the file, and the picker lists it in full.
+
+The field is styled exactly like the TRK and CUE controls beside it - the same box, label and value, and the same change of look when Edit mode goes on. Only Edit mode makes it clickable, and the whole field is one button, so it shows a hand cursor throughout rather than a text caret over the number.
+
+The header reads the same way on every page: the track and its levels on the left, what it plays and on what machine on the right.
+
+In Edit mode, clicking it opens a Sample Slot picker built like the [Sample Slots](./sample-slots.md) pages:
+
+- Only the loaded slots of that machine's own pool are listed - a Flex machine never offers Static slots, and the other way round.
+- The slot the track already plays is tagged `Assigned` at the right of its row, and the list opens on it.
+- Moving the selection loads that sample, and plays it when Auto-preview is on, through the same transport bar the Sample Slots pages use.
+- The keys are the same ones: arrows move the selection, Space plays and pauses, Ctrl and the arrows scrub and set the volume, Shift+Enter toggles Auto-preview, Shift+L toggles Loop, and Ctrl+F focuses the search box.
+- Enter assigns the selected slot, as does double-clicking a row or pressing Assign. Escape or Cancel closes the picker without changing anything.
+- The window can be resized from its edges, like the Tools modals.
+
+The assignment is per Part, which is what makes it useful: the same track can play a different sample in Part 1 and Part 2, and switching Part on the device switches the sample with it.
+
+The slot for the pool the track is not currently using is preserved, so changing the machine type later finds the slot the device left there.
+
+The field is read-only until Edit mode is on, and the change is saved the same way every other Part parameter is.
+
+#### Track and Cue levels
+
+The track header on the AMP and ALL pages carries TRK and CUE - the device's mixer levels for that track. They are not the AMP page's own VOL, which is a separate parameter in the grid below.
+
+They sit in the header rather than in a parameter block because they belong to the track rather than to any one page: that way they show on the ALL page too, without adding a column that would unbalance the parameter grids.
+
+They are stored per track and per Part - the same track can sit at a different level in Part 1 and Part 2 - and exist for every machine type, including Thru, Neighbor and Pickup tracks that play no sample at all.
 
 ### MIDI Track Pages (M1–M8)
 

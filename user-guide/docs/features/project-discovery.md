@@ -61,6 +61,19 @@ To open a project and start working:
 
 ---
 
+## Bookmarking Projects
+
+Projects you keep coming back to can be pinned to the top of the page.
+
+- Right-click a project card and choose **Bookmark**. A **Bookmarked Projects** section appears above the scan results, with a card per bookmark naming the Set it belongs to.
+- Right-click a bookmarked card and choose **Unbookmark** to remove it.
+- Bookmarks are remembered between launches, and the section is there before you scan - so a project is one click away on startup.
+- A bookmarked card opens its project just like any other card, and the search box filters bookmarks alongside everything else.
+- Operations follow the bookmark. Rename a bookmarked project, move it to another Set, or rename the Set around it, and the bookmark points at the new location with the new name. Delete the project - or the Set holding it - and its bookmark goes with it.
+- A bookmark whose project is no longer on disk is discarded on the next launch. That covers projects moved or deleted outside the app, and means a bookmarked card always opens something.
+
+---
+
 ## Project Status Indicators
 
 Inside each project card, you will see two status markers:

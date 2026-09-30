@@ -28,8 +28,16 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
     const makeMachine = (trackId: number) => ({
       track_id: trackId,
       machine_type: 'Flex',
+      // Stored 0-based: track 1 plays Sample Slot 1
+      static_slot_id: trackId,
+      flex_slot_id: trackId,
       machine_params: { ptch: 64, strt: 0, len: 0, rate: 0, rtrg: 0, rtim: 0, in_ab: null, vol_ab: null, in_cd: null, vol_cd: null, dir: null, gain: null, op: null },
       machine_setup: { xloop: 0, slic: 0, len: 0, rate: 0, tstr: 0, tsns: 0 },
+    })
+    const makeVolume = (trackId: number, partId: number) => ({
+      track_id: trackId,
+      main: 100 + partId,
+      cue: 40 + trackId,
     })
     const makeAmp = (trackId: number, partId: number) => ({
       track_id: trackId,
@@ -76,6 +84,7 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
     const makePart = (partId: number, atkOverride?: number) => ({
       part_id: partId,
       machines: tracks.map(makeMachine),
+      volumes: tracks.map((t) => makeVolume(t, partId)),
       amps: tracks.map((t) => {
         const amp = makeAmp(t, partId)
         if (atkOverride !== undefined) amp.atk = atkOverride
@@ -115,8 +124,10 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
               midi_settings: { trig_channels: [1, 2, 3, 4, 5, 6, 7, 8], auto_channel: 10, clock_send: true, clock_receive: true, transport_send: true, transport_receive: true, prog_change_send: false, prog_change_send_channel: 1, prog_change_receive: false, prog_change_receive_channel: 1 },
               metronome_settings: { enabled: false, main_volume: 64, cue_volume: 64, pitch: 64, tonal: false, preroll: 0, time_signature_numerator: 4, time_signature_denominator: 4 },
               sample_slots: {
-                flex_slots: Array(128).fill(null).map((_, i) => ({ slot_id: i, slot_type: 'Flex', path: null, gain: null, loop_mode: null, timestretch_mode: null, source_location: null, file_exists: false, compatibility: null, file_format: null, bit_depth: null, sample_rate: null })),
-                static_slots: Array(128).fill(null).map((_, i) => ({ slot_id: i, slot_type: 'Static', path: null, gain: null, loop_mode: null, timestretch_mode: null, source_location: null, file_exists: false, compatibility: null, file_format: null, bit_depth: null, sample_rate: null })),
+                // Slot ids are 1-based, as the file and the device number them.
+                // Flex slots 1..3 hold a sample; everything else is empty.
+                flex_slots: Array(128).fill(null).map((_, i) => ({ slot_id: i + 1, slot_type: 'Flex', path: i < 3 ? `../AUDIO/kick${i + 1}.wav` : null, gain: null, loop_mode: null, timestretch_mode: null, source_location: null, file_exists: i < 3, compatibility: null, file_format: null, bit_depth: null, sample_rate: null })),
+                static_slots: Array(128).fill(null).map((_, i) => ({ slot_id: i + 1, slot_type: 'Static', path: i === 0 ? '../AUDIO/loop.wav' : null, gain: null, loop_mode: null, timestretch_mode: null, source_location: null, file_exists: i === 0, compatibility: null, file_format: null, bit_depth: null, sample_rate: null })),
               },
             }
 
@@ -272,6 +283,281 @@ test.describe('Parts Editor - View mode guards', () => {
     await expect(input).toHaveValue('20')
     await expect(input).not.toHaveClass(/editable/)
     await expect(input).toHaveAttribute('readonly', '')
+  })
+})
+
+test.describe('Parts Editor - Sample slot per track and Part', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await openPartsTab(page)
+    await selectTrack(page, '0')
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'SRC' }).click()
+  })
+
+  test('shows the slot number in the header, beside the machine type', async ({ page }) => {
+    const header = page.locator('.parts-track-header').first()
+    // Stored 0-based, shown as the device numbers it: T1 plays Flex slot 1
+    const field = header.locator('.parts-sample-field')
+    // Labelled like the TRK/CUE controls beside it
+    await expect(field.locator('.parts-level-label')).toHaveText('SLOT')
+    await expect(field.locator('.param-value')).toHaveText('F001')
+    // The filename is not in the header - it would truncate to nothing useful
+    await expect(header).not.toContainText('kick1.wav')
+    // It is in the tooltip, and in full in the picker
+    await expect(field).toHaveAttribute('title', /F001 - kick1\.wav/)
+    // The slot and the machine type sit together, on the right of the header
+    const right = header.locator('.parts-track-header-right')
+    await expect(right.locator('.parts-sample-field')).toHaveCount(1)
+    await expect(right.locator('.machine-type')).toHaveCount(1)
+  })
+
+  test('the ALL page header reads badge and levels left, slot and machine right', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'ALL' }).click()
+    const header = page.locator('.parts-track-header').first()
+
+    // Left: the track, then its levels
+    const order = await header.evaluate(el => Array.from(el.children).map(c => c.className))
+    expect(order[0]).toContain('track-badge')
+    expect(order[1]).toContain('parts-track-levels')
+    expect(order[2]).toContain('parts-track-header-right')
+
+    // Right: the slot it plays, then the machine type
+    const right = header.locator('.parts-track-header-right')
+    await expect(right.locator('.parts-sample-field .param-value')).toHaveText('F001')
+    await expect(right.locator('.machine-type')).toHaveText('Flex')
+  })
+
+  test('is read-only until Edit mode is on, and is styled exactly like a TRK/CUE control', async ({ page }) => {
+    // The sample field wears .parts-level / .parts-level-label / .param-value, so it
+    // matches the level controls beside it by construction. Compare the two live, in
+    // the same instant, in both modes.
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'ALL' }).click()
+    const compare = async () => await page.locator('.parts-track-header').first().evaluate(el => {
+      const look = (n: Element | null) => {
+        if (!n) return null
+        const cs = getComputedStyle(n as HTMLElement)
+        return {
+          h: Math.round((n as HTMLElement).getBoundingClientRect().height * 100) / 100,
+          border: cs.border, radius: cs.borderRadius, bg: cs.backgroundColor,
+          shadow: cs.boxShadow, pad: cs.padding,
+        }
+      }
+      return {
+        level: {
+          box: look(el.querySelector('.parts-track-levels .parts-level')),
+          label: look(el.querySelector('.parts-track-levels .parts-level-label')),
+          value: look(el.querySelector('.parts-track-levels .param-value')),
+        },
+        field: {
+          box: look(el.querySelector('.parts-sample-field')),
+          label: look(el.querySelector('.parts-sample-field .parts-level-label')),
+          value: look(el.querySelector('.parts-sample-field .param-value')),
+        },
+      }
+    })
+
+    const field = page.locator('.parts-sample-field').first()
+    await expect(field).toBeDisabled()
+    const viewMode = await compare()
+    expect(viewMode.field.box).toEqual(viewMode.level.box)
+    expect(viewMode.field.label).toEqual(viewMode.level.label)
+    expect(viewMode.field.value).toEqual(viewMode.level.value)
+
+    await enterEditMode(page)
+    await expect(field).toBeEnabled()
+    await page.waitForTimeout(400) // let the .editable transition settle
+    const editMode = await compare()
+    expect(editMode.field.box).toEqual(editMode.level.box)
+    expect(editMode.field.label).toEqual(editMode.level.label)
+    expect(editMode.field.value).toEqual(editMode.level.value)
+    // Edit mode really does change the value's look - on both alike
+    expect(editMode.field.value).not.toEqual(viewMode.field.value)
+
+    // The whole field is one button: no text caret over the value half
+    const cursors = await field.evaluate(el => ({
+      button: getComputedStyle(el).cursor,
+      label: getComputedStyle(el.querySelector('.parts-level-label') as HTMLElement).cursor,
+      value: getComputedStyle(el.querySelector('.param-value') as HTMLElement).cursor,
+    }))
+    expect(cursors).toEqual({ button: 'pointer', label: 'pointer', value: 'pointer' })
+  })
+
+  test('the picker lists the machine\'s own pool, with the assignment marked', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-sample-field').first().click()
+
+    const modal = page.locator('.slot-picker-modal')
+    await expect(modal.locator('.modal-header h3')).toContainText('Flex Sample Slot')
+    // Same header shape as the Tools list modals: icon, title, one muted info line
+    await expect(modal.locator('.missing-samples-header-count'))
+      .toHaveText('T1 - PART 1 - showing 3 of 3 slots')
+    await expect(modal.locator('.modal-header h3 i.fa-list')).toHaveCount(1)
+    await expect(modal.locator('tbody tr')).toHaveCount(3)
+    await expect(modal.locator('tbody tr').first()).toContainText('F001')
+    await expect(modal.locator('tbody tr').first()).toContainText('kick1.wav')
+    // A Flex machine never offers the Static pool
+    await expect(modal.locator('tbody tr', { hasText: 'loop.wav' })).toHaveCount(0)
+    // The slot the track already plays is named, and the list opens on it
+    await expect(modal.locator('.slot-picker-row.assigned')).toContainText('F001')
+    await expect(modal.locator('.slot-picker-assigned-tag')).toHaveText('Assigned')
+    // Reaches the row's right edge, and is not eaten by the long-filename fade that
+    // every other sample cell in the app applies to its last tenth
+    const edges = await modal.locator('.slot-picker-row.assigned .col-sample').evaluate(el => ({
+      mask: getComputedStyle(el).maskImage,
+      gap: Math.round(el.getBoundingClientRect().right
+        - (el.querySelector('.slot-picker-assigned-tag') as HTMLElement).getBoundingClientRect().right),
+    }))
+    expect(edges.mask).toBe('none')
+    expect(edges.gap).toBeLessThan(20)
+
+    // Header is the Tools list-modal header, not a look-alike: .bank-card h3 leaks
+    // into this modal and would otherwise underline and inflate the title
+    const h3 = await modal.locator('.modal-header h3').evaluate(el => {
+      const cs = getComputedStyle(el)
+      return { pad: cs.padding, border: cs.borderBottomWidth, h: Math.round(el.getBoundingClientRect().height) }
+    })
+    expect(h3).toEqual({ pad: '0px', border: '0px', h: 21 })
+    await expect(modal.locator('.slot-picker-row.cursor')).toContainText('F001')
+    // The search box is not focused - the arrow keys belong to the list
+    await expect(modal.locator('.header-search-input')).not.toBeFocused()
+    // No per-row play button; playback is the transport bar, as on the Sample Slots pages
+    await expect(modal.locator('.slot-picker-play')).toHaveCount(0)
+    await expect(modal.locator('.sample-player-bar')).toBeVisible()
+  })
+
+  test('arrows move the selection and Enter assigns', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-sample-field').first().click()
+    const modal = page.locator('.slot-picker-modal')
+
+    await page.keyboard.press('ArrowDown')
+    await expect(modal.locator('.slot-picker-row.cursor')).toContainText('F002')
+    await page.keyboard.press('ArrowDown')
+    await expect(modal.locator('.slot-picker-row.cursor')).toContainText('F003')
+    // The selection stops at the end rather than wrapping
+    await page.keyboard.press('ArrowDown')
+    await expect(modal.locator('.slot-picker-row.cursor')).toContainText('F003')
+
+    await page.keyboard.press('Enter')
+    await expect(modal).toHaveCount(0)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    expect(calls[calls.length - 1].args.partsData[0].machines[0].flex_slot_id).toBe(2)
+  })
+
+  test('Ctrl+F focuses the search box, as on the Sample Slots pages', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-sample-field').first().click()
+    const modal = page.locator('.slot-picker-modal')
+
+    await page.keyboard.press('Control+f')
+    await expect(modal.locator('.header-search-input')).toBeFocused()
+  })
+
+  test('the modal can be resized, like the Tools modals', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-sample-field').first().click()
+    const modal = page.locator('.slot-picker-modal')
+    await expect(modal.locator('.modal-resize-handle')).not.toHaveCount(0)
+  })
+
+  test('the slot list sorts, like the other tables', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-sample-field').first().click()
+    const modal = page.locator('.slot-picker-modal')
+    const firstSlot = () => modal.locator('tbody tr').first().locator('td').first()
+
+    // Defaults to slot order
+    await expect(firstSlot()).toHaveText('F001')
+    await modal.locator('th', { hasText: 'Slot' }).click()
+    await expect(firstSlot()).toHaveText('F003')
+
+    // Sorting by Sample orders by filename, and reverses on a second click
+    await modal.locator('th', { hasText: 'Sample' }).click()
+    await expect(firstSlot()).toHaveText('F001')
+    await modal.locator('th', { hasText: 'Sample' }).click()
+    await expect(firstSlot()).toHaveText('F003')
+  })
+
+  test('the picker searches, and previews a sample like the Sample Slots pages', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-sample-field').first().click()
+    const modal = page.locator('.slot-picker-modal')
+
+    await modal.locator('.header-search-input').fill('kick3')
+    await expect(modal.locator('tbody tr')).toHaveCount(1)
+    await expect(modal.getByText('Showing 1 of 3 slots')).toBeVisible()
+    await expect(modal.locator('.sample-player-bar')).toBeVisible()
+  })
+
+  test('picking another slot saves it against that Part and track', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-sample-field').first().click()
+    const modal = page.locator('.slot-picker-modal')
+    await modal.locator('tbody tr', { hasText: 'kick3.wav' }).click()
+    await modal.getByRole('button', { name: 'Assign' }).click()
+
+    await expect(modal).toHaveCount(0)
+    await expect.poll(async () => (await getInvokeCalls(page, 'save_parts')).length).toBeGreaterThan(0)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    const saved = calls[calls.length - 1].args.partsData[0]
+    expect(saved.part_id).toBe(0)
+    expect(saved.machines[0].flex_slot_id).toBe(2)
+    // The other pool is carried through untouched
+    expect(saved.machines[0].static_slot_id).toBe(0)
+    // And no other track moved
+    expect(saved.machines[1].flex_slot_id).toBe(1)
+    // The header field now names the slot that was picked
+    await expect(page.locator('.parts-track-header').first().locator('.parts-sample-field .param-value')).toHaveText('F003')
+  })
+
+  test('Escape closes the picker without assigning anything', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-sample-field').first().click()
+    await expect(page.locator('.slot-picker-modal')).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.slot-picker-modal')).toHaveCount(0)
+    expect(await getInvokeCalls(page, 'save_parts')).toHaveLength(0)
+  })
+})
+
+test.describe('Parts Editor - Track and Cue volume', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await openPartsTab(page)
+    await selectTrack(page, '0')
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'AMP' }).click()
+  })
+
+  test('the track header carries the levels, separate from AMP VOL', async ({ page }) => {
+    const levels = page.locator('.parts-track-levels').first()
+    await expect(levels.locator('.parts-level', { hasText: 'TRK' }).locator('input')).toHaveValue('100')
+    await expect(levels.locator('.parts-level', { hasText: 'CUE' }).locator('input')).toHaveValue('40')
+    // AMP's own VOL is a different control in the parameter grid
+    const main = page.locator('.parts-params-section', { hasText: 'MAIN' }).first()
+    await expect(main.locator('.param-item', { hasText: 'VOL' }).locator('input')).toHaveValue('100')
+  })
+
+  test('the levels show on the ALL page as well as AMP', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'ALL' }).click()
+    const levels = page.locator('.parts-track-levels').first()
+    await expect(levels.locator('.parts-level', { hasText: 'TRK' }).locator('input')).toHaveValue('100')
+    await expect(levels.locator('.parts-level', { hasText: 'CUE' }).locator('input')).toHaveValue('40')
+    // And no MIXER block was added to the parameter grids
+    await expect(page.locator('.parts-mixer-params')).toHaveCount(0)
+  })
+
+  test('editing the Track level saves it against that Part and track', async ({ page }) => {
+    await enterEditMode(page)
+    const track = page.locator('.parts-track-levels').first().locator('.parts-level', { hasText: 'TRK' }).locator('input')
+    await track.fill('64')
+    await track.blur()
+
+    await expect.poll(async () => (await getInvokeCalls(page, 'save_parts')).length).toBeGreaterThan(0)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    const saved = calls[calls.length - 1].args.partsData[0]
+    expect(saved.volumes[0].main).toBe(64)
+    expect(saved.volumes[0].cue).toBe(40)
   })
 })
 

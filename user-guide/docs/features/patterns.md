@@ -123,7 +123,15 @@ Each pattern displays its assigned part as a **"→ Part N"** label. Hovering ov
 The app displays the **Length** (in steps) and **Master Scale** (speed) for every pattern. If you are using **Per Track** scale mode, the individual track length and speed are shown instead.
 
 ### Chain Behavior
-The **Chain Mode** indicator shows how the Octatrack will transition after this pattern finishes playing (e.g., chain after 16, 32, 64 steps).
+The **Chain after** indicator shows how long this pattern plays before a cued pattern starts.
+
+Every pattern either follows the project's CHAIN AFTER setting or carries its own, which on the device is the USE PRJ SET / USE PAT SET pair in the PATTERN SETTINGS menu. The badge shows the value that actually applies and where it comes from:
+
+- `Chain after: PLEN (project)` - the pattern keeps USE PRJ SET on, and the project is set to play each pattern to its end (the device's PAT.LEN default).
+- `Chain after: 16 (project)` - same, but the project chains after a set number of steps.
+- `Chain after: 8 (pattern)` - this pattern has USE PRJ SET off and chains on its own value instead of the project's.
+
+Values other than PLEN are counted in pattern steps. Hovering the badge spells out which setting is in force and what the other one holds.
 
 ---
 

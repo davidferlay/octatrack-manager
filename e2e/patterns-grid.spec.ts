@@ -65,6 +65,8 @@ async function setupTauriMocks(page: Page) {
             return {
               name: 'TestProject',
               tempo: 120.0,
+              // Project CHAIN AFTER: 0 is the device's PAT.LEN default
+              pattern_chain_behavior: 0,
               time_signature: '4/4',
               pattern_length: 16,
               os_version: '1.40F',
@@ -95,7 +97,10 @@ async function setupTauriMocks(page: Page) {
                   id: 0, name: 'PART 1',
                   patterns: Array(16).fill(null).map((_, j) => ({
                     id: j, name: `Pattern ${j + 1}`, part_assignment: 0, length: 16,
-                    scale_mode: 'Normal', master_scale: '1x', chain_mode: 'Project', tempo_info: null,
+                    scale_mode: 'Normal', master_scale: '1x',
+                    // Pattern 1 sets its own chain-after value; the rest defer to the project
+                    chain_mode: j === 0 ? 'Pattern' : 'Project', chain_after: j === 0 ? 4 : null,
+                    tempo_info: null,
                     active_tracks: 1, trig_counts: emptyCounts, per_track_settings: null, has_swing: false,
                     tracks: Array(16).fill(null).map((_, k) => makeTrack(k)),
                   })),
@@ -188,6 +193,62 @@ test.describe('Patterns tab - step grid indicators', () => {
     await expect(label).toHaveText('→ Part 3')
     // The tooltip names the part too, so a renamed part is identifiable.
     await expect(label).toHaveAttribute('title', 'This pattern uses Part 3: PART 3')
+  })
+
+  test('the Chain after badge shows the value that actually applies', async ({ page }) => {
+    const patternsTab = page.locator('.header-tab', { hasText: 'Patterns' })
+    await patternsTab.click()
+    await expect(page.locator('.pattern-step').first()).toBeVisible({ timeout: 10000 })
+
+    // Pattern 1 unchecked USE PRJ SET and carries its own value (4 in the mock)
+    const badge = page.locator('.pattern-tempo-indicator', { hasText: 'Chain after:' }).first()
+    await expect(badge).toHaveText('Chain after: 4 (pattern)')
+    await expect(badge).toHaveAttribute('title', /USE PRJ SET is off for this pattern/)
+    await expect(badge).toHaveAttribute('title', /counted in pattern steps/)
+  })
+
+  test('a pattern following the project shows the project value, not a bare word', async ({ page }) => {
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        const res = await orig(cmd, args)
+        // Every pattern keeps USE PRJ SET on; the project chains after 16
+        if (cmd === 'load_single_bank') {
+          res.parts[0].patterns.forEach((p: any) => { p.chain_mode = 'Project'; p.chain_after = null })
+        }
+        if (cmd === 'load_project_metadata') res.pattern_chain_behavior = 16
+        return res
+      }
+    })
+    await page.reload()
+    await page.locator('.header-tab', { hasText: 'Patterns' }).click()
+    await expect(page.locator('.pattern-step').first()).toBeVisible({ timeout: 10000 })
+
+    const badge = page.locator('.pattern-tempo-indicator', { hasText: 'Chain after:' }).first()
+    await expect(badge).toHaveText('Chain after: 16 (project)')
+    await expect(badge).toHaveAttribute('title', /USE PRJ SET is on/)
+  })
+
+  test('the device default PAT.LEN is named, not shown as 0', async ({ page }) => {
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        const res = await orig(cmd, args)
+        if (cmd === 'load_single_bank') {
+          res.parts[0].patterns.forEach((p: any) => { p.chain_mode = 'Project'; p.chain_after = null })
+        }
+        if (cmd === 'load_project_metadata') res.pattern_chain_behavior = 0
+        return res
+      }
+    })
+    await page.reload()
+    await page.locator('.header-tab', { hasText: 'Patterns' }).click()
+    await expect(page.locator('.pattern-step').first()).toBeVisible({ timeout: 10000 })
+
+    await expect(page.locator('.pattern-tempo-indicator', { hasText: 'Chain after:' }).first())
+      .toHaveText('Chain after: PLEN (project)')
   })
 
   test('trigger, one-shot, trigless and trigless lock render as circles', async ({ page }) => {

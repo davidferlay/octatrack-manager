@@ -71,6 +71,11 @@ async function setupTauriMocks(page: Page) {
             })
             return newPath
           }
+          case 'project_exists':
+            // A bookmark is pruned when its project is no longer on disk
+            return Object.values(currentState)
+              .flatMap((s) => s.projects)
+              .some((p) => p.path === args.projectPath)
           case 'delete_project': {
             for (const s of Object.values(currentState)) {
               s.projects = s.projects.filter((p) => p.path !== args.projectPath)
@@ -207,6 +212,92 @@ test.beforeEach(async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: /scan/i }).click()
   await expect(page.getByText('PROJ_A')).toBeVisible()
+})
+
+// --- Bookmarks ---
+
+test('bookmarking a project pins it to its own section, and it survives a reload', async ({ page }) => {
+  await expect(page.locator('.bookmarked-projects')).toHaveCount(0)
+
+  await page.getByText('PROJ_A').click({ button: 'right' })
+  await page.getByText('Bookmark', { exact: true }).click()
+
+  const section = page.locator('.bookmarked-projects')
+  await expect(section).toBeVisible()
+  await expect(section.getByText('PROJ_A')).toBeVisible()
+  // The card names the Set it belongs to - it has no tree around it to say so
+  await expect(section.locator('.bookmarked-set')).toHaveText('SetA')
+
+  // A bookmark is there on launch, before any scan
+  await page.reload()
+  await expect(page.locator('.bookmarked-projects').getByText('PROJ_A')).toBeVisible()
+  await expect(page.getByRole('button', { name: /scan/i })).toBeVisible()
+})
+
+test('a bookmarked project offers Unbookmark, which removes the section', async ({ page }) => {
+  await page.getByText('PROJ_A').click({ button: 'right' })
+  await page.getByText('Bookmark', { exact: true }).click()
+  await expect(page.locator('.bookmarked-projects')).toBeVisible()
+
+  await page.locator('.bookmarked-projects').getByText('PROJ_A').click({ button: 'right' })
+  await expect(page.getByText('Unbookmark')).toBeVisible()
+  await page.getByText('Unbookmark').click()
+  await expect(page.locator('.bookmarked-projects')).toHaveCount(0)
+})
+
+test('renaming a bookmarked project carries the bookmark with it', async ({ page }) => {
+  await page.getByText('PROJ_A').click({ button: 'right' })
+  await page.getByText('Bookmark', { exact: true }).click()
+
+  await page.locator('.bookmarked-projects').getByText('PROJ_A').click({ button: 'right' })
+  await page.getByText(/rename/i).click()
+  await page.getByRole('textbox', { name: /new project name/i }).fill('RENAMED')
+  await page.getByRole('button', { name: /^rename$/i }).click()
+
+  const section = page.locator('.bookmarked-projects')
+  await expect(section.getByText('RENAMED')).toBeVisible()
+  await expect(section.getByText('PROJ_A')).toHaveCount(0)
+
+  // The stored bookmark points at the new path, so a relaunch finds the project
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('otm.project-bookmarks') ?? '[]'))
+  expect(stored).toHaveLength(1)
+  expect(stored[0].name).toBe('RENAMED')
+  expect(stored[0].path).toBe('/mock/SetA/RENAMED')
+})
+
+test('deleting a bookmarked project removes its bookmark', async ({ page }) => {
+  await page.getByText('PROJ_A').click({ button: 'right' })
+  await page.getByText('Bookmark', { exact: true }).click()
+  await expect(page.locator('.bookmarked-projects')).toBeVisible()
+
+  await page.locator('.bookmarked-projects').getByText('PROJ_A').click({ button: 'right' })
+  await page.getByText(/delete/i).click()
+  await page.getByRole('button', { name: /^delete$/i }).click()
+
+  await expect(page.locator('.bookmarked-projects')).toHaveCount(0)
+})
+
+test('a bookmark whose project vanished outside the app is discarded on launch', async ({ page }) => {
+  await page.getByText('PROJ_A').click({ button: 'right' })
+  await page.getByText('Bookmark', { exact: true }).click()
+  await expect(page.locator('.bookmarked-projects')).toBeVisible()
+
+  // Same stored bookmark, but the project is no longer anywhere on disk
+  await page.evaluate(() => {
+    localStorage.setItem('otm.project-bookmarks', JSON.stringify([
+      { path: '/gone/SetX/VANISHED', name: 'VANISHED', setPath: '/gone/SetX', setName: 'SetX' },
+    ]))
+  })
+  await page.reload()
+  await expect(page.locator('.bookmarked-projects')).toHaveCount(0)
+  await expect.poll(async () => page.evaluate(() => localStorage.getItem('otm.project-bookmarks'))).toBe('[]')
+})
+
+test('a bookmarked card opens the project', async ({ page }) => {
+  await page.getByText('PROJ_A').click({ button: 'right' })
+  await page.getByText('Bookmark', { exact: true }).click()
+  await page.locator('.bookmarked-projects').getByText('PROJ_A').click()
+  await expect.poll(() => page.url()).toContain('/project?')
 })
 
 // --- Project operations ---

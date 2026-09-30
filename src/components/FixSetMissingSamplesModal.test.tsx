@@ -237,8 +237,14 @@ describe('FixSetMissingSamplesModal - Escape', () => {
     // modal only becomes dismissible once the search actually finishes.
     release([])
     await waitFor(() => expect(screen.getByRole('button', { name: 'Review changes' })).toBeEnabled())
-    fireEvent.keyDown(document, { key: 'Escape' })
-    expect(onClose).toHaveBeenCalledTimes(1)
+
+    // Re-fire inside waitFor rather than pressing once: the button's disabled state
+    // comes from the render, while the Escape handler is registered by an effect, so
+    // a single press can land in the gap between the two and be lost.
+    await waitFor(() => {
+      fireEvent.keyDown(document, { key: 'Escape' })
+      expect(onClose).toHaveBeenCalled()
+    })
   })
 })
 

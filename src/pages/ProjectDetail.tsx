@@ -1535,6 +1535,10 @@ export function ProjectDetail() {
                           onSharedLfoTabChange={setSharedPartsLfoTab}
                           sharedActivePartIndex={sharedPartsActivePartIndex}
                           onSharedActivePartChange={setSharedPartsActivePartIndex}
+                          sampleSlots={metadata ? {
+                            static_slots: metadata.sample_slots.static_slots,
+                            flex_slots: metadata.sample_slots.flex_slots,
+                          } : undefined}
                           onWriteStatusChange={handleWriteStatusChange}
                         />
                       );
@@ -1807,7 +1811,26 @@ export function ProjectDetail() {
                               <TrackBadge trackId={trackData.track_id} />
                               {pattern.tempo_info && <span className="pattern-tempo-indicator">{pattern.tempo_info}</span>}
                               <span className="pattern-tempo-indicator">Scale Mode: {pattern.scale_mode === "Normal" ? "Pattern" : pattern.scale_mode}</span>
-                              <span className="pattern-tempo-indicator">Chain after: {pattern.chain_mode}</span>
+                              {(() => {
+                                // CHAIN AFTER decides how long this pattern plays before a cued
+                                // one starts. A pattern either keeps USE PRJ SET on and follows
+                                // the project's value, or unchecks it and carries its own.
+                                const projectValue = metadata.pattern_chain_behavior;
+                                const own = pattern.chain_after;
+                                const asText = (v: number) => (v === 0 ? 'PLEN' : String(v));
+                                return (
+                                  <span
+                                    className="pattern-tempo-indicator"
+                                    title={own != null
+                                      ? `USE PRJ SET is off for this pattern: it chains on its own value (${asText(own)}) instead of the project's (${asText(projectValue)}). PLEN plays the pattern to its end; other values are counted in pattern steps.`
+                                      : `USE PRJ SET is on: this pattern follows the project's CHAIN AFTER (${asText(projectValue)}). PLEN plays the pattern to its end; other values are counted in pattern steps.`}
+                                  >
+                                    Chain after: {own != null
+                                      ? `${asText(own)} (pattern)`
+                                      : `${asText(projectValue)} (project)`}
+                                  </span>
+                                );
+                              })()}
                               {pattern.scale_mode === "Per Track" ? (
                                 <>
                                   <span className="pattern-tempo-indicator">

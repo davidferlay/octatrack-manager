@@ -5,6 +5,7 @@ import { TrackBadge } from './TrackBadge';
 import { ALL_MIDI_TRACKS } from './TrackSelector';
 import { WriteStatus, writeStatus } from '../types/writeStatus';
 import { RotaryKnob } from './RotaryKnob';
+import { SlotPickerModal } from './SlotPickerModal';
 import './PartsPanel.css';
 
 interface PartsPanelProps {
@@ -22,6 +23,14 @@ interface PartsPanelProps {
   sharedActivePartIndex?: number;  // Optional shared active part index (persists across bank changes)
   onSharedActivePartChange?: (index: number) => void;  // Optional callback for shared active part change
   onWriteStatusChange?: (status: WriteStatus) => void;  // Optional callback to report write status to parent
+  /** The project's Sample Slots, so a Static/Flex track can be pointed at another one. */
+  sampleSlots?: { static_slots: SlotChoice[]; flex_slots: SlotChoice[] };
+}
+
+/** The little a slot selector needs to know about a Sample Slot. */
+export interface SlotChoice {
+  slot_id: number;   // 1-based, as the file and the device number them
+  path: string | null;
 }
 
 type AudioPageType = 'ALL' | 'SRC' | 'AMP' | 'LFO' | 'FX1' | 'FX2';
@@ -42,9 +51,14 @@ export default function PartsPanel({
   onSharedLfoTabChange,
   sharedActivePartIndex,
   onSharedActivePartChange,
-  onWriteStatusChange
+  onWriteStatusChange,
+  sampleSlots,
 }: PartsPanelProps) {
   const [partsData, setPartsData] = useState<PartData[]>([]);
+  // Open Sample Slot picker: which track of which Part it is assigning, and its pool
+  const [slotPicker, setSlotPicker] = useState<{
+    partId: number; trackId: number; pool: 'Static' | 'Flex'; current: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // Unified page index: -1=ALL, 0=SRC/NOTE, 1=AMP/ARP, 2=LFO, 3=FX1/CTRL1, 4=FX2/CTRL2
@@ -665,10 +679,7 @@ export default function PartsPanel({
         <div className="parts-individual-grid">
           {tracksToShow.map((machine) => (
             <div key={machine.track_id} className="parts-individual-section">
-              <div className="parts-track-header">
-                <TrackBadge trackId={machine.track_id} />
-                <span className="machine-type">{machine.machine_type}</span>
-              </div>
+              {renderTrackHeader(activePart, machine.track_id, machine.machine_type, { withSample: true })}
               {renderSrcSectionContent(activePart, machine)}
             </div>
           ))}
@@ -681,10 +692,7 @@ export default function PartsPanel({
       <div className="parts-tracks">
         {tracksToShow.map((machine) => (
           <div key={machine.track_id} className="parts-track">
-            <div className="parts-track-header">
-              <TrackBadge trackId={machine.track_id} />
-              <span className="machine-type">{machine.machine_type}</span>
-            </div>
+            {renderTrackHeader(activePart, machine.track_id, machine.machine_type, { withSample: true })}
 
             <div className="parts-params-section">
               <div className="params-column-label">MAIN</div>
@@ -752,6 +760,113 @@ export default function PartsPanel({
     );
   };
 
+  /**
+   * Which Sample Slot a Static/Flex track plays, for this Part.
+   *
+   * The machine stores the slot 0-based (0 is Sample Slot 1), while the slot list and
+   * the device both number from 1 - hence the +1/-1 either side of this control. The
+   * two pools are stored separately, so the field follows the machine type.
+   *
+   * Sits in the track header, before the machine type: the machine type is what decides
+   * which pool the sample comes from, so it reads left to right as "track, sample,
+   * machine". Picking happens in a modal shaped like the Sample Slots pages.
+   */
+  const renderSlotField = (activePart: PartData, machine: PartData['machines'][0]) => {
+    const isStatic = machine.machine_type === 'Static';
+    const isFlex = machine.machine_type === 'Flex';
+    if (!sampleSlots || (!isStatic && !isFlex)) return null;
+
+    const pool = isStatic ? sampleSlots.static_slots : sampleSlots.flex_slots;
+    const current = isStatic ? machine.static_slot_id : machine.flex_slot_id;
+    if (current == null) return null;
+    const prefix = isStatic ? 'S' : 'F';
+
+    const assigned = pool.find(slot => slot.slot_id === current + 1);
+    const filename = assigned?.path ? assigned.path.split(/[\\/]/).pop() : '(empty)';
+    const label = `${prefix}${String(current + 1).padStart(3, '0')}`;
+
+    // Slot number only: a filename never fits a header without either truncating to
+    // uselessness or shoving the rest of the row around. The name is in the tooltip,
+    // and in full in the picker.
+    return (
+      <button
+        className="parts-level parts-sample-field"
+        disabled={!isEditMode}
+        title={`${label} - ${filename}${isEditMode ? '' : ' (turn on Edit mode to change it)'}`}
+        onClick={() => setSlotPicker({
+          partId: activePart.part_id,
+          trackId: machine.track_id,
+          pool: isStatic ? 'Static' : 'Flex',
+          current,
+        })}
+      >
+        <span className="parts-level-label">SLOT</span>
+        <span className={`param-value ${isEditMode ? 'editable' : ''}`}>{label}</span>
+      </button>
+    );
+  };
+
+  /**
+   * The track's Track and Cue levels, compact enough to live in the header.
+   *
+   * They belong to the track rather than to any one parameter page, and a MIXER block
+   * inside the AMP grid both missed the ALL page and unbalanced the columns - the
+   * header shows on every page and costs the grids nothing.
+   */
+  const renderHeaderLevels = (activePart: PartData, trackId: number) => {
+    const volume = activePart.volumes?.find(v => v.track_id === trackId);
+    if (!volume) return null;
+
+    const field = (key: 'main' | 'cue', label: string, value: number) => (
+      <label className="parts-level" title={`${label === 'TRK' ? 'Track' : 'Cue'} level for this track in this Part`}>
+        <span className="parts-level-label">{label}</span>
+        <input
+          type="text"
+          className={`param-value ${isEditMode ? 'editable' : ''}`}
+          value={value}
+          onChange={(e) => {
+            if (!isEditMode) return;
+            const next = parseInt(e.target.value, 10);
+            if (!isNaN(next)) {
+              updatePartParam(activePart.part_id, 'volumes', trackId, key, next);
+            }
+          }}
+          onBlur={() => { if (isEditMode) savePart(activePart.part_id); }}
+          readOnly={!isEditMode}
+          tabIndex={isEditMode ? 0 : -1}
+        />
+      </label>
+    );
+
+    return (
+      <div className="parts-track-levels">
+        {field('main', 'TRK', volume.main)}
+        {field('cue', 'CUE', volume.cue)}
+      </div>
+    );
+  };
+
+  /**
+   * One track's header: badge, optionally the Sample Slot it plays, its machine type,
+   * and the Track/Cue levels. Shared so every page shows the same row rather than each
+   * layout growing its own variant.
+   */
+  const renderTrackHeader = (
+    activePart: PartData,
+    trackId: number,
+    machineType: string,
+    opts: { withSample?: boolean; withLevels?: boolean } = {},
+  ) => (
+    <div className="parts-track-header">
+      <TrackBadge trackId={trackId} />
+      {opts.withLevels && renderHeaderLevels(activePart, trackId)}
+      <div className="parts-track-header-right">
+        {opts.withSample && renderSlotField(activePart, activePart.machines[trackId])}
+        <span className="machine-type">{machineType}</span>
+      </div>
+    </div>
+  );
+
   // Helper function to render AMP section content (MAIN + SETUP)
   const renderAmpSectionContent = (activePart: PartData, amp: typeof activePart.amps[0]) => (
     <div className="params-vertical-layout">
@@ -796,10 +911,7 @@ export default function PartsPanel({
             const machineType = machine.machine_type;
             return (
               <div key={amp.track_id} className="parts-individual-section">
-                <div className="parts-track-header">
-                  <TrackBadge trackId={amp.track_id} />
-                  <span className="machine-type">{machineType}</span>
-                </div>
+                {renderTrackHeader(activePart, amp.track_id, machineType, { withLevels: true })}
                 {renderAmpSectionContent(activePart, amp)}
               </div>
             );
@@ -818,10 +930,7 @@ export default function PartsPanel({
 
           return (
             <div key={amp.track_id} className="parts-track">
-              <div className="parts-track-header">
-                <TrackBadge trackId={amp.track_id} />
-                <span className="machine-type">{machineType}</span>
-              </div>
+              {renderTrackHeader(activePart, amp.track_id, machineType, { withLevels: true })}
 
               <div className="parts-params-section">
                 <div className="params-column-label">MAIN</div>
@@ -1908,10 +2017,7 @@ export default function PartsPanel({
 
           return (
             <div key={trackIdx} className="parts-track parts-track-wide">
-              <div className="parts-track-header">
-                <TrackBadge trackId={trackIdx} />
-                <span className="machine-type">{machineType}</span>
-              </div>
+              {renderTrackHeader(activePart, trackIdx, machineType, { withSample: true, withLevels: true })}
 
               {/* Row 1: SRC, AMP, LFO1, LFO2 */}
               <div className="parts-all-row">
@@ -2569,6 +2675,23 @@ export default function PartsPanel({
           </>
         )}
       </div>
+
+      {slotPicker && sampleSlots && (
+        <SlotPickerModal
+          pool={slotPicker.pool}
+          slots={slotPicker.pool === 'Static' ? sampleSlots.static_slots : sampleSlots.flex_slots}
+          currentSlotId={slotPicker.current}
+          projectPath={projectPath}
+          trackLabel={`T${slotPicker.trackId + 1}`}
+          partLabel={partNames[slotPicker.partId] ?? `Part ${slotPicker.partId + 1}`}
+          onPick={(slotIdZeroBased) => {
+            const field = slotPicker.pool === 'Static' ? 'static_slot_id' : 'flex_slot_id';
+            updatePartParamLocal(slotPicker.partId, 'machines', slotPicker.trackId, field, slotIdZeroBased);
+            savePart(slotPicker.partId);
+          }}
+          onClose={() => setSlotPicker(null)}
+        />
+      )}
     </div>
   );
 }

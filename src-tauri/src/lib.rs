@@ -572,6 +572,24 @@ async fn check_project_in_set(project_path: String) -> Result<bool, String> {
         .unwrap()
 }
 
+/// Whether a project still sits at this path - a directory holding a project file.
+///
+/// Bookmarks keep a path across launches; this is how the home page tells a project
+/// that was moved or deleted outside the app from one that is simply not in the last
+/// scan (a collapsed group, a filtered search).
+#[tauri::command]
+async fn project_exists(project_path: String) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = std::path::Path::new(&project_path);
+        Ok(
+            dir.is_dir()
+                && (dir.join("project.work").exists() || dir.join("project.strd").exists()),
+        )
+    })
+    .await
+    .unwrap()
+}
+
 #[tauri::command]
 async fn check_projects_in_same_set(project1: String, project2: String) -> Result<bool, String> {
     tauri::async_runtime::spawn_blocking(move || are_projects_in_same_set(&project1, &project2))
@@ -1490,6 +1508,7 @@ pub fn run() {
             get_system_resources,
             // Tools Tab - Set and Audio Pool
             check_project_in_set,
+            project_exists,
             check_projects_in_same_set,
             get_audio_pool_status,
             create_audio_pool,

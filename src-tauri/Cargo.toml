@@ -25,7 +25,9 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-ot-tools-io = { git = "https://gitlab.com/davidferlay/ot-tools-io.git", branch = "fix/default-project-settings" }
+# Pinned to an exact commit, not a branch: a moving branch would let a parser change
+# arrive on a plain `cargo update`, and a bad parse here means projects stop opening.
+ot-tools-io = { git = "https://gitlab.com/davidferlay/ot-tools-io.git", rev = "46d886d027213296319f22ec0b401442a550387a" }
 sysinfo = "0.32"
 trash = "5"
 walkdir = "2"

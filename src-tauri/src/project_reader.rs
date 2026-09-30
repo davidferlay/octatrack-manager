@@ -24,6 +24,10 @@ pub struct ProjectMetadata {
     pub metronome_settings: MetronomeSettings,
     pub sample_slots: SampleSlots,
     pub os_version: String,
+    /// Project-level CHAIN AFTER (`PATTERN_CHANGE_CHAIN_BEHAVIOR`): how long the
+    /// playing pattern runs before a cued one starts, for every pattern that has
+    /// not unchecked USE PRJ SET. 0 is the device's PAT.LEN default.
+    pub pattern_chain_behavior: u8,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -244,12 +248,15 @@ pub struct Pattern {
     pub scale_mode: String,  // "Normal" or "Per Track"
     pub master_scale: String, // Playback speed multiplier (2x, 3/2x, 1x, 3/4x, 1/2x, 1/4x, 1/8x)
     pub chain_mode: String,  // "Project" or "Pattern"
+    /// The Pattern's own chain-after value, as stored. `None` when the Pattern
+    /// defers to the Project setting (the device writes 255 = N/A there).
+    pub chain_after: Option<u8>,
     pub tempo_info: Option<String>, // Pattern tempo if set, or None if using project tempo
-    pub active_tracks: u8,   // Number of tracks with at least one trigger trig
-    pub trig_counts: TrigCounts, // Detailed trig statistics
+    pub active_tracks: u8,          // Number of tracks with at least one trigger trig
+    pub trig_counts: TrigCounts,    // Detailed trig statistics
     pub per_track_settings: Option<PerTrackSettings>, // Settings for per-track mode
-    pub has_swing: bool,     // Whether pattern has any swing trigs
-    pub tracks: Vec<TrackInfo>, // Per-track information
+    pub has_swing: bool,            // Whether pattern has any swing trigs
+    pub tracks: Vec<TrackInfo>,     // Per-track information
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -273,6 +280,21 @@ pub struct PartTrackMachine {
     pub machine_type: String, // "Static", "Flex", "Thru", "Neighbor", "Pickup"
     pub machine_params: MachineParamValues,
     pub machine_setup: MachineSetupValues,
+    /// Static Sample Slot this track plays, 0-based (slot 1 is stored as 0).
+    /// Both pools are stored per track whatever the machine type is - which one
+    /// actually sounds is decided by `machine_type`.
+    pub static_slot_id: u8,
+    /// Flex Sample Slot this track plays, 0-based.
+    pub flex_slot_id: u8,
+}
+
+/// A Part's per-track mixer levels. Separate from the AMP page's own VOL: these are
+/// the Track and Cue levels the device's mixer shows.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartTrackVolume {
+    pub track_id: u8,
+    pub main: u8,
+    pub cue: u8,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -459,6 +481,7 @@ pub struct PartTrackMidiCtrl2 {
 pub struct PartData {
     pub part_id: u8,                          // 0-3 for Parts 1-4
     pub machines: Vec<PartTrackMachine>,      // 8 audio tracks
+    pub volumes: Vec<PartTrackVolume>,        // 8 audio tracks (Track/Cue levels)
     pub amps: Vec<PartTrackAmp>,              // 8 audio tracks
     pub lfos: Vec<PartTrackLfo>,              // 8 audio tracks (also used for MIDI LFOs)
     pub fxs: Vec<PartTrackFx>,                // 8 audio tracks
@@ -901,6 +924,12 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
             // Extract OS version
             let os_version = project.metadata.os_version.clone();
 
+            let pattern_chain_behavior = project
+                .settings
+                .control
+                .sequencer
+                .pattern_change_chain_behaviour;
+
             // Extract current pattern length from the active bank file
             let pattern_length = {
                 let current_bank = project.states.bank + 1; // Bank is 0-indexed, files are 1-indexed
@@ -943,6 +972,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                 metronome_settings,
                 sample_slots,
                 os_version,
+                pattern_chain_behavior,
             })
         }
         Err(e) => Err(format!("Failed to read project file: {:?}", e)),
@@ -1447,6 +1477,12 @@ fn read_project_banks_internal(
                             "Project".to_string()
                         } else {
                             "Pattern".to_string()
+                        };
+                        // Same byte, kept as a number: "Pattern" alone does not say
+                        // after how much the chain change happens.
+                        let chain_after = match pattern.chain_behaviour.use_pattern_setting {
+                            255 => None,
+                            v => Some(v),
                         };
 
                         // Helper function to count set bits in trig masks
@@ -2398,6 +2434,7 @@ fn read_project_banks_internal(
                             scale_mode,
                             master_scale,
                             chain_mode,
+                            chain_after,
                             tempo_info,
                             active_tracks,
                             trig_counts,
@@ -2473,6 +2510,7 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
         let part = &bank_data.parts.unsaved.0[part_id as usize];
 
         let mut machines = Vec::new();
+        let mut volumes = Vec::new();
         let mut amps = Vec::new();
         let mut lfos = Vec::new();
         let mut fxs = Vec::new();
@@ -2611,11 +2649,21 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
                 }
             };
 
+            let machine_slots = &part.audio_track_machine_slots[track_id as usize];
             machines.push(PartTrackMachine {
                 track_id,
                 machine_type,
                 machine_params,
                 machine_setup,
+                static_slot_id: machine_slots.static_slot_id,
+                flex_slot_id: machine_slots.flex_slot_id,
+            });
+
+            let track_volume = &part.audio_track_volumes[track_id as usize];
+            volumes.push(PartTrackVolume {
+                track_id,
+                main: track_volume.main,
+                cue: track_volume.cue,
             });
 
             // Get AMP parameters
@@ -2852,6 +2900,7 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
         parts_data.push(PartData {
             part_id,
             machines,
+            volumes,
             amps,
             lfos,
             fxs,
@@ -3042,8 +3091,22 @@ pub fn save_parts_data(
             }
 
             // Update Machine parameters (SRC page)
+            // Track and Cue levels (mixer), independent of the AMP page's VOL
+            if let Some(volume) = part_data.volumes.get(track_id) {
+                part_unsaved.audio_track_volumes[track_id].main = volume.main;
+                part_unsaved.audio_track_volumes[track_id].cue = volume.cue;
+            }
+
             if let Some(machine) = part_data.machines.get(track_id) {
                 let machine_type = part_unsaved.audio_track_machine_types[track_id];
+
+                // Which Sample Slot the track plays. Both pools are written back:
+                // switching the machine type later must find the other pool's slot
+                // exactly as the device left it.
+                part_unsaved.audio_track_machine_slots[track_id].static_slot_id =
+                    machine.static_slot_id;
+                part_unsaved.audio_track_machine_slots[track_id].flex_slot_id =
+                    machine.flex_slot_id;
 
                 match machine_type {
                     0 | 1 => {
@@ -9324,6 +9387,17 @@ mod tests {
             let p2 = patterns.iter().find(|p| p.id == 1).expect("pattern 2");
             assert_eq!(p1.chain_mode, "Project", "255 = N/A = use project");
             assert_eq!(p2.chain_mode, "Pattern");
+            // The value itself is carried alongside the mode: "Pattern" on its own
+            // never said after how much the chain change happens.
+            assert_eq!(p1.chain_after, None, "N/A carries no value of its own");
+            assert_eq!(p2.chain_after, Some(4));
+            // The project's own CHAIN AFTER is what p1 actually follows, so it has to
+            // reach the UI too - "Project" on its own says nothing about the timing.
+            let metadata = read_project_metadata(&project.path).unwrap();
+            assert_eq!(
+                metadata.pattern_chain_behavior, 0,
+                "a default project is PAT.LEN, which the device stores as 0"
+            );
             // And the part still comes through untouched.
             assert_eq!(p2.part_assignment, 1);
         }
@@ -9481,6 +9555,27 @@ mod tests {
                 _temp_dir: temp_dir,
                 path,
             }
+        }
+
+        /// A project whose first Flex slot points at a path containing `=`.
+        ///
+        /// The device writes a sample filename verbatim, `=` included. Parsing a
+        /// settings line on every `=` used to drop that slot's PATH and fail the whole
+        /// project as `ProjectParse(HashMap)` - "Error loading project" for the user.
+        fn with_equals_in_sample_path(path_value: &str) -> Self {
+            let project = Self::new();
+            let file = Path::new(&project.path).join("project.work");
+            let bytes = std::fs::read(&file).expect("read project");
+            let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&bytes);
+            // A default project holds only the recorder-buffer slots (129-136), which
+            // the metadata reader skips - so add a real Flex slot 1 carrying the path.
+            let block = format!(
+                "[SAMPLE]\r\nTYPE=FLEX\r\nSLOT=001\r\nPATH={path_value}\r\nBPMx24=2880\r\nTSMODE=2\r\nLOOPMODE=0\r\nGAIN=72\r\nTRIGQUANTIZATION=255\r\n[/SAMPLE]\r\n\r\n[SAMPLE]"
+            );
+            let replaced = decoded.into_owned().replacen("[SAMPLE]", &block, 1);
+            let (encoded, _, _) = encoding_rs::WINDOWS_1258.encode(&replaced);
+            std::fs::write(&file, encoded).expect("write project");
+            project
         }
 
         /// Create a test project with modified bank data for testing copy operations
@@ -17421,6 +17516,44 @@ mod tests {
             );
         }
 
+        /// Reported from the field: a project whose sample filename contains `=`
+        /// refused to open with "Failed to read project file: ProjectParse(HashMap)".
+        #[test]
+        fn test_read_project_metadata_with_equals_in_a_sample_path() {
+            let wanted = "../AUDIO/drums/kick=2 [a=b].wav";
+            let project = TestProject::with_equals_in_sample_path(wanted);
+
+            let metadata = read_project_metadata(&project.path)
+                .expect("a '=' inside a sample path must not make the project unreadable");
+
+            let slot = metadata
+                .sample_slots
+                .flex_slots
+                .iter()
+                .find(|s| s.slot_id == 1)
+                .expect("flex slot 1");
+            assert_eq!(
+                slot.path.as_deref(),
+                Some(wanted),
+                "everything after the first '=' is the path"
+            );
+        }
+
+        /// The same file read through our own surgical parser, which never had the bug -
+        /// both readers must agree, or a fix would silently repoint the slot.
+        #[test]
+        fn test_raw_sample_fields_agree_on_a_path_containing_equals() {
+            let wanted = "../AUDIO/drums/kick=2 [a=b].wav";
+            let project = TestProject::with_equals_in_sample_path(wanted);
+
+            let fields = read_raw_sample_fields(&Path::new(&project.path).join("project.work"))
+                .expect("raw fields");
+            let slot = fields
+                .get(&("FLEX".to_string(), 1))
+                .expect("flex slot 1 fields");
+            assert_eq!(slot.get("PATH").map(String::as_str), Some(wanted));
+        }
+
         #[test]
         fn test_read_project_metadata_success() {
             let project = TestProject::new();
@@ -17895,6 +18028,62 @@ mod tests {
             // Read again and verify
             let reloaded_parts = read_parts_data(&project.path, "A").unwrap();
             assert_eq!(reloaded_parts.parts.len(), original_parts.parts.len());
+        }
+
+        /// The Sample Slot a track plays and the Track/Cue levels are per Part, so
+        /// editing them has to survive a save/reload the same way the AMP page does.
+        #[test]
+        fn test_save_parts_data_persists_machine_slot_and_volumes() {
+            let project = TestProject::new();
+            let mut parts = read_parts_data(&project.path, "A").unwrap();
+
+            // Part 2, track T3: point it at different slots and move both levels
+            let part = &mut parts.parts[1];
+            part.machines[2].static_slot_id = 41;
+            part.machines[2].flex_slot_id = 17;
+            part.volumes[2].main = 99;
+            part.volumes[2].cue = 12;
+
+            save_parts_data(&project.path, "A", parts.parts.clone()).unwrap();
+
+            let reloaded = read_parts_data(&project.path, "A").unwrap();
+            let machine = &reloaded.parts[1].machines[2];
+            assert_eq!(machine.static_slot_id, 41);
+            assert_eq!(
+                machine.flex_slot_id, 17,
+                "the other pool's slot is kept too - switching machine type must find it"
+            );
+            let volume = &reloaded.parts[1].volumes[2];
+            assert_eq!(volume.main, 99);
+            assert_eq!(volume.cue, 12);
+
+            // Other tracks and other parts are left alone
+            assert_eq!(reloaded.parts[1].machines[3].static_slot_id, 3);
+            assert_eq!(reloaded.parts[0].machines[2].static_slot_id, 2);
+        }
+
+        /// Editing a Part writes only the working copy: the device's "Reload Part"
+        /// restores what was saved, and that copy must still hold the old values.
+        #[test]
+        fn test_machine_slot_edit_leaves_the_saved_part_copy_alone() {
+            let project = TestProject::new();
+            let mut parts = read_parts_data(&project.path, "A").unwrap();
+            parts.parts[0].machines[0].flex_slot_id = 77;
+            parts.parts[0].volumes[0].main = 7;
+            save_parts_data(&project.path, "A", parts.parts.clone()).unwrap();
+
+            let bank =
+                BankFile::from_data_file(&Path::new(&project.path).join("bank01.work")).unwrap();
+            assert_eq!(
+                bank.parts.unsaved.0[0].audio_track_machine_slots[0].flex_slot_id, 77,
+                "the working copy takes the edit"
+            );
+            assert_eq!(
+                bank.parts.saved.0[0].audio_track_machine_slots[0].flex_slot_id, 0,
+                "the saved copy is untouched, so Reload Part still restores it"
+            );
+            assert_eq!(bank.parts.unsaved.0[0].audio_track_volumes[0].main, 7);
+            assert_eq!(bank.parts.saved.0[0].audio_track_volumes[0].main, 108);
         }
 
         #[test]

@@ -21,6 +21,7 @@ import { invalidatePoolUsage } from "../hooks/usePoolUsage";
 import { Version } from "../components/Version";
 import { ScrollToTop } from "../components/ScrollToTop";
 import { ProjectGrid } from "../components/ProjectGrid";
+import { mergeBookmarks, useBookmarks } from "../utils/bookmarks";
 import { CreateProjectModal } from "../components/CreateProjectModal";
 import { DeleteProjectDialog } from "../components/DeleteProjectDialog";
 import { RenameProjectModal } from "../components/RenameProjectModal";
@@ -119,6 +120,17 @@ export function HomePage() {
     setSearchText,
   } = useProjects();
 
+  const {
+    bookmarks, isBookmarked, toggleBookmark,
+    retargetBookmark, retargetBookmarksUnder, pruneMissingBookmarks,
+  } = useBookmarks();
+
+  // A project can also be moved or deleted outside the app; drop bookmarks whose
+  // project is no longer on disk rather than leaving a card that opens nothing.
+  useEffect(() => {
+    pruneMissingBookmarks();
+  }, [pruneMissingBookmarks]);
+
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchActive = searchText.trim().length > 0;
   useSearchShortcut(searchInputRef, () => setSearchText(''));
@@ -169,6 +181,34 @@ export function HomePage() {
     () => filterProjects(locations, standaloneProjects, searchText),
     [locations, standaloneProjects, searchText],
   );
+
+  // Bookmarks refreshed from whatever the last scan found (so a renamed project
+  // shows its new name), then filtered by the same search box as everything else.
+  const visibleBookmarks = useMemo(() => {
+    const discovered = [
+      ...locations.flatMap((location) =>
+        location.sets.flatMap((set) =>
+          set.projects.map((project) => ({
+            path: project.path,
+            name: project.name,
+            setPath: set.path,
+            setName: set.name,
+          })),
+        ),
+      ),
+      // Standalone projects can be bookmarked too, and are refreshed the same way
+      ...standaloneProjects.map((project) => ({
+        path: project.path,
+        name: project.name,
+        setPath: project.path.substring(0, project.path.lastIndexOf('/')),
+        setName: 'Individual Projects',
+      })),
+    ];
+    const needle = searchText.trim().toLowerCase();
+    return mergeBookmarks(bookmarks, discovered).filter(
+      (b) => !needle || b.name.toLowerCase().includes(needle),
+    );
+  }, [bookmarks, locations, standaloneProjects, searchText]);
   const visibleLocations = filtered.locations;
   const visibleStandaloneProjects = filtered.standaloneProjects;
 
@@ -253,6 +293,13 @@ export function HomePage() {
     // Defer state update so dnd-kit finishes its cleanup before React re-renders the modal
     if (source.type === 'project' && target.type === 'set') {
       if (source.sourceSetPath === target.setPath) return;
+      // The project keeps its name but lands in another Set - a bookmark follows it
+      retargetBookmark(source.project.path, {
+        path: `${target.setPath}/${source.project.name}`,
+        name: source.project.name,
+        setPath: target.setPath,
+        setName: locations.flatMap((l) => l.sets).find((set) => set.path === target.setPath)?.name ?? '',
+      });
       setTimeout(() => {
         setCopyProgress({
           transferId: crypto.randomUUID(),
@@ -568,6 +615,49 @@ export function HomePage() {
           >
             Clear search
           </button>
+        </div>
+      )}
+
+      {visibleBookmarks.length > 0 && (
+        <div className="bookmarked-projects">
+          <h2 className="bookmarked-projects-title">
+            <i className="fas fa-bookmark"></i> Bookmarked Projects
+          </h2>
+          <div className="projects-grid">
+            {visibleBookmarks.map((bookmark) => (
+              <div
+                key={bookmark.path}
+                className="project-card clickable-project bookmarked-card"
+                tabIndex={0}
+                title={bookmark.path}
+                onClick={() => goTo(`/project?path=${encodeURIComponent(bookmark.path)}&name=${encodeURIComponent(bookmark.name)}`)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    goTo(`/project?path=${encodeURIComponent(bookmark.path)}&name=${encodeURIComponent(bookmark.name)}`);
+                  }
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setContextMenu({
+                    x: e.clientX,
+                    y: e.clientY,
+                    target: {
+                      kind: 'project',
+                      project: { name: bookmark.name, path: bookmark.path, has_project_file: true, has_banks: true },
+                      setPath: bookmark.setPath,
+                      setName: bookmark.setName,
+                    },
+                  });
+                }}
+              >
+                <div className="project-name">{bookmark.name}</div>
+                <div className="project-info">
+                  <span className="bookmarked-set">{bookmark.setName || 'Standalone'}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -998,6 +1088,16 @@ export function HomePage() {
           y={contextMenu.y}
           target={contextMenu.target}
           clipboard={clipboard}
+          isBookmarked={contextMenu.target.kind === 'project' && isBookmarked(contextMenu.target.project.path)}
+          onToggleBookmark={() => {
+            if (contextMenu.target.kind === 'project') {
+              toggleBookmark(
+                contextMenu.target.project,
+                contextMenu.target.setPath,
+                contextMenu.target.setName,
+              );
+            }
+          }}
           onCopy={() => {
             if (contextMenu.target.kind === 'project') {
               copyToClipboard(
@@ -1130,6 +1230,7 @@ export function HomePage() {
           onConfirm={async () => {
             try {
               await invoke('delete_project', { projectPath: deleteTarget.project.path });
+              retargetBookmark(deleteTarget.project.path, null);
               const setPath = deleteTarget.project.path.substring(
                 0,
                 deleteTarget.project.path.lastIndexOf('/')
@@ -1151,6 +1252,17 @@ export function HomePage() {
             setRenamingProject(null);
             try {
               await invoke('rename_project', { projectPath: renamingProject.project.path, newName });
+              // A rename moves the directory; carry the bookmark to the new path
+              const oldPath = renamingProject.project.path;
+              const parent = oldPath.substring(0, oldPath.lastIndexOf('/'));
+              retargetBookmark(oldPath, {
+                path: `${parent}/${newName}`,
+                name: newName,
+                setPath: renamingProject.setPath,
+                setName: locations
+                  .flatMap((l) => l.sets)
+                  .find((set) => set.path === renamingProject.setPath)?.name ?? '',
+              });
               await rescanSet(renamingProject.setPath);
             } catch (err) {
               alert(`Rename failed: ${err}`);
@@ -1173,6 +1285,8 @@ export function HomePage() {
             setRenamingSet(null);
             try {
               const newPath = await invoke<string>('rename_set', { setPath: renamingSet.setPath, newName });
+              // Every project of the Set moved with it - so do their bookmarks
+              retargetBookmarksUnder(renamingSet.setPath, { setPath: newPath, setName: newName });
               setLocations((prev) =>
                 prev.map((loc) => ({
                   ...loc,
@@ -1201,6 +1315,7 @@ export function HomePage() {
           onConfirm={async () => {
             try {
               await invoke('delete_set', { setPath: deleteSetTarget.setPath });
+              retargetBookmarksUnder(deleteSetTarget.setPath, null);
               setLocations((prev) =>
                 prev.map((loc) => ({
                   ...loc,

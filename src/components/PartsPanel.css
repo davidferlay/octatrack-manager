@@ -183,11 +183,106 @@
 
 .parts-track-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  gap: 10px;
   margin-bottom: 10px;
   padding-bottom: 6px;
   border-bottom: 1px solid #333;
+}
+
+/* The machine type is the last thing on the left, then the levels sit at the far
+   right whatever else the header carries. */
+/* Boxed to the same metrics as the slot field beside it, so the two line up */
+.parts-track-header .machine-type {
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 3px 10px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+
+/* Left of the header: the track and its levels. Right: what it plays and on what
+   machine - so every page reads the same way whichever of the two it carries. */
+.parts-track-header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+/* The Sample Slot a track plays, as a badge beside the machine type. Slot number
+   only - the filename lives in the tooltip and in the picker; in a header it would
+   either truncate to nothing useful or push the rest of the row around. Sized to
+   match .machine-type so the two read as a pair. */
+/* The Sample Slot field IS a level control - it wears .parts-level, .parts-level-label
+   and .param-value, so it matches TRK/CUE by construction in both modes rather than by
+   a second description of them. All that is left here is the button reset. */
+.parts-sample-field {
+  flex: 0 0 auto;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.parts-sample-field:disabled {
+  cursor: default;
+}
+
+/* The field is one button, so every part of it shows the button's own cursor.
+   .param-value.editable would otherwise impose a text caret over the value half,
+   which is not editable here - clicking it opens the picker like anywhere else.
+   Four classes deep to outrank `.parts-track .param-value.editable`. */
+.parts-track-header .parts-sample-field .parts-level-label,
+.parts-track-header .parts-sample-field .param-value,
+.parts-track-header .parts-sample-field .param-value.editable {
+  cursor: inherit;
+}
+
+/* Track and Cue levels, compact enough for the header - they belong to the track,
+   not to any one parameter page. */
+.parts-track-levels {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+
+/* Label and value share one bordered box: the label floating outside it read as a
+   stray word next to an unrelated field. */
+.parts-level {
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid var(--elektron-border-gray, #333);
+  border-radius: 4px;
+  background-color: var(--elektron-black, #0a0a0a);
+}
+
+.parts-level-label {
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--elektron-text-secondary, #888);
+  background-color: rgba(255, 255, 255, 0.05);
+  border-right: 1px solid var(--elektron-border-gray, #333);
+}
+
+/* The input carries the box's own background, so only the label is set apart */
+.parts-level .param-value {
+  width: 2.8rem;
+  text-align: center;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 
 .track-label {

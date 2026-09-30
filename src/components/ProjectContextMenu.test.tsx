@@ -14,6 +14,7 @@ const setTarget: ContextTarget = { kind: 'set', setPath: '/s', setName: 'S' }
 const locationTarget: ContextTarget = { kind: 'location', locationPath: '/loc', locationName: 'L' }
 
 const handlers = {
+  onToggleBookmark: vi.fn(),
   onCopy: vi.fn(),
   onCopySet: vi.fn(),
   onRename: vi.fn(),
@@ -198,3 +199,33 @@ describe('ProjectContextMenu', () => {
     expect(screen.getByText(/paste set/i)).toBeInTheDocument()
   })
 })
+
+describe('ProjectContextMenu - bookmarks', () => {
+  it('offers Bookmark on a project that is not bookmarked yet', async () => {
+    render(
+      <ProjectContextMenu x={0} y={0} target={projectTarget} clipboard={null} {...handlers} />
+    )
+    expect(screen.getByText('Bookmark')).toBeInTheDocument()
+    expect(screen.queryByText('Unbookmark')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByText('Bookmark'))
+    expect(handlers.onToggleBookmark).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers Unbookmark once it is', () => {
+    render(
+      <ProjectContextMenu x={0} y={0} target={projectTarget} clipboard={null} isBookmarked {...handlers} />
+    )
+    expect(screen.getByText('Unbookmark')).toBeInTheDocument()
+    expect(screen.queryByText('Bookmark')).not.toBeInTheDocument()
+  })
+
+  it('is a project-only action - a Set has nothing to bookmark', () => {
+    render(
+      <ProjectContextMenu x={0} y={0} target={setTarget} clipboard={null} {...handlers} />
+    )
+    expect(screen.queryByText('Bookmark')).not.toBeInTheDocument()
+    expect(screen.queryByText('Unbookmark')).not.toBeInTheDocument()
+  })
+})
+

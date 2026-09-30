@@ -95,6 +95,8 @@ export interface ProjectMetadata {
   midi_settings: MidiSettings;
   metronome_settings: MetronomeSettings;
   sample_slots: SampleSlots;
+  /** Project-level CHAIN AFTER, followed by every pattern that keeps USE PRJ SET on. */
+  pattern_chain_behavior: number;
   os_version: string;
 }
 
@@ -229,6 +231,8 @@ interface Pattern {
   scale_mode: string;
   master_scale: string;
   chain_mode: string;
+  /** The pattern's own chain-after value; null when it defers to the project setting. */
+  chain_after: number | null;
   tempo_info: string | null;
   active_tracks: number;
   trig_counts: TrigCounts;
@@ -284,6 +288,17 @@ export interface PartTrackMachine {
   machine_type: string;  // "Static", "Flex", "Thru", "Neighbor", "Pickup"
   machine_params: MachineParamValues;
   machine_setup: MachineSetupValues;
+  /** Static Sample Slot this track plays, 0-based (slot 1 is stored as 0). */
+  static_slot_id: number;
+  /** Flex Sample Slot this track plays, 0-based. */
+  flex_slot_id: number;
+}
+
+/** A Part's per-track Track and Cue levels - the mixer's, not the AMP page's VOL. */
+export interface PartTrackVolume {
+  track_id: number;
+  main: number;
+  cue: number;
 }
 
 export interface PartTrackAmp {
@@ -431,6 +446,7 @@ export interface PartTrackMidiCtrl2 {
 export interface PartData {
   part_id: number;
   machines: PartTrackMachine[];
+  volumes: PartTrackVolume[];
   amps: PartTrackAmp[];
   lfos: PartTrackLfo[];
   fxs: PartTrackFx[];

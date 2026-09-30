@@ -174,6 +174,31 @@ h1 {
 }
 
 /* Devices List */
+/* Pinned projects, above the scan results: they are there on launch, so the
+   section has to stand on its own without a Set or location around it. */
+.bookmarked-projects {
+  padding: 2rem 2rem 0;
+}
+
+.bookmarked-projects-title {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--elektron-orange);
+}
+
+.bookmarked-projects-title i {
+  margin-right: 0.4rem;
+}
+
+/* The Set a bookmark belongs to - context the card has no tree to sit in. */
+.bookmarked-set {
+  color: var(--elektron-text-secondary);
+  font-size: 0.75rem;
+}
+
 .devices-list {
   flex: 1;
   padding: 2rem;
@@ -6192,6 +6217,131 @@ th.col-usage .header-content .sort-indicator {
 .missing-samples-list-modal .dropdown-options {
   width: max-content;
   min-width: auto;
+}
+
+/* Sample Slot picker (Parts editor): the Sample Slots pages' shape - slot numbering,
+   search, transport bar and player keys - rather than a dropdown nobody can audition.
+   Resizable like the Tools modals, since a pool can hold 128 slots. */
+.modal-content.slot-picker-modal {
+  max-width: 760px;
+  width: 92%;
+  display: flex;
+  flex-direction: column;
+  /* Opens compact and grows to taste. A floor keeps a one-slot pool from rendering
+     as a sliver, and dragging the handles overrides both. */
+  min-height: 26rem;
+  max-height: 60vh;
+  position: relative;
+}
+
+/* Header is the Tools list-modal header (icon, title, one muted info line, search,
+   close) - the picker is one of those lists, so it should not invent its own. */
+.slot-picker-header {
+  flex: 0 0 auto;
+}
+
+/* The picker renders inside PartsPanel's .bank-card, and `.bank-card h3` adds a
+   bottom border and padding meant for section headings - inherited here it drew a
+   line under the modal title and pushed it off the info line beside it. */
+.slot-picker-modal .modal-header h3 {
+  margin: 0;
+  padding: 0;
+  border-bottom: none;
+}
+
+/* Sample cells across the app fade their last 10% so long filenames trail off. The
+   Assigned tag sits at that edge, so the fade ate it: the filename inside truncates
+   with an ellipsis instead, and the cell itself is not masked. */
+.slot-picker-modal .samples-table td.col-sample {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.slot-picker-modal .modal-body {
+  padding: 0;
+}
+
+.slot-picker-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Keeps its own height rather than being squeezed by the list above it, and sits a
+   little tighter than on the full pages, which have more room to give it. */
+.slot-picker-modal .sample-player-bar {
+  flex: 0 0 auto;
+  height: 2rem;
+}
+
+.slot-picker-row {
+  cursor: pointer;
+}
+
+.slot-picker-row:hover {
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+/* The selected row, styled like a selected slot row on the Sample Slots pages:
+   an orange edge rather than a wash, so the text stays readable. */
+.slot-picker-row.cursor td {
+  background-color: rgba(255, 102, 0, 0.14);
+}
+
+.slot-picker-row.cursor td:first-child {
+  box-shadow: inset 3px 0 0 var(--elektron-orange);
+}
+
+.slot-picker-row.assigned .col-slot {
+  color: var(--elektron-orange);
+  font-weight: 600;
+}
+
+/* Filename left, "Assigned" pinned right - the tag marks the row rather than
+   trailing the name at whatever width that happens to end. */
+/* The cell stays a real table cell - making it a flex container took it out of the
+   table's sizing, which is why the tag used to stop wherever the name ended. The
+   flex row lives inside it, and the cell takes the width the Slot column leaves. */
+.slot-picker-row .col-sample {
+  width: 100%;
+}
+
+.slot-picker-sample-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.slot-picker-filename {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot-picker-assigned-tag {
+  flex: 0 0 auto;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--elektron-orange);
+  border-radius: 3px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--elektron-orange);
+}
+
+.slot-picker-empty {
+  text-align: center;
+  color: var(--elektron-text-secondary);
+  padding: 1.5rem 0;
+}
+
+/* Same action row as the Tools review modals */
+.slot-picker-actions {
+  flex: 0 0 auto;
+  padding: 0.75rem 1rem 1rem;
 }
 
 /* Modal styles */
