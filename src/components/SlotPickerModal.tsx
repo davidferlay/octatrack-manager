@@ -4,6 +4,7 @@ import {
 } from '../hooks/useAudioPreview';
 import { SamplePlayerBar } from './SamplePlayerBar';
 import { useEscapeClose } from '../hooks/useEscapeClose';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { useModalResize } from './FixPoolFilesModal';
 import { useSearchShortcut } from '../hooks/useSearchShortcut';
 import type { SlotChoice } from './PartsPanel';
@@ -56,6 +57,8 @@ export function SlotPickerModal({
   const listRef = useRef<HTMLDivElement>(null);
   const { modalRef, style, handles } = useModalResize();
   useEscapeClose(onClose);
+  // The slot list is long; reaching its end must not start scrolling the page behind
+  useBodyScrollLock();
   // Ctrl/Cmd+F focuses the search box, Escape clears it - as on the Sample Slots pages
   useSearchShortcut(searchRef, () => setSearchText(''));
 

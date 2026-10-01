@@ -466,13 +466,13 @@ test.describe('Parts Editor - Sample slot per track and Part', () => {
     const modal = page.locator('.slot-picker-modal')
     await expect(modal).toBeVisible()
 
-    // The chain is cut both at the scrollable list and at the overlay, which is what
-    // catches the wheel over the header, the player bar and the buttons.
+    // Two guards: the list does not chain its own scroll, and the page behind is
+    // locked - the wheel reaches it over the header, buttons and player bar too.
     const containment = await modal.evaluate(el => ({
       list: getComputedStyle(el.querySelector('.slot-picker-list') as HTMLElement).overscrollBehavior,
-      overlay: getComputedStyle(el.closest('.modal-overlay') as HTMLElement).overscrollBehavior,
+      body: getComputedStyle(document.body).overflow,
     }))
-    expect(containment).toEqual({ list: 'contain', overlay: 'contain' })
+    expect(containment).toEqual({ list: 'contain', body: 'hidden' })
 
     // And behaviourally: wheel hard past the bottom of the list, page stays put
     const before = await page.evaluate(() => window.scrollY)
@@ -480,6 +480,13 @@ test.describe('Parts Editor - Sample slot per track and Part', () => {
     await list.hover()
     for (let i = 0; i < 6; i++) await page.mouse.wheel(0, 600)
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(before)
+
+    // The lock is released on close - leaving it on would freeze the page
+    await page.keyboard.press('Escape')
+    await expect(modal).toHaveCount(0)
+    expect(await page.evaluate(() => document.body.style.overflow)).toBe('')
+    await page.mouse.wheel(0, 600)
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before)
   })
 
   test('the modal can be resized, like the Tools modals', async ({ page }) => {

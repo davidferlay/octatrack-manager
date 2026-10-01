@@ -1115,16 +1115,7 @@ h1 {
 }
 
 /* Warning modal */
-/* A modal must not scroll the page behind it: wheel events over the overlay, or
-   past the end of a scrollable region inside it, chain to the nearest scrollable
-   ancestor unless the chain is cut here. Contain (not none) still allows the
-   modal's own regions to scroll normally. */
 .modal-overlay {
-  /* `overscroll-behavior` only engages on a scroll container, so the overlay has to
-     be one - otherwise the wheel passes straight through to the page. `auto` rather
-     than `hidden` so a modal taller than the viewport stays reachable. */
-  overflow: auto;
-  overscroll-behavior: contain;
   position: fixed;
   top: 0;
   left: 0;
