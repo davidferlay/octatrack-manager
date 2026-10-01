@@ -460,6 +460,28 @@ test.describe('Parts Editor - Sample slot per track and Part', () => {
     await expect(modal.locator('.header-search-input')).toBeFocused()
   })
 
+  test('scrolling past the end of the slot list does not scroll the page behind it', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-sample-field').first().click()
+    const modal = page.locator('.slot-picker-modal')
+    await expect(modal).toBeVisible()
+
+    // The chain is cut both at the scrollable list and at the overlay, which is what
+    // catches the wheel over the header, the player bar and the buttons.
+    const containment = await modal.evaluate(el => ({
+      list: getComputedStyle(el.querySelector('.slot-picker-list') as HTMLElement).overscrollBehavior,
+      overlay: getComputedStyle(el.closest('.modal-overlay') as HTMLElement).overscrollBehavior,
+    }))
+    expect(containment).toEqual({ list: 'contain', overlay: 'contain' })
+
+    // And behaviourally: wheel hard past the bottom of the list, page stays put
+    const before = await page.evaluate(() => window.scrollY)
+    const list = modal.locator('.slot-picker-list')
+    await list.hover()
+    for (let i = 0; i < 6; i++) await page.mouse.wheel(0, 600)
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(before)
+  })
+
   test('the modal can be resized, like the Tools modals', async ({ page }) => {
     await enterEditMode(page)
     await page.locator('.parts-sample-field').first().click()
