@@ -1213,10 +1213,7 @@ export default function PartsPanel({
 
       return (
         <div key={lfo.track_id} className={isGridMode ? "parts-individual-section" : "parts-track"}>
-          <div className="parts-track-header">
-            <TrackBadge trackId={lfo.track_id} />
-            <span className="machine-type">{machineType}</span>
-          </div>
+          {renderTrackHeader(activePart, lfo.track_id, machineType)}
 
           {activeLfoTab !== 'DESIGN' && lfoParams && fieldNames ? (
             <div className={isGridMode ? "params-vertical-layout" : "parts-params-section"}>
@@ -1384,10 +1381,7 @@ export default function PartsPanel({
             const machineType = machine.machine_type;
             return (
               <div key={fx.track_id} className="parts-individual-section">
-                <div className="parts-track-header">
-                  <TrackBadge trackId={fx.track_id} />
-                  <span className="machine-type">{machineType}</span>
-                </div>
+                {renderTrackHeader(activePart, fx.track_id, machineType)}
                 {renderFx1SectionContent(activePart, fx)}
               </div>
             );
@@ -1409,10 +1403,7 @@ export default function PartsPanel({
 
           return (
             <div key={fx.track_id} className="parts-track">
-              <div className="parts-track-header">
-                <TrackBadge trackId={fx.track_id} />
-                <span className="machine-type">{machineType}</span>
-              </div>
+              {renderTrackHeader(activePart, fx.track_id, machineType)}
 
               <div className="parts-params-section">
                 <div className="params-column-label">MAIN - {formatFxType(fx.fx1_type)}</div>
@@ -1468,10 +1459,7 @@ export default function PartsPanel({
             const machineType = machine.machine_type;
             return (
               <div key={fx.track_id} className="parts-individual-section">
-                <div className="parts-track-header">
-                  <TrackBadge trackId={fx.track_id} />
-                  <span className="machine-type">{machineType}</span>
-                </div>
+                {renderTrackHeader(activePart, fx.track_id, machineType)}
                 {renderFx2SectionContent(activePart, fx)}
               </div>
             );
@@ -1493,10 +1481,7 @@ export default function PartsPanel({
 
           return (
             <div key={fx.track_id} className="parts-track">
-              <div className="parts-track-header">
-                <TrackBadge trackId={fx.track_id} />
-                <span className="machine-type">{machineType}</span>
-              </div>
+              {renderTrackHeader(activePart, fx.track_id, machineType)}
 
               <div className="parts-params-section">
                 <div className="params-column-label">MAIN - {formatFxType(fx.fx2_type)}</div>
@@ -1598,10 +1583,7 @@ export default function PartsPanel({
         <div className="parts-individual-grid">
           {tracksToShow.map((midi_note) => (
             <div key={midi_note.track_id} className="parts-individual-section">
-              <div className="parts-track-header">
-                <TrackBadge trackId={midi_note.track_id + 8} />
-                <span className="machine-type">MIDI</span>
-              </div>
+              {renderTrackHeader(activePart, midi_note.track_id + 8, "MIDI")}
               {renderNoteSectionContent(activePart, midi_note)}
             </div>
           ))}
@@ -1614,10 +1596,7 @@ export default function PartsPanel({
       <div className="parts-tracks">
         {tracksToShow.map((midi_note) => (
           <div key={midi_note.track_id} className="parts-track">
-            <div className="parts-track-header">
-              <TrackBadge trackId={midi_note.track_id + 8} />
-              <span className="machine-type">MIDI</span>
-            </div>
+            {renderTrackHeader(activePart, midi_note.track_id + 8, "MIDI")}
 
             <div className="parts-params-section">
               <div className="params-column-label">MAIN</div>
@@ -1660,10 +1639,7 @@ export default function PartsPanel({
         <div className="parts-individual-grid">
           {tracksToShow.map((midi_arp) => (
             <div key={midi_arp.track_id} className="parts-individual-section">
-              <div className="parts-track-header">
-                <TrackBadge trackId={midi_arp.track_id + 8} />
-                <span className="machine-type">MIDI</span>
-              </div>
+              {renderTrackHeader(activePart, midi_arp.track_id + 8, "MIDI")}
               {renderArpSectionContent(activePart, midi_arp)}
             </div>
           ))}
@@ -1676,10 +1652,7 @@ export default function PartsPanel({
       <div className="parts-tracks">
         {tracksToShow.map((midi_arp) => (
           <div key={midi_arp.track_id} className="parts-track">
-            <div className="parts-track-header">
-              <TrackBadge trackId={midi_arp.track_id + 8} />
-              <span className="machine-type">MIDI</span>
-            </div>
+            {renderTrackHeader(activePart, midi_arp.track_id + 8, "MIDI")}
 
             <div className="parts-params-section">
               <div className="params-column-label">MAIN</div>
@@ -1741,10 +1714,7 @@ export default function PartsPanel({
 
       return (
         <div key={lfo.track_id} className={isGridMode ? "parts-individual-section" : "parts-track"}>
-          <div className="parts-track-header">
-            <TrackBadge trackId={lfo.track_id + 8} />
-            <span className="machine-type">MIDI</span>
-          </div>
+          {renderTrackHeader(activePart, lfo.track_id + 8, "MIDI")}
 
           {activeLfoTab !== 'DESIGN' && lfoData ? (
             <div className={isGridMode ? "params-vertical-layout" : "parts-params-section"}>
@@ -1878,10 +1848,7 @@ export default function PartsPanel({
         <div className="parts-individual-grid">
           {tracksToShow.map((midi_ctrl1) => (
             <div key={midi_ctrl1.track_id} className="parts-individual-section">
-              <div className="parts-track-header">
-                <TrackBadge trackId={midi_ctrl1.track_id + 8} />
-                <span className="machine-type">MIDI</span>
-              </div>
+              {renderTrackHeader(activePart, midi_ctrl1.track_id + 8, "MIDI")}
               {renderCtrl1SectionContent(activePart, midi_ctrl1)}
             </div>
           ))}
@@ -1894,10 +1861,7 @@ export default function PartsPanel({
       <div className="parts-tracks">
         {tracksToShow.map((midi_ctrl1) => (
           <div key={midi_ctrl1.track_id} className="parts-track">
-            <div className="parts-track-header">
-              <TrackBadge trackId={midi_ctrl1.track_id + 8} />
-              <span className="machine-type">MIDI</span>
-            </div>
+            {renderTrackHeader(activePart, midi_ctrl1.track_id + 8, "MIDI")}
 
             <div className="parts-params-section">
               <div className="params-column-label">MAIN</div>
@@ -1940,10 +1904,7 @@ export default function PartsPanel({
         <div className="parts-individual-grid">
           {tracksToShow.map((midi_ctrl2) => (
             <div key={midi_ctrl2.track_id} className="parts-individual-section">
-              <div className="parts-track-header">
-                <TrackBadge trackId={midi_ctrl2.track_id + 8} />
-                <span className="machine-type">MIDI</span>
-              </div>
+              {renderTrackHeader(activePart, midi_ctrl2.track_id + 8, "MIDI")}
               {renderCtrl2SectionContent(activePart, midi_ctrl2)}
             </div>
           ))}
@@ -1956,10 +1917,7 @@ export default function PartsPanel({
       <div className="parts-tracks">
         {tracksToShow.map((midi_ctrl2) => (
           <div key={midi_ctrl2.track_id} className="parts-track">
-            <div className="parts-track-header">
-              <TrackBadge trackId={midi_ctrl2.track_id + 8} />
-              <span className="machine-type">MIDI</span>
-            </div>
+            {renderTrackHeader(activePart, midi_ctrl2.track_id + 8, "MIDI")}
 
             <div className="parts-params-section">
               <div className="params-column-label">MAIN</div>
@@ -2292,10 +2250,7 @@ export default function PartsPanel({
 
           return (
             <div key={trackIdx} className="parts-track parts-track-wide">
-              <div className="parts-track-header">
-                <TrackBadge trackId={trackIdx + 8} />
-                <span className="machine-type">MIDI</span>
-              </div>
+              {renderTrackHeader(activePart, trackIdx + 8, "MIDI")}
 
               {/* Row 1: NOTE, ARP, LFO1, LFO2 */}
               <div className="parts-all-row">
