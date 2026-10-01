@@ -579,15 +579,19 @@ async fn check_project_in_set(project_path: String) -> Result<bool, String> {
 /// scan (a collapsed group, a filtered search).
 #[tauri::command]
 async fn project_exists(project_path: String) -> Result<bool, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let dir = std::path::Path::new(&project_path);
-        Ok(
-            dir.is_dir()
-                && (dir.join("project.work").exists() || dir.join("project.strd").exists()),
-        )
-    })
-    .await
-    .unwrap()
+    tauri::async_runtime::spawn_blocking(move || Ok(is_project_dir(&project_path)))
+        .await
+        .unwrap()
+}
+
+/// Whether `path` is a directory still holding an Octatrack project.
+///
+/// A bookmark is dropped when this says no, so it asks for a project file rather
+/// than just a directory: an empty folder left behind by a move is not a project,
+/// and keeping a bookmark on it would point the user at nothing.
+fn is_project_dir(path: &str) -> bool {
+    let dir = std::path::Path::new(path);
+    dir.is_dir() && (dir.join("project.work").exists() || dir.join("project.strd").exists())
 }
 
 #[tauri::command]
@@ -1970,6 +1974,47 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let missing = dir.path().join("does-not-exist.wav");
         assert!(read_audio_bytes(missing.to_str().unwrap()).is_err());
+    }
+
+    // =========================================================================
+    // project_exists - what bookmark pruning relies on
+    // =========================================================================
+
+    #[test]
+    fn project_exists_accepts_a_live_project() {
+        let dir = tempfile::tempdir().unwrap();
+        let proj = dir.path().join("PROJ");
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(proj.join("project.work"), b"x").unwrap();
+        assert!(is_project_dir(proj.to_str().unwrap()));
+    }
+
+    #[test]
+    fn project_exists_accepts_a_project_saved_but_never_worked_on() {
+        // A project straight off the device has project.strd and no project.work
+        let dir = tempfile::tempdir().unwrap();
+        let proj = dir.path().join("PROJ");
+        std::fs::create_dir_all(&proj).unwrap();
+        std::fs::write(proj.join("project.strd"), b"x").unwrap();
+        assert!(is_project_dir(proj.to_str().unwrap()));
+    }
+
+    #[test]
+    fn project_exists_rejects_a_folder_the_project_was_moved_out_of() {
+        let dir = tempfile::tempdir().unwrap();
+        let empty = dir.path().join("PROJ");
+        std::fs::create_dir_all(&empty).unwrap();
+        assert!(!is_project_dir(empty.to_str().unwrap()));
+    }
+
+    #[test]
+    fn project_exists_rejects_a_path_that_is_gone_or_is_a_file() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(!is_project_dir(dir.path().join("NOPE").to_str().unwrap()));
+
+        let file = dir.path().join("project.work");
+        std::fs::write(&file, b"x").unwrap();
+        assert!(!is_project_dir(file.to_str().unwrap()));
     }
 }
 

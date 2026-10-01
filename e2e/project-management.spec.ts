@@ -293,6 +293,49 @@ test('a bookmark whose project vanished outside the app is discarded on launch',
   await expect.poll(async () => page.evaluate(() => localStorage.getItem('otm.project-bookmarks'))).toBe('[]')
 })
 
+test('renaming the Set carries its bookmarks with it', async ({ page }) => {
+  await page.getByText('PROJ_A').click({ button: 'right' })
+  await page.getByText('Bookmark', { exact: true }).click()
+  await expect(page.locator('.bookmarked-projects .bookmarked-set')).toHaveText('SetA')
+
+  await page.locator('.set-header').first().click({ button: 'right' })
+  await page.getByText(/rename set/i).click()
+  await page.getByRole('textbox', { name: /new project name/i }).fill('NEWSET')
+  await page.getByRole('button', { name: /^rename$/i }).click()
+
+  // The project did not move or change name, so its bookmark must survive the Set rename
+  const section = page.locator('.bookmarked-projects')
+  await expect(section.getByText('PROJ_A')).toBeVisible()
+  await expect(section.locator('.bookmarked-set')).toHaveText('NEWSET')
+
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('otm.project-bookmarks') ?? '[]'))
+  expect(stored[0].path).toBe('/mock/NEWSET/PROJ_A')
+  expect(stored[0].setPath).toBe('/mock/NEWSET')
+})
+
+test('deleting the Set drops the bookmarks of the projects inside it', async ({ page }) => {
+  await page.getByText('PROJ_A').click({ button: 'right' })
+  await page.getByText('Bookmark', { exact: true }).click()
+  await expect(page.locator('.bookmarked-projects .project-card')).toHaveCount(1)
+
+  // SetB starts collapsed, so its projects are clipped until it is opened
+  const setB = page.locator('.set-card')
+    .filter({ has: page.locator('.set-name', { hasText: 'SetB' }) })
+  await setB.locator('.set-header').click()
+  await setB.getByText('PROJ_C').click({ button: 'right' })
+  await page.getByText('Bookmark', { exact: true }).click()
+  await expect(page.locator('.bookmarked-projects .project-card')).toHaveCount(2)
+
+  // SetA goes, taking PROJ_A with it - PROJ_C lives in SetB and must stay
+  await page.locator('.set-header').first().click({ button: 'right' })
+  await page.getByRole('button', { name: 'Delete Set' }).click()
+  await page.getByRole('button', { name: /^delete$/i }).click()
+
+  const section = page.locator('.bookmarked-projects')
+  await expect(section.getByText('PROJ_A')).toHaveCount(0)
+  await expect(section.getByText('PROJ_C')).toBeVisible()
+})
+
 test('a bookmarked card opens the project', async ({ page }) => {
   await page.getByText('PROJ_A').click({ button: 'right' })
   await page.getByText('Bookmark', { exact: true }).click()

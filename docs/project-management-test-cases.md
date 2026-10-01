@@ -168,3 +168,5 @@
 | PM132 | Bookmarks | A Set whose name is a prefix of another | Bookmark a project in "SET1" and one in "SET10", then delete "SET1" | Only the SET1 bookmark goes - SET10's is not caught by the shared prefix |
 | PM133 | Bookmarks | An unreadable drive does not lose bookmarks | Bookmark a project, then make the existence check fail (for example a drive that errors rather than reporting absence) | The bookmark is kept - an error is not proof the project is gone |
 
+| PM134 | Project opening | A sample filename containing "=" does not truncate the project | Open a project whose Audio Pool holds a file with "=" in its name (for example `bass=sub.wav`), assigned to a slot | The project opens, its name and metadata read correctly, and the slot shows the full filename - nothing is cut at the "=" |
+| PM135 | Project opening | A project whose settings block is incomplete still opens | Open a project saved by an older OS whose [SETTINGS] block is missing keys | The project opens with defaults for the absent keys instead of refusing to load |
