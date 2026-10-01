@@ -903,6 +903,19 @@ export function ProjectDetail() {
     );
   }
 
+  /**
+   * Recompute just the Usage data after a Sample Slot assignment changed.
+   *
+   * Two sources feed the badges and both have to move: this project's own per-slot
+   * usage (the Flex/Static tabs) and the Set-wide pool usage shared with the Audio
+   * Pool page and the Audio Pool pane. Nothing else about the project is re-read -
+   * the slot lists, banks and parts are all still current.
+   */
+  const refreshSampleUsage = useCallback(() => {
+    setUsageRefreshKey((key) => key + 1);
+    if (audioPoolPath) invalidatePoolUsage(audioPoolPath);
+  }, [audioPoolPath]);
+
   const handleRefresh = () => {
     // Trigger spin animation
     setIsSpinning(true);
@@ -1535,6 +1548,7 @@ export function ProjectDetail() {
                           onSharedLfoTabChange={setSharedPartsLfoTab}
                           sharedActivePartIndex={sharedPartsActivePartIndex}
                           onSharedActivePartChange={setSharedPartsActivePartIndex}
+                          onSlotAssignmentSaved={refreshSampleUsage}
                           sampleSlots={metadata ? {
                             static_slots: metadata.sample_slots.static_slots,
                             flex_slots: metadata.sample_slots.flex_slots,

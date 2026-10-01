@@ -6346,6 +6346,15 @@ th.col-usage .header-content .sort-indicator {
   padding: 0.75rem 1rem 1rem;
 }
 
+/* Assign is a one-word confirmation, not the page-level Execute the 200px width was
+   drawn for - size it to its label. */
+.slot-picker-actions .tools-execute-btn {
+  width: auto;
+  min-width: 7rem;
+  padding: 0.6rem 1.5rem;
+  font-size: 1rem;
+}
+
 /* Modal styles */
 .modal-content.fix-missing-modal {
   max-width: 850px;

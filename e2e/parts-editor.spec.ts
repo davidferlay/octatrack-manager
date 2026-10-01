@@ -546,6 +546,35 @@ test.describe('Parts Editor - Sample slot per track and Part', () => {
     await expect(page.locator('.parts-track-header').first().locator('.parts-sample-field .param-value')).toHaveText('F003')
   })
 
+  test('assigning a slot recomputes the usage badges, and nothing else', async ({ page }) => {
+    await enterEditMode(page)
+    const before = await getInvokeCalls(page, 'compute_sample_usage')
+
+    // A plain parameter edit must not trigger a usage rescan
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'AMP' }).click()
+    const atk = page.locator('.param-item', { hasText: 'ATK' }).first().locator('input')
+    await atk.fill('77')
+    await atk.blur()
+    await expect.poll(async () => (await getInvokeCalls(page, 'save_parts')).length).toBeGreaterThan(0)
+    expect(await getInvokeCalls(page, 'compute_sample_usage')).toHaveLength(before.length)
+
+    // Changing which slot a track plays does
+    const metadataBefore = (await getInvokeCalls(page, 'load_project_metadata')).length
+    const partsBefore = (await getInvokeCalls(page, 'load_parts_data')).length
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'SRC' }).click()
+    await page.locator('.parts-sample-field').first().click()
+    const modal = page.locator('.slot-picker-modal')
+    await modal.locator('tbody tr', { hasText: 'kick3.wav' }).click()
+    await modal.getByRole('button', { name: 'Assign' }).click()
+
+    await expect
+      .poll(async () => (await getInvokeCalls(page, 'compute_sample_usage')).length)
+      .toBeGreaterThan(before.length)
+    // Only the usage is recomputed - the project and its parts are not re-read
+    expect(await getInvokeCalls(page, 'load_project_metadata')).toHaveLength(metadataBefore)
+    expect(await getInvokeCalls(page, 'load_parts_data')).toHaveLength(partsBefore)
+  })
+
   test('Escape closes the picker without assigning anything', async ({ page }) => {
     await enterEditMode(page)
     await page.locator('.parts-sample-field').first().click()

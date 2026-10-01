@@ -23,6 +23,14 @@ interface PartsPanelProps {
   sharedActivePartIndex?: number;  // Optional shared active part index (persists across bank changes)
   onSharedActivePartChange?: (index: number) => void;  // Optional callback for shared active part change
   onWriteStatusChange?: (status: WriteStatus) => void;  // Optional callback to report write status to parent
+  /**
+   * A track was pointed at a different Sample Slot, and the save landed.
+   *
+   * Only this changes which slots are played, so only this needs the Usage badges
+   * recomputed - every other Part edit leaves usage untouched, and recomputing on a
+   * knob turn would rescan the Set for nothing.
+   */
+  onSlotAssignmentSaved?: () => void;
   /** The project's Sample Slots, so a Static/Flex track can be pointed at another one. */
   sampleSlots?: { static_slots: SlotChoice[]; flex_slots: SlotChoice[] };
 }
@@ -52,6 +60,7 @@ export default function PartsPanel({
   sharedActivePartIndex,
   onSharedActivePartChange,
   onWriteStatusChange,
+  onSlotAssignmentSaved,
   sampleSlots,
 }: PartsPanelProps) {
   const [partsData, setPartsData] = useState<PartData[]>([]);
@@ -446,7 +455,7 @@ export default function PartsPanel({
 
   // Save part to backend (called on mouse release from knob)
   // Uses partsDataRef to always get latest data, avoiding stale closure issues with debounced callbacks
-  const savePart = useCallback((partId: number) => {
+  const savePart = useCallback((partId: number, options?: { slotAssignmentChanged?: boolean }) => {
     const currentPartsData = partsDataRef.current;
     const partIndex = currentPartsData.findIndex(p => p.part_id === partId);
     if (partIndex === -1) {
@@ -464,12 +473,13 @@ export default function PartsPanel({
       const partName = partNames[partId] || `Part ${partId + 1}`;
       onWriteStatusChange?.(writeStatus.success(`Part ${partName} saved as *`));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
+      if (options?.slotAssignmentChanged) onSlotAssignmentSaved?.();
     }).catch(err => {
       console.error('Failed to save part:', err);
       onWriteStatusChange?.(writeStatus.error('Save failed'));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
     });
-  }, [projectPath, bankId, partNames, onWriteStatusChange]);
+  }, [projectPath, bankId, partNames, onWriteStatusChange, onSlotAssignmentSaved]);
 
   // Render param with rotary knob for All view
   const renderParamWithKnob = (
@@ -2642,7 +2652,7 @@ export default function PartsPanel({
           onPick={(slotIdZeroBased) => {
             const field = slotPicker.pool === 'Static' ? 'static_slot_id' : 'flex_slot_id';
             updatePartParamLocal(slotPicker.partId, 'machines', slotPicker.trackId, field, slotIdZeroBased);
-            savePart(slotPicker.partId);
+            savePart(slotPicker.partId, { slotAssignmentChanged: true });
           }}
           onClose={() => setSlotPicker(null)}
         />
