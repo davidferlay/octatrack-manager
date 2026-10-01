@@ -793,8 +793,13 @@
   gap: 0;
 }
 
+/* `.parts-track-wide` is only ever the ALL tab's layout (audio and MIDI), where the
+   header spans the whole grid - inset it so its badge and levels do not sit flush
+   against the card edge the way the narrower per-page layouts can. */
 .parts-track.parts-track-wide > .parts-track-header {
   grid-column: 1 / -1;
+  padding-left: 15px;
+  padding-right: 15px;
 }
 
 .parts-all-row {

@@ -315,6 +315,13 @@ test.describe('Parts Editor - Sample slot per track and Part', () => {
     await page.locator('.parts-page-tabs .parts-tab', { hasText: 'ALL' }).click()
     const header = page.locator('.parts-track-header').first()
 
+    // Inset on the ALL tab, where the header spans the full width of the card
+    const pad = await header.evaluate(el => {
+      const cs = getComputedStyle(el)
+      return { left: cs.paddingLeft, right: cs.paddingRight }
+    })
+    expect(pad).toEqual({ left: '15px', right: '15px' })
+
     // Left: the track, then its levels
     const order = await header.evaluate(el => Array.from(el.children).map(c => c.className))
     expect(order[0]).toContain('track-badge')
