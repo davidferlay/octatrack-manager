@@ -575,6 +575,61 @@ test.describe('Parts Editor - Sample slot per track and Part', () => {
     expect(await getInvokeCalls(page, 'load_parts_data')).toHaveLength(partsBefore)
   })
 
+  test('a slot row has a context menu with Play, reveal and copy path', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-sample-field').first().click()
+    const modal = page.locator('.slot-picker-modal')
+
+    await modal.locator('tbody tr', { hasText: 'kick2.wav' }).click({ button: 'right' })
+    const menu = page.locator('.context-menu')
+    await expect(menu).toBeVisible()
+    await expect(menu.locator('.context-menu-item')).toHaveCount(3)
+    await expect(menu).toContainText('Play')
+    await expect(menu).toContainText('Open in file explorer')
+    await expect(menu).toContainText('Copy path to clipboard')
+
+    // Right-clicking acts on the row under the pointer, so it selects it too
+    await expect(modal.locator('.slot-picker-row.cursor')).toContainText('F002')
+
+    // Reveal is given the resolved absolute path, not the slot's stored relative one
+    await menu.getByText('Open in file explorer').click()
+    await expect(menu).toHaveCount(0)
+    const calls = await getInvokeCalls(page, 'reveal_in_file_manager')
+    expect(calls[calls.length - 1].args.path).toBe('/test/project/../AUDIO/kick2.wav')
+  })
+
+  test('the context menu closes on Escape, leaving the picker open', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-sample-field').first().click()
+    const modal = page.locator('.slot-picker-modal')
+    await modal.locator('tbody tr').first().click({ button: 'right' })
+    await expect(page.locator('.context-menu')).toBeVisible()
+
+    // The menu is the topmost layer, so it takes the first Escape
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.context-menu')).toHaveCount(0)
+    await expect(modal).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(modal).toHaveCount(0)
+  })
+
+  test('TMP escape probe', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-sample-field').first().click()
+    await page.locator('.slot-picker-modal tbody tr').first().click({ button: 'right' })
+    const before = await page.evaluate(() => ({
+      menus: document.querySelectorAll('.context-menu').length,
+      modal: document.querySelectorAll('.slot-picker-modal').length,
+    }))
+    await page.keyboard.press('Escape')
+    const after = await page.evaluate(() => ({
+      menus: document.querySelectorAll('.context-menu').length,
+      modal: document.querySelectorAll('.slot-picker-modal').length,
+    }))
+    console.log('ESCPROBE', JSON.stringify({ before, after }))
+  })
+
   test('Escape closes the picker without assigning anything', async ({ page }) => {
     await enterEditMode(page)
     await page.locator('.parts-sample-field').first().click()

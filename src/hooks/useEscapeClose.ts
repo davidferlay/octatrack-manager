@@ -34,6 +34,12 @@ export function useEscapeClose(onClose: () => void, enabled: boolean = true) {
 
     function onKey(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
+      console.log('ESCHOOK', JSON.stringify({
+        top: stack[stack.length - 1] === id,
+        depth: stack.length,
+        menu: !!document.querySelector('.context-menu'),
+        active: (document.activeElement as HTMLElement | null)?.tagName,
+      }));
       if (stack[stack.length - 1] !== id) return;
       // A context menu opened inside this modal closes first, on its own handler.
       if (document.querySelector(".context-menu")) return;

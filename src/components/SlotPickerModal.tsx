@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import {
   useAudioPreview, isAudioFile, scrubTarget, volumeStep, shouldAutoPreview,
 } from '../hooks/useAudioPreview';
@@ -52,6 +53,7 @@ export function SlotPickerModal({
   const [sortColumn, setSortColumn] = useState<'slot' | 'sample'>('slot');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [playable, setPlayable] = useState(false);
+  const [rowMenu, setRowMenu] = useState<{ x: number; y: number; row: Row } | null>(null);
   const player = useAudioPreview();
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -108,10 +110,33 @@ export function SlotPickerModal({
   const sortIndicator = (column: 'slot' | 'sample') =>
     sortColumn === column ? (sortDirection === 'asc' ? ' ▲' : ' ▼') : '';
 
+  useEffect(() => {
+    if (!rowMenu) return;
+    const close = (e: MouseEvent) => {
+      if ((e.target as HTMLElement | null)?.closest?.('.context-menu')) return;
+      setRowMenu(null);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setRowMenu(null); };
+    document.addEventListener('click', close, true);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', close, true);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [rowMenu]);
+
   const resolve = (path: string | null) => {
     if (!path) return null;
     const isAbsolute = path.startsWith('/') || /^[A-Za-z]:/.test(path);
     return isAbsolute ? path : `${projectPath}/${path}`;
+  };
+
+  /** Explicit play, as from the context menu: sounds regardless of Auto-preview. */
+  const playRow = (row: Row) => {
+    const resolved = resolve(row.path);
+    if (!resolved || !isAudioFile(resolved)) return;
+    setPlayable(true);
+    player.play(resolved, row.filename);
   };
 
   // Moving the selection loads that sample, and plays it when Auto-preview is on -
@@ -234,6 +259,14 @@ export function SlotPickerModal({
                     className={`slot-picker-row${i === cursor ? ' cursor' : ''}${row.isAssigned ? ' assigned' : ''}`}
                     onClick={() => setCursor(i)}
                     onDoubleClick={() => commit(row)}
+                    onContextMenu={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      // Right-clicking also selects, so the menu always acts on the
+                      // row under the pointer rather than on an older selection
+                      setCursor(i);
+                      setRowMenu({ x: e.clientX, y: e.clientY, row });
+                    }}
                   >
                     <td className="col-slot">{row.label}</td>
                     <td className="col-sample" title={row.path ?? ''}>
@@ -252,6 +285,41 @@ export function SlotPickerModal({
               </tbody>
             </table>
           </div>
+
+          {rowMenu && (() => {
+            const resolved = resolve(rowMenu.row.path);
+            const playableRow = !!resolved && isAudioFile(resolved);
+            return (
+              <div
+                className="context-menu"
+                style={{ position: 'fixed', top: rowMenu.y, left: rowMenu.x }}
+                onClick={e => e.stopPropagation()}
+              >
+                <button
+                  className="context-menu-item"
+                  disabled={!playableRow}
+                  title={playableRow ? undefined : 'This slot holds no playable file'}
+                  onClick={() => { playRow(rowMenu.row); setRowMenu(null); }}
+                >
+                  <i className="fas fa-play"></i> Play
+                </button>
+                <button
+                  className="context-menu-item"
+                  disabled={!resolved}
+                  onClick={() => { if (resolved) invoke('reveal_in_file_manager', { path: resolved }); setRowMenu(null); }}
+                >
+                  <i className="fas fa-folder-open"></i> Open in file explorer
+                </button>
+                <button
+                  className="context-menu-item"
+                  disabled={!resolved}
+                  onClick={() => { if (resolved) navigator.clipboard.writeText(resolved); setRowMenu(null); }}
+                >
+                  <i className="fas fa-copy"></i> Copy path to clipboard
+                </button>
+              </div>
+            );
+          })()}
 
           <SamplePlayerBar player={player} playable={playable} />
 
