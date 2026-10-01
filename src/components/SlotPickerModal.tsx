@@ -125,6 +125,16 @@ export function SlotPickerModal({
     };
   }, [rowMenu]);
 
+  /**
+   * Lowest-numbered empty slot in this pool, or null when every slot is taken.
+   *
+   * There is no "no sample" value for a machine's slot byte - the device assigns by
+   * picking a slot and pressing YES (manual 11.3), and the byte always names one. So
+   * un-assigning means pointing the track at an empty slot, which is exactly where a
+   * fresh project leaves every machine.
+   */
+  const firstEmptySlot = useMemo(() => slots.find(s => !s.path)?.slot_id ?? null, [slots]);
+
   const resolve = (path: string | null) => {
     if (!path) return null;
     const isAbsolute = path.startsWith('/') || /^[A-Za-z]:/.test(path);
@@ -303,6 +313,27 @@ export function SlotPickerModal({
                 >
                   <i className="fas fa-play"></i> Play
                 </button>
+                {rowMenu.row.isAssigned && rowMenu.row.path && (
+                  <>
+                    <div className="context-menu-separator" />
+                    <button
+                      className="context-menu-item"
+                      disabled={firstEmptySlot === null}
+                      title={firstEmptySlot === null
+                        ? 'Every slot in this pool holds a sample'
+                        : `Points the track at ${prefix}${String(firstEmptySlot).padStart(3, '0')}, an empty slot`}
+                      onClick={() => {
+                        if (firstEmptySlot === null) return;
+                        setRowMenu(null);
+                        onPick(firstEmptySlot - 1);
+                        onClose();
+                      }}
+                    >
+                      <i className="fas fa-ban"></i> Un-assign
+                    </button>
+                    <div className="context-menu-separator" />
+                  </>
+                )}
                 <button
                   className="context-menu-item"
                   disabled={!resolved}

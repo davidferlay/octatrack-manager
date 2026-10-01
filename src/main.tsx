@@ -21,9 +21,18 @@ if ('scrollRestoration' in window.history) {
 // close logic runs. Modals without a close button (e.g. mid-conversion) are unaffected.
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
+  // A context menu opened inside a modal is the topmost layer - it closes first, on
+  // its own handler, exactly as useEscapeClose treats it.
+  if (document.querySelector('.context-menu')) return;
   const overlays = document.querySelectorAll('.modal-overlay');
   const top = overlays[overlays.length - 1];
-  top?.querySelector<HTMLElement>('.modal-close')?.click();
+  const close = top?.querySelector<HTMLElement>('.modal-close');
+  if (!close) return;
+  close.click();
+  // Closing removes the overlay synchronously, so a page-level handler later in this
+  // same keypress would look, see no modal, and act - on a project page that means
+  // navigating away. The keypress has been spent on the modal: stop it here.
+  e.stopImmediatePropagation();
 });
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(

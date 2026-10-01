@@ -74,12 +74,22 @@ In Edit mode, clicking it opens a Sample Slot picker built like the [Sample Slot
 - The keys are the same ones: arrows move the selection, Space plays and pauses, Ctrl and the arrows scrub and set the volume, Shift+Enter toggles Auto-preview, Shift+L toggles Loop, and Ctrl+F focuses the search box.
 - Enter assigns the selected slot, as does double-clicking a row or pressing Assign. Escape or Cancel closes the picker without changing anything.
 - The window can be resized from its edges, like the Tools modals.
+- Right-clicking a row opens a menu with Play, Open in file explorer and Copy path to clipboard. Play sounds the sample whatever Auto-preview is set to. The entries are greyed out for a slot holding no file.
+- Escape closes one layer at a time: the context menu first, then the picker.
 
 The assignment is per Part, which is what makes it useful: the same track can play a different sample in Part 1 and Part 2, and switching Part on the device switches the sample with it.
 
 The slot for the pool the track is not currently using is preserved, so changing the machine type later finds the slot the device left there.
 
 The field is read-only until Edit mode is on, and the change is saved the same way every other Part parameter is.
+
+#### Un-assigning a sample
+
+The row tagged `Assigned` carries one extra entry in its context menu: Un-assign.
+
+The Octatrack has no "no sample" setting for a machine - a Flex or Static machine always names a slot, and you assign by picking one and pressing YES on the device. So Un-assign does the only thing that means: it points the track at the lowest-numbered empty slot of that pool, which is where a fresh project leaves every machine. The menu entry names that slot before you click it, and is greyed out in the rare case that all 128 slots hold a sample.
+
+The slot still shows a number afterwards - that is the device's own model, not a quirk of the app.
 
 #### Track and Cue levels
 

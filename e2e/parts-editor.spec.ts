@@ -598,6 +598,27 @@ test.describe('Parts Editor - Sample slot per track and Part', () => {
     expect(calls[calls.length - 1].args.path).toBe('/test/project/../AUDIO/kick2.wav')
   })
 
+  test('only the assigned row offers Un-assign, and it points the track at an empty slot', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-sample-field').first().click()
+    const modal = page.locator('.slot-picker-modal')
+    const menu = page.locator('.context-menu')
+
+    // Track 1 plays slot 1, so kick1.wav is the assigned row
+    await modal.locator('tbody tr', { hasText: 'kick1.wav' }).click({ button: 'right' })
+    await expect(menu.locator('.context-menu-item')).toHaveCount(4)
+    // Under Play, fenced off from the two file entries below it
+    await expect(menu.locator('.context-menu-item').nth(1)).toHaveText('Un-assign')
+    await expect(menu.locator('.context-menu-separator')).toHaveCount(2)
+    // Slots 1-3 hold samples, so slot 4 is the first free one
+    await expect(menu.getByText('Un-assign')).toHaveAttribute('title', /F004/)
+
+    await menu.getByText('Un-assign').click()
+    await expect(modal).toHaveCount(0)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    expect(calls[calls.length - 1].args.partsData[0].machines[0].flex_slot_id).toBe(3)
+  })
+
   test('the context menu closes on Escape, leaving the picker open', async ({ page }) => {
     await enterEditMode(page)
     await page.locator('.parts-sample-field').first().click()
@@ -612,22 +633,6 @@ test.describe('Parts Editor - Sample slot per track and Part', () => {
 
     await page.keyboard.press('Escape')
     await expect(modal).toHaveCount(0)
-  })
-
-  test('TMP escape probe', async ({ page }) => {
-    await enterEditMode(page)
-    await page.locator('.parts-sample-field').first().click()
-    await page.locator('.slot-picker-modal tbody tr').first().click({ button: 'right' })
-    const before = await page.evaluate(() => ({
-      menus: document.querySelectorAll('.context-menu').length,
-      modal: document.querySelectorAll('.slot-picker-modal').length,
-    }))
-    await page.keyboard.press('Escape')
-    const after = await page.evaluate(() => ({
-      menus: document.querySelectorAll('.context-menu').length,
-      modal: document.querySelectorAll('.slot-picker-modal').length,
-    }))
-    console.log('ESCPROBE', JSON.stringify({ before, after }))
   })
 
   test('Escape closes the picker without assigning anything', async ({ page }) => {
