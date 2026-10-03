@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fieldSpec, clampToSpec, formatSpecValue, parseSpecValue, isDeviceField } from './partFieldSpecs'
+import { fieldSpec, clampToSpec, formatSpecValue, parseSpecValue, isDeviceField, noteName } from './partFieldSpecs'
 
 /**
  * The numbers asserted here are what the device itself wrote: each preset project was
@@ -138,6 +138,82 @@ describe('fields the AMP page does not carry', () => {
     for (const f of ['atk', 'hold', 'rel', 'vol', 'bal']) {
       expect(isDeviceField(f)).toBe(true)
       expect(fieldSpec(f)).not.toBeNull()
+    }
+  })
+})
+
+describe('MIDI tracks', () => {
+  it('keeps NOTE LEN and ARP LEN apart, since they are different parameters', () => {
+    const note = fieldSpec('midi_notes.len')!
+    const arp = fieldSpec('midi_arps.len')!
+    expect(note.widget).toBe('unipolar')
+    expect(arp.widget).toBe('selector')
+    expect(arp.options).toHaveLength(16)
+  })
+
+  it('names the arpeggiator settings the device names', () => {
+    expect(fieldSpec('midi_arps.mode')!.options?.map(o => o.label))
+      .toEqual(['OFF', 'TRUE', 'UP', 'DOWN', 'CYCL', 'SHFL', 'RND'])
+    expect(fieldSpec('midi_arps.rnge')!.options?.map(o => o.label))
+      .toEqual(['1 OCT', '2 OCT', '3 OCT', '4 OCT', '5 OCT', '6 OCT', '7 OCT', '8 OCT'])
+    const keys = fieldSpec('midi_arps.key')!
+    expect(keys.options).toHaveLength(25)
+    expect(keys.options![0].label).toBe('Off')
+    expect(keys.options![1].label).toBe('C MAJ')
+    expect(keys.options![24].label).toBe('B MIN')
+  })
+
+  it('shows the arp speed as the multiple it is, and reads one back', () => {
+    const spd = fieldSpec('midi_arps.spd')!
+    expect([spd.min, spd.max]).toEqual([0, 95])
+    expect(formatSpecValue(0, spd)).toBe('x1')
+    expect(formatSpecValue(95, spd)).toBe('x96')
+    expect(parseSpecValue('x4', spd)).toBe(3)
+  })
+
+  it('offers the sixteen MIDI channels, counted from one', () => {
+    const chan = fieldSpec('midi_notes.chan')!
+    expect([chan.min, chan.max]).toEqual([0, 15])
+    expect(chan.options![0].label).toBe('1')
+    expect(chan.options![15].label).toBe('16')
+  })
+
+  it('lets Bank, Program and Sub Bank be switched off, one past the byte', () => {
+    for (const f of ['bank', 'prog', 'sbnk']) {
+      const spec = fieldSpec(`midi_notes.${f}`)!
+      expect(spec.max, f).toBe(128)
+      expect(spec.default, f).toBe(128)
+      expect(formatSpecValue(128, spec)).toBe('Off')
+      // Anything below it is the number itself
+      expect(formatSpecValue(0, spec)).toBe('0')
+    }
+  })
+
+  it('names a note the way a keyboard does', () => {
+    expect(noteName(0)).toBe('C-1')
+    expect(noteName(60)).toBe('C4')
+    expect(noteName(69)).toBe('A4')
+    expect(formatSpecValue(48, fieldSpec('midi_notes.note')!)).toBe('C3')
+  })
+
+  it('gives a MIDI track its own LFO targets, not the audio ones', () => {
+    const midi = fieldSpec('midi_lfos.lfo1_pmtr')!
+    const audio = fieldSpec('lfo1_pmtr')!
+    expect(midi.options).toHaveLength(30)
+    expect(midi.options![0].label).toBe('Note Note')
+    expect(midi.options![6]).toEqual({ value: 12, label: 'Arp Transpose' })
+    expect(audio.options![0].label).toBe('P1 P01')
+    expect(midi.options).not.toEqual(audio.options)
+    // Same reordering as the audio list: the second group stores above the third
+    expect(midi.options![12]).toEqual({ value: 6, label: 'LFO 1 Speed' })
+  })
+
+  it('treats the extra notes and the transpose as offsets', () => {
+    for (const f of ['midi_notes.not2', 'midi_notes.not3', 'midi_notes.not4', 'midi_arps.tran']) {
+      const spec = fieldSpec(f)!
+      expect(spec.widget, f).toBe('bipolar')
+      expect(formatSpecValue(64, spec)).toBe('0')
+      expect(formatSpecValue(70, spec)).toBe('6')
     }
   })
 })

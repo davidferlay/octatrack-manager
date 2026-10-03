@@ -2984,6 +2984,38 @@ fn clamp_part_data(part: &mut PartData, machine_types: &[u8; 8]) {
         amp.amp_setup_fx1 = amp.amp_setup_fx1.min(3);
         amp.amp_setup_fx2 = amp.amp_setup_fx2.min(3);
     }
+    for note in part.midi_notes.iter_mut() {
+        // Bank, Program and Sub Bank go one past the byte, where 128 means "off"
+        note.bank = note.bank.min(128);
+        note.prog = note.prog.min(128);
+        note.sbnk = note.sbnk.min(128);
+        // CHAN is deliberately not held to 0-15 here. Every MIDI track of the 354
+        // banks to hand sits inside that range, but the editor is not the only thing
+        // that writes one, and narrowing a value this code has never seen would
+        // change it rather than protect it.
+    }
+    for arp in part.midi_arps.iter_mut() {
+        arp.leg = arp.leg.min(1);
+        arp.mode = arp.mode.min(6);
+        arp.spd = arp.spd.min(95);
+        arp.rnge = arp.rnge.min(7);
+        arp.len = arp.len.min(15);
+        arp.key = arp.key.min(24);
+    }
+    for lfo in part.midi_lfos.iter_mut() {
+        for pmtr in [&mut lfo.lfo1_pmtr, &mut lfo.lfo2_pmtr, &mut lfo.lfo3_pmtr] {
+            *pmtr = (*pmtr).min(29);
+        }
+        for wave in [&mut lfo.lfo1_wave, &mut lfo.lfo2_wave, &mut lfo.lfo3_wave] {
+            *wave = (*wave).min(18);
+        }
+        for mult in [&mut lfo.lfo1_mult, &mut lfo.lfo2_mult, &mut lfo.lfo3_mult] {
+            *mult = (*mult).min(6);
+        }
+        for trig in [&mut lfo.lfo1_trig, &mut lfo.lfo2_trig, &mut lfo.lfo3_trig] {
+            *trig = (*trig).min(7);
+        }
+    }
     for lfo in part.lfos.iter_mut() {
         for pmtr in [&mut lfo.lfo1_pmtr, &mut lfo.lfo2_pmtr, &mut lfo.lfo3_pmtr] {
             *pmtr = (*pmtr).min(29);
@@ -18255,6 +18287,52 @@ mod tests {
                 Some(3),
                 "clamped as the Static machine the bank says it is"
             );
+        }
+
+        /// A MIDI track's own settings are short lists too, and the arpeggiator's
+        /// are the ones most easily sent out of range.
+        #[test]
+        fn test_save_parts_data_holds_midi_settings_to_the_device_range() {
+            let project = TestProject::new();
+            let mut parts = read_parts_data(&project.path, "A").unwrap();
+            let part = &mut parts.parts[0];
+            part.midi_arps[0].mode = 200;
+            part.midi_arps[0].rnge = 200;
+            part.midi_arps[0].spd = 200;
+            part.midi_arps[0].len = 200;
+            part.midi_arps[0].key = 200;
+            part.midi_arps[0].leg = 200;
+            part.midi_notes[0].bank = 255;
+            part.midi_lfos[0].lfo1_pmtr = 99;
+
+            save_parts_data(&project.path, "A", parts.parts.clone()).unwrap();
+
+            let reloaded = read_parts_data(&project.path, "A").unwrap();
+            let arp = &reloaded.parts[0].midi_arps[0];
+            assert_eq!(arp.mode, 6, "RND is the last arp mode");
+            assert_eq!(arp.rnge, 7, "eight octaves is the widest range");
+            assert_eq!(arp.spd, 95, "x96 is the fastest");
+            assert_eq!(arp.len, 15, "sixteen steps is the longest");
+            assert_eq!(arp.key, 24);
+            assert_eq!(arp.leg, 1);
+            assert_eq!(
+                reloaded.parts[0].midi_notes[0].bank, 128,
+                "128 is Off, one past the byte, and is as high as Bank goes"
+            );
+            assert_eq!(reloaded.parts[0].midi_lfos[0].lfo1_pmtr, 29);
+        }
+
+        /// The MIDI channel is left as found: the editor only ever offers a valid one,
+        /// and narrowing a value written elsewhere would change it rather than guard it.
+        #[test]
+        fn test_save_parts_data_leaves_the_midi_channel_alone() {
+            let project = TestProject::new();
+            let mut parts = read_parts_data(&project.path, "A").unwrap();
+            parts.parts[0].midi_notes[0].chan = 200;
+            save_parts_data(&project.path, "A", parts.parts.clone()).unwrap();
+
+            let reloaded = read_parts_data(&project.path, "A").unwrap();
+            assert_eq!(reloaded.parts[0].midi_notes[0].chan, 200);
         }
 
         /// A value the device does produce is written through untouched - clamping

@@ -40,7 +40,7 @@ export interface FieldSpec {
    */
   options?: { value: number; label: string }[];
   /** How the number reads to a human, where it is not just the number. */
-  display?: 'semitones' | 'offset';
+  display?: 'semitones' | 'offset' | 'note' | 'times';
   /**
    * Set when the device's own ceiling has not been established and the spec falls
    * back to the byte's own limit. The floor is still the measured one.
@@ -183,6 +183,102 @@ const TARGET: FieldSpec = {
   min: 0, max: 29, default: 0, widget: 'selector', options: LFO_TARGETS,
 };
 
+/** What a MIDI track's LFO can modulate - a different list from an audio track's. */
+const MIDI_TARGETS: { value: number; label: string }[] = [
+  { value: 0, label: 'Note Note' },
+  { value: 1, label: 'Note Velocity' },
+  { value: 2, label: 'Note Length' },
+  { value: 3, label: 'Note Note 2' },
+  { value: 4, label: 'Note Note 3' },
+  { value: 5, label: 'Note Note 4' },
+  { value: 12, label: 'Arp Transpose' },
+  { value: 13, label: 'Arp Legato' },
+  { value: 14, label: 'Arp Mode' },
+  { value: 15, label: 'Arp Speed' },
+  { value: 16, label: 'Arp Range' },
+  { value: 17, label: 'Arp Note Length' },
+  { value: 6, label: 'LFO 1 Speed' },
+  { value: 7, label: 'LFO 2 Speed' },
+  { value: 8, label: 'LFO 3 Speed' },
+  { value: 9, label: 'LFO 1 Depth' },
+  { value: 10, label: 'LFO 2 Depth' },
+  { value: 11, label: 'LFO 3 Depth' },
+  { value: 18, label: 'Control 1 Pitchbend' },
+  { value: 19, label: 'Control 1 Aftertouch' },
+  ...[1, 2, 3, 4].map((n, i) => ({ value: 20 + i, label: `Control 1 CC 0${n}` })),
+  ...[5, 6, 7, 8, 9, 10].map((n, i) => ({
+    value: 24 + i, label: `Control 2 CC ${String(n).padStart(2, '0')}` })),
+];
+
+const MIDI_TARGET: FieldSpec = {
+  min: 0, max: 29, default: 0, widget: 'selector', options: MIDI_TARGETS,
+};
+
+/** [ArpMode], [ArpRange], [ArpKey] - the arpeggiator's named settings. */
+const ARP_MODES = ['OFF', 'TRUE', 'UP', 'DOWN', 'CYCL', 'SHFL', 'RND'];
+const ARP_RANGES = ['1 OCT', '2 OCT', '3 OCT', '4 OCT', '5 OCT', '6 OCT', '7 OCT', '8 OCT'];
+const ARP_KEYS = [
+  'Off',
+  ...['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+    .flatMap(note => [`${note} MAJ`, `${note} MIN`]),
+];
+
+/** The sixteen MIDI channels, stored from zero and shown from one. */
+const MIDI_CHANNELS = Array.from({ length: 16 }, (_, i) => String(i + 1));
+
+/**
+ * A MIDI track's own fields, keyed by the page they sit on: NOTE and ARP both have a
+ * LEN, and they are not the same parameter.
+ *
+ * Ranges are the device's lists where it has one, checked against every bank of the
+ * projects to hand (354 of them) for the fields that have no list.
+ */
+const MIDI: Record<string, FieldSpec> = {
+  // The note itself, shown the way a keyboard names it
+  'midi_notes.note': { min: 0, max: 127, default: 48, widget: 'unipolar', display: 'note' },
+  'midi_notes.vel': U(0, 127, 100),
+  'midi_notes.len': U(0, 127, 6),
+  // The three extra notes are offsets from the first
+  'midi_notes.not2': { min: 0, max: 127, default: 64, widget: 'bipolar', center: 64, display: 'offset' },
+  'midi_notes.not3': { min: 0, max: 127, default: 64, widget: 'bipolar', center: 64, display: 'offset' },
+  'midi_notes.not4': { min: 0, max: 127, default: 64, widget: 'bipolar', center: 64, display: 'offset' },
+  'midi_notes.chan': SELECT(0, MIDI_CHANNELS),
+  // Bank, Program and Sub Bank each carry one past the top of the byte for "off",
+  // which is where a track that sends none of them rests
+  'midi_notes.bank': { min: 0, max: 128, default: 128, widget: 'unipolar', options: [{ value: 128, label: 'Off' }] },
+  'midi_notes.prog': { min: 0, max: 128, default: 128, widget: 'unipolar', options: [{ value: 128, label: 'Off' }] },
+  'midi_notes.sbnk': { min: 0, max: 128, default: 128, widget: 'unipolar', options: [{ value: 128, label: 'Off' }] },
+
+  'midi_arps.tran': { min: 0, max: 127, default: 64, widget: 'bipolar', center: 64, display: 'offset' },
+  'midi_arps.leg': TOGGLE(0, ['OFF', 'ON']),
+  'midi_arps.mode': SELECT(0, ARP_MODES),
+  // Ninety-six speeds, shown as the multiple they are
+  'midi_arps.spd': { min: 0, max: 95, default: 5, widget: 'unipolar', display: 'times' },
+  'midi_arps.rnge': SELECT(0, ARP_RANGES),
+  'midi_arps.nlen': U(0, 127, 6),
+  'midi_arps.len': SELECT(7, Array.from({ length: 16 }, (_, i) => String(i + 1))),
+  'midi_arps.key': SELECT(0, ARP_KEYS),
+
+  'midi_ctrl1s.pb': { min: 0, max: 127, default: 64, widget: 'bipolar', center: 64, display: 'offset' },
+  'midi_ctrl1s.at': U(0, 127, 0),
+
+  // A MIDI track's LFOs modulate its own parameters, not an audio track's
+  'midi_lfos.lfo1_pmtr': MIDI_TARGET,
+  'midi_lfos.lfo2_pmtr': MIDI_TARGET,
+  'midi_lfos.lfo3_pmtr': MIDI_TARGET,
+};
+
+// The CC values and the CC numbers behind them, which are plain MIDI ranges
+for (const [section, numbers] of [
+  ['midi_ctrl1s', [1, 2, 3, 4]],
+  ['midi_ctrl2s', [5, 6, 7, 8, 9, 10]],
+] as const) {
+  for (const n of numbers) {
+    MIDI[`${section}.cc${n}`] = U(0, 127, 0);
+    MIDI[`${section}.cc${n}_num`] = U(0, 127, 0);
+  }
+}
+
 /** AMP, LFO and the other pages, which every audio machine shares. */
 const SHARED: Record<string, FieldSpec> = {
   'atk': U(0, 127, 0),
@@ -242,6 +338,8 @@ export function fieldSpec(
   ctx?: { slic?: number | null },
 ): FieldSpec | null {
   if (!isDeviceField(field)) return null;
+  const midi = MIDI[field];
+  if (midi) return midi;
   if (field.startsWith('machine_')) {
     // SRC fields are enumerated per machine, so a miss here really is absent
     const machine = SRC[machineType as MachineType];
@@ -279,12 +377,22 @@ export function formatSpecValue(value: number, spec: FieldSpec): string {
   if (spec.display === 'offset' && spec.center !== undefined) {
     return String(value - spec.center);
   }
+  if (spec.display === 'note') return noteName(value);
+  if (spec.display === 'times') return `x${value + 1}`;
   return String(value);
+}
+
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+/** A MIDI note number as a keyboard names it: 0 is C-1, 60 is C4. */
+export function noteName(value: number): string {
+  return `${NOTE_NAMES[value % 12]}${Math.floor(value / 12) - 1}`;
 }
 
 /** Turns what a human typed back into the raw byte, for a field that reads differently. */
 export function parseSpecValue(text: string, spec: FieldSpec): number | null {
-  const n = parseFloat(text);
+  // A multiplier reads back the way it is shown, with or without its leading x
+  const n = parseFloat(spec.display === 'times' ? text.replace(/^\s*x/i, '') : text);
   if (!Number.isFinite(n)) return null;
   if (spec.display === 'semitones' && spec.center !== undefined) {
     return Math.round(spec.center + n * 5);
@@ -292,5 +400,6 @@ export function parseSpecValue(text: string, spec: FieldSpec): number | null {
   if (spec.display === 'offset' && spec.center !== undefined) {
     return Math.round(spec.center + n);
   }
+  if (spec.display === 'times') return Math.round(n) - 1;
   return Math.round(n);
 }

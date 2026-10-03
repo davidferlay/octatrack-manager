@@ -200,11 +200,11 @@ test.describe('Patterns tab - step grid indicators', () => {
     await patternsTab.click()
     await expect(page.locator('.pattern-step').first()).toBeVisible({ timeout: 10000 })
 
-    // Pattern 1 unchecked USE PRJ SET and carries its own value (4 in the mock)
+    // Pattern 1 unchecked USE PRJ SET and carries its own setting (4 in the mock)
     const badge = page.locator('.pattern-tempo-indicator', { hasText: 'Chain after:' }).first()
-    await expect(badge).toHaveText('Chain after: 4 (pattern)')
+    await expect(badge).toHaveText('Chain after: 4/16 (pattern)')
     await expect(badge).toHaveAttribute('title', /USE PRJ SET is off for this pattern/)
-    await expect(badge).toHaveAttribute('title', /counted in pattern steps/)
+    await expect(badge).toHaveAttribute('title', /sixteenth steps/)
   })
 
   test('a pattern following the project shows the project value, not a bare word', async ({ page }) => {
@@ -226,7 +226,8 @@ test.describe('Patterns tab - step grid indicators', () => {
     await expect(page.locator('.pattern-step').first()).toBeVisible({ timeout: 10000 })
 
     const badge = page.locator('.pattern-tempo-indicator', { hasText: 'Chain after:' }).first()
-    await expect(badge).toHaveText('Chain after: 16 (project)')
+    // Setting 16 is the longest the device offers - 256 steps, not 16
+    await expect(badge).toHaveText('Chain after: 256/16 (project)')
     await expect(badge).toHaveAttribute('title', /USE PRJ SET is on/)
   })
 

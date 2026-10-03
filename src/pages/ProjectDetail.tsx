@@ -7,6 +7,7 @@ import { TrackSelector, ALL_AUDIO_TRACKS, ALL_MIDI_TRACKS } from "../components/
 import { PatternSelector, ALL_PATTERNS } from "../components/PatternSelector";
 import { SampleSlotsTable } from "../components/SampleSlotsTable";
 import PartsPanel from "../components/PartsPanel";
+import { formatChainAfter } from "../utils/chainAfter";
 import ToolsPanel from "../components/ToolsPanel";
 import { OverwriteModal } from "../components/OverwriteModal";
 import { TransferProgressPanel } from "../components/TransferProgressPanel";
@@ -1832,13 +1833,16 @@ export function ProjectDetail() {
                                 // the project's value, or unchecks it and carries its own.
                                 const projectValue = metadata.pattern_chain_behavior;
                                 const own = pattern.chain_after;
-                                const asText = (v: number) => (v === 0 ? 'PLEN' : String(v));
+                                // The settings past the fourth do not match their stored
+                                // byte, so the label comes from the device's own list
+                                const asText = formatChainAfter;
+                                const scale = 'PLEN plays the pattern to its end; the other settings chain after a fixed number of sixteenth steps.';
                                 return (
                                   <span
                                     className="pattern-tempo-indicator"
                                     title={own != null
-                                      ? `USE PRJ SET is off for this pattern: it chains on its own value (${asText(own)}) instead of the project's (${asText(projectValue)}). PLEN plays the pattern to its end; other values are counted in pattern steps.`
-                                      : `USE PRJ SET is on: this pattern follows the project's CHAIN AFTER (${asText(projectValue)}). PLEN plays the pattern to its end; other values are counted in pattern steps.`}
+                                      ? `USE PRJ SET is off for this pattern: it chains on its own setting (${asText(own)}) instead of the project's (${asText(projectValue)}). ${scale}`
+                                      : `USE PRJ SET is on: this pattern follows the project's CHAIN AFTER (${asText(projectValue)}). ${scale}`}
                                   >
                                     Chain after: {own != null
                                       ? `${asText(own)} (pattern)`

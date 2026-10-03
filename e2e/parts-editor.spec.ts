@@ -17,14 +17,17 @@ import { test, expect, Page } from '@playwright/test'
 interface MockOptions {
   partsEditedBitmask?: number
   partsSavedState?: number[]
+  /** Effect assigned to the FX1 slot of every track, for checking an effect's layout. */
+  fx1Type?: number
 }
 
 async function setupTauriMocks(page: Page, options?: MockOptions) {
   const opts = {
     partsEditedBitmask: options?.partsEditedBitmask ?? 0,
     partsSavedState: options?.partsSavedState ?? [1, 0, 0, 0],
+    fx1Type: options?.fx1Type ?? 4,
   }
-  await page.addInitScript((opts: { partsEditedBitmask: number; partsSavedState: number[] }) => {
+  await page.addInitScript((opts: { partsEditedBitmask: number; partsSavedState: number[]; fx1Type: number }) => {
     const makeMachine = (trackId: number) => ({
       track_id: trackId,
       machine_type: 'Flex',
@@ -55,7 +58,7 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
     })
     const makeFx = (trackId: number) => ({
       track_id: trackId,
-      fx1_type: 4, fx2_type: 8,
+      fx1_type: opts.fx1Type, fx2_type: 8,
       fx1_param1: 0, fx1_param2: 0, fx1_param3: 0, fx1_param4: 0, fx1_param5: 0, fx1_param6: 0,
       fx2_param1: 0, fx2_param2: 0, fx2_param3: 0, fx2_param4: 0, fx2_param5: 0, fx2_param6: 0,
       fx1_setup1: 0, fx1_setup2: 0, fx1_setup3: 0, fx1_setup4: 0, fx1_setup5: 0, fx1_setup6: 0,
@@ -252,9 +255,15 @@ test.describe('Parts Editor - Layout', () => {
     await page.locator('.parts-page-tabs .parts-tab', { hasText: 'FX1' }).click()
     await expect(page.locator('.params-column-label', { hasText: 'MAIN - FILTER' })).toBeVisible()
     await expect(page.getByText('BASE', { exact: true })).toBeVisible()
-    await expect(page.getByText('WIDTH', { exact: true })).toBeVisible()
+    // The device labels it WDTH, and the filter fills all six knobs
+    await expect(page.getByText('WDTH', { exact: true })).toBeVisible()
   })
 
+  /**
+   * Each label names the parameter at its own position, so an effect whose page leaves
+   * a knob empty must leave a gap. Compacting the list silently points every later
+   * knob at the wrong parameter - which is what these guard against.
+   */
   test('switching part tabs shows that part\'s values', async ({ page }) => {
     await selectTrack(page, '0')
     await page.locator('.parts-page-tabs .parts-tab', { hasText: 'AMP' }).click()
@@ -950,5 +959,58 @@ test.describe('Parts Editor - Shared LFO tab', () => {
     await page.locator('#parts-bank-select').selectOption('1')
     await expect(page.locator('.bank-card-header h3', { hasText: 'BANK B' })).toBeVisible()
     await expect(page.locator('.parts-lfo-sidebar .parts-tab', { hasText: 'LFO 2' })).toHaveClass(/active/)
+  })
+})
+
+/**
+ * An effect's labels name parameters by position: the label at index n belongs to
+ * parameter n+1. An effect whose page leaves a knob empty therefore needs an empty
+ * entry in that position - compacting the list points every later knob at the wrong
+ * parameter, which is silent and writes the wrong byte.
+ *
+ * These mock the effect directly rather than through the shared setup, so each gets
+ * exactly one set of mocks.
+ */
+test.describe('Parts Editor - Effect page layout', () => {
+  async function openFx1(page: Page, fx1Type: number) {
+    await setupTauriMocks(page, { fx1Type })
+    await openPartsTab(page)
+    await selectTrack(page, '0')
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'FX1' }).click()
+  }
+
+  test('an effect with a gap in its page keeps its later knobs on the right parameter', async ({ page }) => {
+    // DJ EQ reads LS F, a gap, then HS F, LOWG, MIDG, HI G, and has no setup page
+    await openFx1(page, 13)
+    await expect(page.locator('.params-column-label', { hasText: 'MAIN - DJ EQ' })).toBeVisible()
+    expect(await page.locator('.param-label').allTextContents())
+      .toEqual(['LS F', 'HS F', 'LOWG', 'MIDG', 'HI G'])
+  })
+
+  test('a reverb keeps MIXF on the last setup slot, where the device puts it', async ({ page }) => {
+    await openFx1(page, 20) // Gatebox plate reverb
+    expect(await page.locator('.param-label').allTextContents())
+      .toEqual(['TIME', 'DAMP', 'GATE', 'HP', 'LP', 'MIX', 'GVOL', 'BAL', 'MONO', 'MIXF'])
+
+    await enterEditMode(page)
+    const mixf = page.locator('.param-item').filter({ hasText: 'MIXF' }).locator('input.param-value')
+    await mixf.fill('1')
+    await mixf.blur()
+    const calls = await getInvokeCalls(page, 'save_parts')
+    const fx = calls[calls.length - 1].args.partsData[0].fxs[0]
+    expect(fx.fx1_setup6).toBe(1)
+    expect(fx.fx1_setup4).toBe(0)
+  })
+
+  test('the comb filter puts MIX last, past its empty slot', async ({ page }) => {
+    await openFx1(page, 19)
+    expect(await page.locator('.param-label').allTextContents())
+      .toEqual(['PTCH', 'TUNE', 'LP', 'FB', 'MIX'])
+  })
+
+  test('the spring reverb leaves its first row to TIME alone', async ({ page }) => {
+    await openFx1(page, 21)
+    expect(await page.locator('.param-label').allTextContents())
+      .toEqual(['TIME', 'HP', 'LP', 'MIX', 'TYPE', 'BAL'])
   })
 })

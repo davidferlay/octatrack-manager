@@ -514,7 +514,12 @@ export default function PartsPanel({
             ?.machines[trackId]?.machine_setup?.slic,
         }
       : undefined;
-    const spec = fieldSpec(field, machineType, slicContext);
+    // A MIDI track's fields are named per page - NOTE and ARP both have a LEN, and
+    // its LFOs modulate its own parameters - so they are looked up section and all
+    const specKey = typeof section === 'string' && section.startsWith('midi_')
+      ? `${section}.${field}`
+      : field;
+    const spec = fieldSpec(specKey, machineType, slicContext);
     if (!spec) return null;
 
     const displayValue = value ?? spec.default;
@@ -627,24 +632,31 @@ export default function PartsPanel({
     return fxTypes[value] || `FX ${value}`;
   };
 
+  /**
+   * The six MAIN parameter labels of an effect, by position.
+   *
+   * Position matters: the label at index n names parameter n+1, so an effect whose
+   * page leaves a knob empty needs an empty entry there rather than a shorter list.
+   * Compacting them would point every later knob at the wrong parameter. Each layout
+   * is the one the manual's Appendix B shows.
+   */
   const getFxMainLabels = (fxType: number): string[] => {
-    // Returns array of 6 MAIN parameter labels for given FX type
     const mainMappings: { [key: number]: string[] } = {
       0: ['', '', '', '', '', ''], // OFF - no params
-      4: ['BASE', 'WIDTH', 'Q', 'DEPTH', 'ATK', 'DEC'], // FILTER
+      4: ['BASE', 'WDTH', 'Q', 'DPTH', 'ATK', 'DEC'], // FILTER
       5: ['INP', 'DPTH', 'WDTH', 'HP', 'LP', 'SEND'], // SPATIALIZER
       8: ['TIME', 'FB', 'VOL', 'BASE', 'WDTH', 'SEND'], // DELAY
       12: ['FRQ1', 'GN1', 'Q1', 'FRQ2', 'GN2', 'Q2'], // EQ
-      13: ['LS F', 'HS F', 'LOWG', 'MIDG', 'HI G', ''], // DJ EQ
+      13: ['LS F', '', 'HS F', 'LOWG', 'MIDG', 'HI G'], // DJ EQ (B.4: a gap at slot 2)
       16: ['CNTR', 'DEP', 'SPD', 'FB', 'WID', 'MIX'], // PHASER
       17: ['DEL', 'DEP', 'SPD', 'FB', 'WID', 'MIX'], // FLANGER
       18: ['DEL', 'DEP', 'SPD', 'FB', 'WID', 'MIX'], // CHORUS
-      19: ['PTCH', 'TUNE', 'LP', 'FB', 'MIX', ''], // COMB FILTER
+      19: ['PTCH', 'TUNE', 'LP', 'FB', '', 'MIX'], // COMB FILTER (B.9: a gap before MIX)
       20: ['TIME', 'DAMP', 'GATE', 'HP', 'LP', 'MIX'], // PLATE REVERB
-      21: ['TIME', 'HP', 'LP', 'MIX', '', ''], // SPRING REVERB
+      21: ['TIME', '', '', 'HP', 'LP', 'MIX'], // SPRING REVERB (B.14: TIME alone on the first row)
       22: ['TIME', 'SHVG', 'SHVF', 'HP', 'LP', 'MIX'], // DARK REVERB
       24: ['ATK', 'REL', 'THRS', 'RAT', 'GAIN', 'MIX'], // COMPRESSOR
-      28: ['DIST', 'AMF', 'SRR', 'BRR', 'AMD', ''], // LO-FI COLLECTION (B.11)
+      28: ['DIST', '', 'AMF', 'SRR', 'BRR', 'AMD'], // LO-FI COLLECTION (B.11: a gap at slot 2)
     };
     return mainMappings[fxType] || ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'];
   };
@@ -655,19 +667,19 @@ export default function PartsPanel({
     const setupMappings: { [key: number]: string[] } = {
       0: ['', '', '', '', '', ''], // B.1 NONE - no setup params
       4: ['HP', 'LP', 'ENV', 'HOLD', 'Q', 'DIST'], // B.2 12/24DB MULTI MODE FILTER
-      5: ['PHSE', 'M/S', 'MG', 'SG', '', ''], // B.8 SPATIALIZER
+      5: ['', 'PHSE', '', 'M/S', 'MG', 'SG'], // B.8 SPATIALIZER
       8: ['X', 'TAPE', 'DIR', 'SYNC', 'LOCK', 'PASS'], // B.12 ECHO FREEZE DELAY
-      12: ['TYP1', 'TYP2', '', '', '', ''], // B.3 2-BAND PARAMETRIC EQ
+      12: ['TYP1', '', '', 'TYP2', '', ''], // B.3 2-BAND PARAMETRIC EQ
       13: ['', '', '', '', '', ''], // B.4 DJ STYLE KILL EQ - no setup params
-      16: ['NUM', '', '', '', '', ''], // B.5 2-10 STAGE PHASER
+      16: ['', 'NUM', '', '', '', ''], // B.5 2-10 STAGE PHASER
       17: ['', '', '', '', '', ''], // B.6 FLANGER - no setup params
-      18: ['TAPS', 'FBLP', '', '', '', ''], // B.7 2-10 TAP CHORUS
+      18: ['TAPS', '', '', 'FBLP', '', ''], // B.7 2-10 TAP CHORUS
       19: ['', '', '', '', '', ''], // B.9 COMB FILTER - no setup params
-      20: ['GVOL', 'BAL', 'MONO', 'MIXF', '', ''], // B.13 GATEBOX PLATE REVERB
+      20: ['GVOL', 'BAL', 'MONO', '', '', 'MIXF'], // B.13 GATEBOX PLATE REVERB
       21: ['TYPE', 'BAL', '', '', '', ''], // B.14 SPRING REVERB
-      22: ['PRE', 'BAL', 'MONO', 'MIXF', '', ''], // B.15 DARK REVERB
+      22: ['PRE', 'BAL', 'MONO', '', '', 'MIXF'], // B.15 DARK REVERB
       24: ['RMS', '', '', '', '', ''], // B.10 DYNAMIX COMPRESSOR
-      28: ['AMPH', '', '', '', '', ''], // B.11 LO-FI COLLECTION
+      28: ['', '', 'AMPH', '', '', ''], // B.11 LO-FI COLLECTION
     };
     return setupMappings[fxType] || ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'];
   };
