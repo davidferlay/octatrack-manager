@@ -302,6 +302,23 @@ export interface PartTrackVolume {
   cue: number;
 }
 
+/** An audio track's recorder buffer setup - the device's two RECORDING SETUP pages. */
+export interface PartTrackRecorder {
+  track_id: number;
+  in_ab: number;
+  in_cd: number;
+  rlen: number;
+  trig: number;
+  src3: number;
+  xloop: number;
+  fin: number;
+  fout: number;
+  ab: number;
+  qrec: number;
+  qpl: number;
+  cd: number;
+}
+
 export interface PartTrackAmp {
   track_id: number;
   atk: number;
@@ -457,6 +474,7 @@ export interface PartData {
   midi_lfos: PartTrackLfo[];        // Reuses audio LFO structure
   midi_ctrl1s: PartTrackMidiCtrl1[];
   midi_ctrl2s: PartTrackMidiCtrl2[];
+  recorders: PartTrackRecorder[];
 }
 
 // Response from load_parts_data including bank-level state flags

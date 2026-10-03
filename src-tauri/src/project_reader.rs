@@ -288,6 +288,30 @@ pub struct PartTrackMachine {
     pub flex_slot_id: u8,
 }
 
+/// An audio track's recorder buffer setup, the device's two RECORDING SETUP pages.
+///
+/// Page one picks what is sampled - which inputs, which internal source, how long and
+/// how the sampling is triggered. Page two shapes it: the fades, the input monitoring
+/// levels and the quantisation of recording and playback.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartTrackRecorder {
+    pub track_id: u8,
+    // RECORDING SETUP 1
+    pub in_ab: u8,
+    pub in_cd: u8,
+    pub rlen: u8,
+    pub trig: u8,
+    pub src3: u8,
+    pub xloop: u8,
+    // RECORDING SETUP 2
+    pub fin: u8,
+    pub fout: u8,
+    pub ab: u8,
+    pub qrec: u8,
+    pub qpl: u8,
+    pub cd: u8,
+}
+
 /// A Part's per-track mixer levels. Separate from the AMP page's own VOL: these are
 /// the Track and Cue levels the device's mixer shows.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -488,6 +512,7 @@ pub struct PartData {
     pub amps: Vec<PartTrackAmp>,              // 8 audio tracks
     pub lfos: Vec<PartTrackLfo>,              // 8 audio tracks (also used for MIDI LFOs)
     pub fxs: Vec<PartTrackFx>,                // 8 audio tracks
+    pub recorders: Vec<PartTrackRecorder>,    // 8 audio tracks (recorder buffer setup)
     pub midi_notes: Vec<PartTrackMidiNote>,   // 8 MIDI tracks
     pub midi_arps: Vec<PartTrackMidiArp>,     // 8 MIDI tracks
     pub midi_lfos: Vec<PartTrackLfo>,         // 8 MIDI tracks (reuses audio LFO structure)
@@ -2558,6 +2583,7 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
         let mut amps = Vec::new();
         let mut lfos = Vec::new();
         let mut fxs = Vec::new();
+        let mut recorders = Vec::new();
 
         // Process 8 audio tracks (tracks 0-7)
         for track_id in 0..8 {
@@ -2779,6 +2805,24 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
             // Get FX1 setup parameters
             let fx1_setup = &part.audio_track_params_setup[track_id as usize].fx1;
 
+            // The track recorder's two setup pages
+            let rec = &part.recorder_setup[track_id as usize];
+            recorders.push(PartTrackRecorder {
+                track_id,
+                in_ab: rec.src.in_ab,
+                in_cd: rec.src.in_cd,
+                rlen: rec.src.rlen,
+                trig: rec.src.trig,
+                src3: rec.src.src3,
+                xloop: rec.src.xloop,
+                fin: rec.proc.fin,
+                fout: rec.proc.fout,
+                ab: rec.proc.ab,
+                qrec: rec.proc.qrec,
+                qpl: rec.proc.qpl,
+                cd: rec.proc.cd,
+            });
+
             // Get FX2 setup parameters
             let fx2_setup = &part.audio_track_params_setup[track_id as usize].fx2;
 
@@ -2948,6 +2992,7 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
             amps,
             lfos,
             fxs,
+            recorders,
             midi_notes,
             midi_arps,
             midi_lfos,
@@ -3024,6 +3069,27 @@ fn clamp_part_data(part: &mut PartData, machine_types: &[u8; 8]) {
         amp.amp_setup_atck = amp.amp_setup_atck.min(1);
         amp.amp_setup_fx1 = amp.amp_setup_fx1.min(3);
         amp.amp_setup_fx2 = amp.amp_setup_fx2.min(3);
+    }
+    for rec in part.recorders.iter_mut() {
+        // Five input choices each, as a Thru machine has
+        rec.in_ab = rec.in_ab.min(4);
+        rec.in_cd = rec.in_cd.min(4);
+        // 64 is MAX, above the 64 lengths below it
+        rec.rlen = rec.rlen.min(64);
+        // ONE, ONE2, HOLD
+        rec.trig = rec.trig.min(2);
+        // Nothing, the eight tracks, MAIN or CUE
+        rec.src3 = rec.src3.min(10);
+        rec.xloop = rec.xloop.min(1);
+        rec.fin = rec.fin.min(112);
+        rec.fout = rec.fout.min(112);
+        // QREC and QPL keep 255 for OFF, which sits outside the ordinary range
+        if rec.qrec != 255 {
+            rec.qrec = rec.qrec.min(16);
+        }
+        if rec.qpl != 255 {
+            rec.qpl = rec.qpl.min(16);
+        }
     }
     for note in part.midi_notes.iter_mut() {
         // Bank, Program and Sub Bank go one past the byte, where 128 means "off"
@@ -3245,6 +3311,22 @@ pub fn save_parts_data(
                 part_unsaved.audio_track_params_setup[track_id].fx2.setting4 = fx.fx2_setup4;
                 part_unsaved.audio_track_params_setup[track_id].fx2.setting5 = fx.fx2_setup5;
                 part_unsaved.audio_track_params_setup[track_id].fx2.setting6 = fx.fx2_setup6;
+            }
+
+            if let Some(rec) = part_data.recorders.get(track_id) {
+                let target = &mut part_unsaved.recorder_setup[track_id];
+                target.src.in_ab = rec.in_ab;
+                target.src.in_cd = rec.in_cd;
+                target.src.rlen = rec.rlen;
+                target.src.trig = rec.trig;
+                target.src.src3 = rec.src3;
+                target.src.xloop = rec.xloop;
+                target.proc.fin = rec.fin;
+                target.proc.fout = rec.fout;
+                target.proc.ab = rec.ab;
+                target.proc.qrec = rec.qrec;
+                target.proc.qpl = rec.qpl;
+                target.proc.cd = rec.cd;
             }
 
             // Update Machine parameters (SRC page)
@@ -18397,6 +18479,64 @@ mod tests {
                     "raw {raw} should have no name"
                 );
             }
+        }
+
+        /// The recorder setup is per track and per Part, so an edit has to survive a
+        /// save and reload like any other Part value.
+        #[test]
+        fn test_save_parts_data_persists_the_recorder_setup() {
+            let project = TestProject::new();
+            let mut parts = read_parts_data(&project.path, "A").unwrap();
+            let rec = &mut parts.parts[1].recorders[2];
+            rec.src3 = 9; // MAIN
+            rec.rlen = 16;
+            rec.trig = 2; // HOLD
+            rec.qrec = 0; // PLEN
+            rec.fin = 12;
+
+            save_parts_data(&project.path, "A", parts.parts.clone()).unwrap();
+
+            let reloaded = read_parts_data(&project.path, "A").unwrap();
+            let back = &reloaded.parts[1].recorders[2];
+            assert_eq!(back.src3, 9);
+            assert_eq!(back.rlen, 16);
+            assert_eq!(back.trig, 2);
+            assert_eq!(back.qrec, 0);
+            assert_eq!(back.fin, 12);
+            // Other tracks and Parts are left alone
+            assert_eq!(reloaded.parts[1].recorders[3].src3, 0);
+            assert_eq!(reloaded.parts[0].recorders[2].src3, 0);
+        }
+
+        /// The recorder's settings are short lists, and the two quantise settings keep
+        /// 255 for OFF - which must survive rather than being pulled down into range.
+        #[test]
+        fn test_save_parts_data_holds_the_recorder_to_the_device_range() {
+            let project = TestProject::new();
+            let mut parts = read_parts_data(&project.path, "A").unwrap();
+            let rec = &mut parts.parts[0].recorders[0];
+            rec.in_ab = 99;
+            rec.in_cd = 99;
+            rec.rlen = 200;
+            rec.trig = 99;
+            rec.src3 = 99;
+            rec.xloop = 99;
+            rec.fin = 200;
+            rec.qrec = 99;
+            rec.qpl = 255; // OFF, and it must stay OFF
+
+            save_parts_data(&project.path, "A", parts.parts.clone()).unwrap();
+
+            let back = &read_parts_data(&project.path, "A").unwrap().parts[0].recorders[0];
+            assert_eq!(back.in_ab, 4);
+            assert_eq!(back.in_cd, 4);
+            assert_eq!(back.rlen, 64, "MAX is the longest setting");
+            assert_eq!(back.trig, 2, "HOLD is the last trig mode");
+            assert_eq!(back.src3, 10, "CUE is the last source");
+            assert_eq!(back.xloop, 1);
+            assert_eq!(back.fin, 112);
+            assert_eq!(back.qrec, 16);
+            assert_eq!(back.qpl, 255, "OFF sits outside the range and is kept");
         }
 
         /// A MIDI track's own settings are short lists too, and the arpeggiator's

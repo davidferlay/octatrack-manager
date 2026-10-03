@@ -42,7 +42,7 @@ export interface SlotChoice {
   path: string | null;
 }
 
-type AudioPageType = 'ALL' | 'SRC' | 'AMP' | 'LFO' | 'FX1' | 'FX2';
+type AudioPageType = 'ALL' | 'SRC' | 'AMP' | 'LFO' | 'FX1' | 'FX2' | 'REC';
 type MidiPageType = 'ALL' | 'NOTE' | 'ARP' | 'LFO' | 'CTRL1' | 'CTRL2';
 type LfoTabType = 'LFO1' | 'LFO2' | 'LFO3' | 'DESIGN';
 
@@ -111,7 +111,7 @@ export default function PartsPanel({
   const isMidiTrack = selectedTrack !== undefined && (selectedTrack >= 8 || selectedTrack === ALL_MIDI_TRACKS);
 
   // Derive the actual page type based on whether we're viewing Audio or MIDI tracks
-  const activeAudioPage: AudioPageType = activePageIndex === -1 ? 'ALL' : (['SRC', 'AMP', 'LFO', 'FX1', 'FX2'][activePageIndex] as AudioPageType);
+  const activeAudioPage: AudioPageType = activePageIndex === -1 ? 'ALL' : (['SRC', 'AMP', 'LFO', 'FX1', 'FX2', 'REC'][activePageIndex] as AudioPageType);
   const activeMidiPage: MidiPageType = activePageIndex === -1 ? 'ALL' : (['NOTE', 'ARP', 'LFO', 'CTRL1', 'CTRL2'][activePageIndex] as MidiPageType);
 
   // Always use partsData directly - we edit in place and auto-save
@@ -516,7 +516,8 @@ export default function PartsPanel({
       : undefined;
     // A MIDI track's fields are named per page - NOTE and ARP both have a LEN, and
     // its LFOs modulate its own parameters - so they are looked up section and all
-    const specKey = typeof section === 'string' && section.startsWith('midi_')
+    const specKey = typeof section === 'string'
+      && (section.startsWith('midi_') || section === 'recorders')
       ? `${section}.${field}`
       : field;
     const spec = fieldSpec(specKey, machineType, slicContext);
@@ -682,6 +683,60 @@ export default function PartsPanel({
       28: ['', '', 'AMPH', '', '', ''], // B.11 LO-FI COLLECTION
     };
     return setupMappings[fxType] || ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'];
+  };
+
+  /**
+   * The track recorder's two setup pages, as the device lays them out: what gets
+   * sampled on the first, how it is shaped on the second.
+   */
+  const renderRecSectionContent = (activePart: PartData, trackId: number) => {
+    const rec = activePart.recorders?.[trackId];
+    if (!rec) return null;
+    const field = (name: string, label: string) =>
+      renderParamWithKnob(activePart.part_id, 'recorders' as keyof PartData, trackId, name,
+        (rec as unknown as Record<string, number>)[name], label);
+    return (
+      <div className="params-vertical-layout">
+        <div className="params-subsection">
+          <div className="params-column-label">SETUP 1</div>
+          <div className="params-grid">
+            {field('in_ab', 'INAB')}
+            {field('in_cd', 'INCD')}
+            {field('rlen', 'RLEN')}
+            {field('trig', 'TRIG')}
+            {field('src3', 'SRC3')}
+            {field('xloop', 'LOOP')}
+          </div>
+        </div>
+        <div className="params-subsection">
+          <div className="params-column-label">SETUP 2</div>
+          <div className="params-grid">
+            {field('fin', 'FIN')}
+            {field('fout', 'FOUT')}
+            {field('ab', 'AB')}
+            {field('qrec', 'QREC')}
+            {field('qpl', 'QPL')}
+            {field('cd', 'CD')}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderRecPage = (part: PartData) => {
+    const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
+    const showAll = selectedTrack === undefined || selectedTrack < 0;
+    const machines = showAll ? activePart.machines : [activePart.machines[selectedTrack]];
+    return (
+      <div className="parts-tracks">
+        {machines.map((machine) => (
+          <div key={machine.track_id} className="parts-track">
+            {renderTrackHeader(activePart, machine.track_id, machine.machine_type)}
+            {renderRecSectionContent(activePart, machine.track_id)}
+          </div>
+        ))}
+      </div>
+    );
   };
 
   // Helper function to render SRC section content (MAIN + SETUP)
@@ -2640,6 +2695,12 @@ export default function PartsPanel({
             >
               FX2
             </button>
+            <button
+              className={`parts-tab ${activePageIndex === 5 ? 'active' : ''}`}
+              onClick={() => setActivePageIndex(5)}
+            >
+              REC
+            </button>
           </>
         ) : (
           <>
@@ -2693,6 +2754,7 @@ export default function PartsPanel({
             {activeAudioPage === 'LFO' && renderLfoPage(activePart)}
             {activeAudioPage === 'FX1' && renderFx1Page(activePart)}
             {activeAudioPage === 'FX2' && renderFx2Page(activePart)}
+            {activeAudioPage === 'REC' && renderRecPage(activePart)}
           </>
         )}
         {activePart && isMidiTrack && (

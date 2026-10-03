@@ -91,6 +91,16 @@ The Octatrack has no "no sample" setting for a machine - a Flex or Static machin
 
 The slot still shows a number afterwards - that is the device's own model, not a quirk of the app.
 
+### Recorder setup
+
+Each audio track has a recorder buffer, and the REC tab shows its two setup pages exactly as the device lays them out.
+
+SETUP 1 is what gets sampled: INAB and INCD choose which inputs are taken, RLEN how long the recording runs (up to MAX), TRIG how sampling starts and stops, SRC3 which internal source is recorded, and LOOP whether the captured sample loops.
+
+SETUP 2 shapes it: FIN and FOUT fade the recording in and out, AB and CD set the monitoring levels of the two input pairs, and QREC and QPL quantise recording and playback. Those last two rest at OFF, which the device stores outside their ordinary range - the app keeps it rather than pulling it down to the nearest step count.
+
+The setup belongs to the Part, like everything else on these pages, so the same track can sample differently in different Parts.
+
 #### Track and Cue levels
 
 The track header on the AMP and ALL pages carries TRK and CUE - the device's mixer levels for that track. They are not the AMP page's own VOL, which is a separate parameter in the grid below.

@@ -226,6 +226,43 @@ const ARP_KEYS = [
 /** The sixteen MIDI channels, stored from zero and shown from one. */
 const MIDI_CHANNELS = Array.from({ length: 16 }, (_, i) => String(i + 1));
 
+/** Which inputs the recorder samples - the same five choices a Thru machine has. */
+const RECORD_SOURCES = ['-', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'MAIN', 'CUE'];
+/** How sampling is started and stopped. */
+const RECORD_TRIGS = ['ONE', 'ONE2', 'HOLD'];
+/** Recording and playback quantisation, which keeps 255 for OFF. */
+const RECORD_QUANTS: { value: number; label: string }[] = [
+  { value: 255, label: 'OFF' },
+  { value: 0, label: 'PLEN' },
+  ...[1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256]
+    .map((steps, i) => ({ value: i + 1, label: String(steps) })),
+];
+
+/**
+ * An audio track's recorder buffer, the device's two RECORDING SETUP pages.
+ *
+ * RLEN counts sequencer steps up to 64 and then reads MAX, so its top setting is one
+ * past the lengths rather than the longest of them. QREC and QPL keep 255 for OFF,
+ * which sits outside their ordinary range - hence their own option lists.
+ */
+const RECORDER: Record<string, FieldSpec> = {
+  'recorders.in_ab': SELECT(1, INPUTS_AB),
+  'recorders.in_cd': SELECT(1, INPUTS_CD),
+  'recorders.rlen': {
+    min: 0, max: 64, default: 64, widget: 'unipolar', display: 'times',
+    options: [{ value: 64, label: 'MAX' }],
+  },
+  'recorders.trig': SELECT(0, RECORD_TRIGS),
+  'recorders.src3': SELECT(0, RECORD_SOURCES),
+  'recorders.xloop': TOGGLE(1, ['OFF', 'ON']),
+  'recorders.fin': U(0, 112, 0),
+  'recorders.fout': U(0, 112, 0),
+  'recorders.ab': U(0, 127, 0),
+  'recorders.cd': U(0, 127, 0),
+  'recorders.qrec': { min: 0, max: 255, default: 255, widget: 'selector', options: RECORD_QUANTS },
+  'recorders.qpl': { min: 0, max: 255, default: 255, widget: 'selector', options: RECORD_QUANTS },
+};
+
 /**
  * A MIDI track's own fields, keyed by the page they sit on: NOTE and ARP both have a
  * LEN, and they are not the same parameter.
@@ -367,7 +404,7 @@ export function fieldSpec(
   ctx?: { slic?: number | null },
 ): FieldSpec | null {
   if (!isDeviceField(field)) return null;
-  const midi = MIDI[field];
+  const midi = MIDI[field] ?? RECORDER[field];
   if (midi) return midi;
   if (field.startsWith('machine_')) {
     // SRC fields are enumerated per machine, so a miss here really is absent

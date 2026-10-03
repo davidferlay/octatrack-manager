@@ -56,6 +56,11 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
       lfo1_trig: 0, lfo2_trig: 0, lfo3_trig: 0,
       custom_lfo_design: Array(16).fill(0),
     })
+    const makeRecorder = (trackId: number) => ({
+      track_id: trackId,
+      in_ab: 1, in_cd: 1, rlen: 64, trig: 0, src3: 0, xloop: 1,
+      fin: 0, fout: 0, ab: 0, qrec: 255, qpl: 255, cd: 0,
+    })
     const makeFx = (trackId: number) => ({
       track_id: trackId,
       fx1_type: opts.fx1Type, fx2_type: 8,
@@ -95,6 +100,7 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
       }),
       lfos: tracks.map(makeLfo),
       fxs: tracks.map(makeFx),
+      recorders: tracks.map(makeRecorder),
       midi_notes: tracks.map(makeMidiNote),
       midi_arps: tracks.map(makeMidiArp),
       midi_lfos: tracks.map(makeLfo),
@@ -239,9 +245,9 @@ test.describe('Parts Editor - Layout', () => {
     await expect(partTabs.nth(3)).toContainText('PART 4 (4)')
   })
 
-  test('audio track shows All/SRC/AMP/LFO/FX1/FX2 page tabs', async ({ page }) => {
+  test('audio track shows All/SRC/AMP/LFO/FX1/FX2/REC page tabs', async ({ page }) => {
     const pageTabs = page.locator('.parts-page-tabs .parts-tab')
-    await expect(pageTabs).toHaveText(['All', 'SRC', 'AMP', 'LFO', 'FX1', 'FX2'])
+    await expect(pageTabs).toHaveText(['All', 'SRC', 'AMP', 'LFO', 'FX1', 'FX2', 'REC'])
   })
 
   test('MIDI track shows All/NOTE/ARP/LFO/CTRL1/CTRL2 page tabs', async ({ page }) => {
@@ -971,6 +977,52 @@ test.describe('Parts Editor - Shared LFO tab', () => {
  * These mock the effect directly rather than through the shared setup, so each gets
  * exactly one set of mocks.
  */
+test.describe('Parts Editor - Recorder setup', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await openPartsTab(page)
+    await selectTrack(page, '0')
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'REC' }).click()
+  })
+
+  test('shows the two setup pages the device has, in its order', async ({ page }) => {
+    await expect(page.locator('.params-column-label', { hasText: 'SETUP 1' })).toBeVisible()
+    await expect(page.locator('.params-column-label', { hasText: 'SETUP 2' })).toBeVisible()
+    expect(await page.locator('.param-label').allTextContents()).toEqual([
+      'INAB', 'INCD', 'RLEN', 'TRIG', 'SRC3', 'LOOP',
+      'FIN', 'FOUT', 'AB', 'QREC', 'QPL', 'CD',
+    ])
+  })
+
+  test('names the settings the device names', async ({ page }) => {
+    const options = async (label: string) =>
+      page.locator('.param-item')
+        .filter({ has: page.locator('.param-label', { hasText: new RegExp(`^${label}$`) }) })
+        .first().locator('select.param-select option').allTextContents()
+
+    expect(await options('INAB')).toEqual(['-', 'A B', 'A', 'B', 'A+B'])
+    expect(await options('TRIG')).toEqual(['ONE', 'ONE2', 'HOLD'])
+    expect(await options('SRC3'))
+      .toEqual(['-', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'MAIN', 'CUE'])
+    expect(await options('LOOP')).toEqual(['OFF', 'ON'])
+    // Quantisation keeps OFF outside its ordinary range
+    expect((await options('QREC')).slice(0, 3)).toEqual(['OFF', 'PLEN', '1'])
+  })
+
+  test('editing a recorder setting saves it against that Part and track', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.param-item')
+      .filter({ has: page.locator('.param-label', { hasText: /^SRC3$/ }) })
+      .first().locator('select.param-select').selectOption('9') // MAIN
+
+    await expect
+      .poll(async () => (await getInvokeCalls(page, 'save_parts')).length)
+      .toBeGreaterThan(0)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    expect(calls[calls.length - 1].args.partsData[0].recorders[0].src3).toBe(9)
+  })
+})
+
 test.describe('Parts Editor - Effect page layout', () => {
   async function openFx1(page: Page, fx1Type: number) {
     await setupTauriMocks(page, { fx1Type })
