@@ -38,9 +38,12 @@ export function PositionBar({ count, index }: PositionBarProps) {
 /**
  * One cycle of an LFO waveform, drawn the way the device draws it.
  *
- * The triangle and its inverse are taken from photographs of the hardware; the rest
- * follow the shape each name describes. The name is kept alongside in the editor
- * rather than replaced, so a shape is never the only thing identifying a setting.
+ * Shapes taken from photographs of the hardware: TRI, ITRI, SAW, ISAW, ISQR, EXP, RMP
+ * and RND. SQR, IEXP and IRMP are the mirror of a shape that was photographed, which
+ * is how the device pairs them everywhere else.
+ *
+ * Worth noting, because it is not obvious: SAW is a plain rising line while RMP is a
+ * rising ramp that resets - they are different shapes, not synonyms.
  *
  * The eight designer slots have no fixed shape - they are whatever was drawn into
  * them - so they show no glyph.
@@ -48,14 +51,14 @@ export function PositionBar({ count, index }: PositionBarProps) {
 const WAVE_PATHS: Record<string, string> = {
   TRI: 'M1 11 L8 1 L15 11',
   ITRI: 'M1 1 L8 11 L15 1',
-  SAW: 'M1 1 L13 11 L13 1 L15 1',
-  ISAW: 'M1 11 L13 1 L13 11 L15 11',
-  SQR: 'M1 11 L1 1 L8 1 L8 11 L15 11',
-  ISQR: 'M1 1 L1 11 L8 11 L8 1 L15 1',
-  EXP: 'M1 1 Q3 11 15 11',
-  IEXP: 'M1 11 Q3 1 15 1',
-  RMP: 'M1 11 L15 1',
-  IRMP: 'M1 1 L15 11',
+  SAW: 'M1 11 L15 1',
+  ISAW: 'M1 1 L15 11',
+  SQR: 'M1 1 L8 1 L8 11 L15 11',
+  ISQR: 'M1 11 L8 11 L8 1 L15 1',
+  EXP: 'M1 11 L3 1 Q6 10 15 10',
+  IEXP: 'M1 1 L3 11 Q6 2 15 2',
+  RMP: 'M1 11 L9 1 L9 11 L15 11',
+  IRMP: 'M1 1 L9 11 L9 1 L15 1',
   RND: 'M1 8 L3 8 L3 3 L6 3 L6 10 L9 10 L9 5 L12 5 L12 9 L15 9',
 };
 

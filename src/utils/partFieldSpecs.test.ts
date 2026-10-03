@@ -390,6 +390,12 @@ describe('values the device does not show as plain numbers', () => {
     expect(formatSpecValue(1, flex('rtim'))).toBe('1')
   })
 
+  it('shows a Pickup machine GAIN in dB, from silence upward', () => {
+    const gain = fieldSpec('machine_params.gain', 'Pickup')!
+    expect(formatSpecValue(0, gain)).toBe('-INF')
+    expect(formatSpecValue(127, gain)).toBe('11.90')
+  })
+
   it('shows AMP HOLD as a time, ending at INF', () => {
     const hold = fieldSpec('hold')!
     expect(formatSpecValue(0, hold)).toBe('0.007')

@@ -14,7 +14,7 @@
  * the device-made projects measure.
  */
 
-import { AMP_HOLD, RETRIG_COUNT, RETRIG_TIME } from './otValueTables';
+import { AMP_HOLD, RETRIG_COUNT, RETRIG_TIME, PICKUP_GAIN } from './otValueTables';
 import { getFxMainLabels } from './fxLabels';
 
 export type Widget =
@@ -181,8 +181,8 @@ const SRC: Record<MachineType, Record<string, FieldSpec>> = {
     // the Static block - so these come from the lists the device offers.
     'machine_params.dir': SELECT(2, PICKUP_DIRECTIONS),
     'machine_params.len': SELECT(1, PICKUP_LENGTHS),
-    // GAIN runs the whole byte, from silence at the bottom to about +12 dB
-    'machine_params.gain': U(0, 127, 64),
+    // GAIN reads in dB, from silence at the bottom to about +12 at the top
+    'machine_params.gain': { min: 0, max: 127, default: 64, widget: 'unipolar', table: PICKUP_GAIN },
     'machine_params.op': SELECT(1, PICKUP_BEHAVIOURS),
     // Timestretch cannot be turned off here, so this one starts at 1 - exactly the
     // floor the device-made project measured

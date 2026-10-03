@@ -46,12 +46,28 @@ describe('PositionBar', () => {
 })
 
 describe('WaveGlyph', () => {
+  const pathOf = (wave: string) =>
+    render(<WaveGlyph wave={wave} />).container.querySelector('path')!.getAttribute('d')!
+
   it('draws the shapes taken from the hardware', () => {
     // A triangle peaks in the middle, its inverse troughs there
-    const tri = render(<WaveGlyph wave="TRI" />).container.querySelector('path')!
-    const itri = render(<WaveGlyph wave="ITRI" />).container.querySelector('path')!
-    expect(tri.getAttribute('d')).toContain('L8 1')
-    expect(itri.getAttribute('d')).toContain('L8 11')
+    expect(pathOf('TRI')).toContain('L8 1')
+    expect(pathOf('ITRI')).toContain('L8 11')
+  })
+
+  it('keeps SAW a plain line and RMP a ramp that resets', () => {
+    // The device draws these differently, so they must not be the same glyph
+    expect(pathOf('SAW')).toBe('M1 11 L15 1')
+    expect(pathOf('RMP')).not.toBe(pathOf('SAW'))
+    // The ramp returns to where it began, which the plain line never does
+    expect(pathOf('RMP')).toContain('L9 11')
+  })
+
+  it('mirrors each waveform against its inverse', () => {
+    for (const [up, down] of [['SAW', 'ISAW'], ['TRI', 'ITRI'], ['SQR', 'ISQR'],
+      ['EXP', 'IEXP'], ['RMP', 'IRMP']]) {
+      expect(pathOf(up), `${up} vs ${down}`).not.toBe(pathOf(down))
+    }
   })
 
   it('draws every basic waveform the device offers', () => {
