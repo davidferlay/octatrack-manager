@@ -202,10 +202,37 @@ describe('MIDI tracks', () => {
     expect(midi.options).toHaveLength(30)
     expect(midi.options![0].label).toBe('Note Note')
     expect(midi.options![6]).toEqual({ value: 12, label: 'Arp Transpose' })
-    expect(audio.options![0].label).toBe('P1 P01')
+    expect(audio.options![0].label).toBe('SRC P01')
     expect(midi.options).not.toEqual(audio.options)
     // Same reordering as the audio list: the second group stores above the third
     expect(midi.options![12]).toEqual({ value: 6, label: 'LFO 1 Speed' })
+  })
+
+  it('names an LFO target after the machine the track actually runs', () => {
+    // The device shows the parameter page and the parameter: SRC STRT on a Flex track
+    const flex = fieldSpec('lfo1_pmtr', 'Flex')!
+    expect(flex.options![1].label).toBe('SRC STRT')
+    const thru = fieldSpec('lfo1_pmtr', 'Thru')!
+    expect(thru.options![1].label).toBe('SRC VOL')
+    expect(thru.options![0].label).toBe('SRC INAB')
+    // Both still store the same value for that position
+    expect(flex.options![1].value).toBe(thru.options![1].value)
+  })
+
+  it('names an effect target after that effect\'s own parameter', () => {
+    // 20 is the plate reverb, whose third main parameter is GATE
+    const spec = fieldSpec('lfo1_pmtr', 'Flex', { fx1Type: 20, fx2Type: 8 })!
+    const byValue = (v: number) => spec.options!.find(o => o.value === v)!.label
+    expect(byValue(18)).toBe('FX1 TIME')
+    expect(byValue(20)).toBe('FX1 GATE')
+    // 8 is the delay, whose first parameter is also TIME
+    expect(byValue(24)).toBe('FX2 TIME')
+    expect(byValue(27)).toBe('FX2 BASE')
+  })
+
+  it('falls back to numbered effect parameters when the effect is unknown', () => {
+    const spec = fieldSpec('lfo1_pmtr', 'Flex')!
+    expect(spec.options!.find(o => o.value === 18)!.label).toBe('FX1 P01')
   })
 
   it('treats the extra notes and the transpose as offsets', () => {
@@ -332,6 +359,58 @@ describe('clamping', () => {
   })
 })
 
+describe('values the device does not show as plain numbers', () => {
+  const flex = (f: string) => fieldSpec(`machine_params.${f}`, 'Flex')!
+
+  it('counts LEN from one, as the device does', () => {
+    expect(formatSpecValue(0, flex('len'))).toBe('1')
+    expect(formatSpecValue(127, flex('len'))).toBe('128')
+  })
+
+  it('reads RATE either side of its centre, where it stops', () => {
+    expect(formatSpecValue(0, flex('rate'))).toBe('-64')
+    expect(formatSpecValue(64, flex('rate'))).toBe('0')
+    expect(formatSpecValue(127, flex('rate'))).toBe('63')
+  })
+
+  it('counts retrigs and ends at INF', () => {
+    expect(formatSpecValue(0, flex('rtrg'))).toBe('1')
+    expect(formatSpecValue(126, flex('rtrg'))).toBe('127')
+    expect(formatSpecValue(127, flex('rtrg'))).toBe('INF')
+  })
+
+  it('shows the retrig time as the device writes it, decimal or division', () => {
+    expect(formatSpecValue(0, flex('rtim'))).toBe('0.005')
+    expect(formatSpecValue(7, flex('rtim'))).toBe('1/128')
+    expect(formatSpecValue(127, flex('rtim'))).toBe('8.000')
+  })
+
+  it('leaves a retrig time the device never produces as its number', () => {
+    // The encoder steps over these nine values
+    expect(formatSpecValue(1, flex('rtim'))).toBe('1')
+  })
+
+  it('shows AMP HOLD as a time, ending at INF', () => {
+    const hold = fieldSpec('hold')!
+    expect(formatSpecValue(0, hold)).toBe('0.007')
+    expect(formatSpecValue(126, hold)).toBe('128.0')
+    expect(formatSpecValue(127, hold)).toBe('INF')
+  })
+
+  it('reads AMP VOL either side of its centre', () => {
+    const vol = fieldSpec('vol')!
+    expect(formatSpecValue(0, vol)).toBe('-64')
+    expect(formatSpecValue(64, vol)).toBe('0')
+    expect(formatSpecValue(127, vol)).toBe('63')
+  })
+
+  it('still shows the parameters that really are plain numbers', () => {
+    expect(formatSpecValue(127, fieldSpec('atk')!)).toBe('127')
+    expect(formatSpecValue(126, fieldSpec('rel')!)).toBe('126')
+    expect(formatSpecValue(127, flex('strt'))).toBe('127')
+  })
+})
+
 describe('how a value reads', () => {
   it('shows PTCH in semitones, five steps to the semitone', () => {
     const ptch = fieldSpec('machine_params.ptch', 'Flex')!
@@ -393,10 +472,10 @@ describe('how a value reads', () => {
     const spec = fieldSpec('lfo1_pmtr')!
     expect(spec.options).toHaveLength(30)
     // The AMP targets come before the LFO ones in the list, but store higher values
-    expect(spec.options![6]).toEqual({ value: 12, label: 'Amp Attack' })
-    expect(spec.options![12]).toEqual({ value: 6, label: 'LFO 1 Speed' })
-    expect(formatSpecValue(17, spec)).toBe('Amp XVol')
-    expect(formatSpecValue(9, spec)).toBe('LFO 1 Depth')
+    expect(spec.options![6]).toEqual({ value: 12, label: 'AMP ATK' })
+    expect(spec.options![12]).toEqual({ value: 6, label: 'LFO1 SPD' })
+    expect(formatSpecValue(17, spec)).toBe('AMP XVOL')
+    expect(formatSpecValue(9, spec)).toBe('LFO1 DEP')
     // Every raw value 0-29 is reachable exactly once
     expect([...new Set(spec.options!.map(o => o.value))].sort((a, b) => a - b))
       .toEqual(Array.from({ length: 30 }, (_, i) => i))

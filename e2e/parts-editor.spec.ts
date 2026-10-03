@@ -673,9 +673,10 @@ test.describe('Parts Editor - Track and Cue volume', () => {
     const levels = page.locator('.parts-track-levels').first()
     await expect(levels.locator('.parts-level', { hasText: 'TRK' }).locator('input')).toHaveValue('100')
     await expect(levels.locator('.parts-level', { hasText: 'CUE' }).locator('input')).toHaveValue('40')
-    // AMP's own VOL is a different control in the parameter grid
+    // AMP's own VOL is a different control in the parameter grid, and reads either
+    // side of its centre as the device shows it - the fixture's 100 is 36 above it
     const main = page.locator('.parts-params-section', { hasText: 'MAIN' }).first()
-    await expect(main.locator('.param-item', { hasText: 'VOL' }).locator('input')).toHaveValue('100')
+    await expect(main.locator('.param-item', { hasText: 'VOL' }).locator('input')).toHaveValue('36')
   })
 
   test('the levels show on the ALL page as well as AMP', async ({ page }) => {
@@ -809,15 +810,38 @@ test.describe('Parts Editor - Field ranges and widgets', () => {
     expect(calls[calls.length - 1].args.partsData[0].machines[0].machine_params.ptch).toBe(4)
   })
 
+  test('a setting with a list shows where in that list it sits', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'AMP' }).click()
+    const amp = page.locator('.param-item')
+      .filter({ has: page.locator('.param-label', { hasText: /^AMP$/ }) }).first()
+    await expect(amp.locator('.param-position-bar')).toBeVisible()
+
+    const markerLeft = async () => amp.locator('.param-position-marker')
+      .evaluate(el => parseFloat((el as HTMLElement).style.left))
+    const atFirst = await markerLeft()
+    await amp.locator('select.param-select').selectOption('3')
+    expect(await markerLeft()).toBeGreaterThan(atFirst)
+  })
+
+  test('the LFO waveform is drawn, not only named', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'LFO' }).click()
+    const wave = page.locator('.param-item')
+      .filter({ has: page.locator('.param-label', { hasText: /^WAVE$/ }) }).first()
+    await expect(wave.locator('svg.param-wave-glyph')).toBeVisible()
+    // The designer slots have no fixed shape, so they draw none
+    await wave.locator('select.param-select').selectOption('11') // T1
+    await expect(wave.locator('svg.param-wave-glyph')).toHaveCount(0)
+  })
+
   test('the LFO target list keeps the device order while storing its own values', async ({ page }) => {
     await page.locator('.parts-page-tabs .parts-tab', { hasText: 'LFO' }).click()
     const pmtr = paramSelect(page, 'PMTR')
     // The AMP targets are listed before the LFO ones
-    await expect(pmtr.locator('option').nth(6)).toHaveText('Amp Attack')
-    await expect(pmtr.locator('option').nth(12)).toHaveText('LFO 1 Speed')
+    await expect(pmtr.locator('option').nth(6)).toHaveText('AMP ATK')
+    await expect(pmtr.locator('option').nth(12)).toHaveText('LFO1 SPD')
 
-    // Picking "LFO 1 Speed" must store 6, not its position in the list
-    await pmtr.selectOption({ label: 'LFO 1 Speed' })
+    // Picking the LFO 1 speed target must store 6, not its position in the list
+    await pmtr.selectOption({ label: 'LFO1 SPD' })
     await expect
       .poll(async () => (await getInvokeCalls(page, 'save_parts')).length)
       .toBeGreaterThan(0)

@@ -1212,3 +1212,48 @@
   cursor: default;
   opacity: 0.75;
 }
+
+/* A setting with a fixed list of values: the device shows where you are in that list
+   above the value itself, so the control stacks the indicator over the selector. */
+.parts-track .param-list-control,
+.parts-individual-section .param-list-control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  margin-top: 4px;
+}
+
+.parts-track .param-position-bar,
+.parts-individual-section .param-position-bar {
+  position: relative;
+  width: 38px;
+  height: 5px;
+  background: #2a2a2a;
+  border: 1px solid #555;
+  border-radius: 2px;
+  box-sizing: border-box;
+}
+
+.parts-track .param-position-marker,
+.parts-individual-section .param-position-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--elektron-orange);
+  border-radius: 1px;
+}
+
+/* The LFO waveform, drawn rather than only named - as the device draws it. */
+.parts-track .param-wave-glyph,
+.parts-individual-section .param-wave-glyph {
+  width: 30px;
+  height: 14px;
+  color: var(--elektron-text-primary);
+}
+
+/* The selector sits under the indicator, so it no longer needs its own top gap */
+.parts-track .param-list-control .param-select,
+.parts-individual-section .param-list-control .param-select {
+  margin-top: 0;
+}

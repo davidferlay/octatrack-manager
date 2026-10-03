@@ -6,6 +6,8 @@ import { ALL_MIDI_TRACKS } from './TrackSelector';
 import { WriteStatus, writeStatus } from '../types/writeStatus';
 import { RotaryKnob } from './RotaryKnob';
 import { fieldSpec, clampToSpec, formatSpecValue, parseSpecValue } from '../utils/partFieldSpecs';
+import { PositionBar, WaveGlyph } from './ParamWidgets';
+import { formatFxType, getFxMainLabels, getFxSetupLabels } from '../utils/fxLabels';
 import { SlotPickerModal } from './SlotPickerModal';
 import './PartsPanel.css';
 
@@ -508,10 +510,14 @@ export default function PartsPanel({
     // SETUP LEN is named after the SLIC setting next to it, so that one field needs
     // to see its neighbour's value. Read from state rather than threaded through all
     // the call sites, which only ever pass values from this same part.
-    const slicContext = field === 'machine_setup.len'
+    // SETUP LEN is named after the SLIC setting next to it, and an LFO target is
+    // named after the machine and the effects the track actually runs
+    const part = partsData.find(p => p.part_id === partId);
+    const slicContext = field === 'machine_setup.len' || /^lfo[123]_pmtr$/.test(field)
       ? {
-          slic: partsData.find(p => p.part_id === partId)
-            ?.machines[trackId]?.machine_setup?.slic,
+          slic: part?.machines[trackId]?.machine_setup?.slic,
+          fx1Type: part?.fxs[trackId]?.fx1_type,
+          fx2Type: part?.fxs[trackId]?.fx2_type,
         }
       : undefined;
     // A MIDI track's fields are named per page - NOTE and ARP both have a LEN, and
@@ -534,20 +540,27 @@ export default function PartsPanel({
       updatePartParam(partId, section, trackId, field, clampToSpec(raw, spec));
     };
 
-    const control = spec.widget === 'toggle' || spec.widget === 'selector' ? (
-      <select
-        className="param-select"
-        value={displayValue}
-        disabled={!isEditMode}
-        onChange={e => commit(parseInt(e.target.value, 10))}
-      >
-        {(spec.options
-          ?? Array.from({ length: spec.max - spec.min + 1 }, (_, i) =>
-            ({ value: spec.min + i, label: String(spec.min + i) }))
-        ).map(o => (
-          <option key={o.value} value={o.value}>{o.label}</option>
-        ))}
-      </select>
+    const isList = spec.widget === 'toggle' || spec.widget === 'selector';
+    const choices = spec.options
+      ?? Array.from({ length: spec.max - spec.min + 1 }, (_, i) =>
+        ({ value: spec.min + i, label: String(spec.min + i) }));
+    const control = isList ? (
+      // The device shows where you are in the list above the value, and draws the
+      // LFO waveform rather than naming it - the name is kept here as well
+      <div className="param-list-control">
+        <PositionBar count={choices.length} index={choices.findIndex(o => o.value === displayValue)} />
+        {field.endsWith('_wave') && <WaveGlyph wave={formatSpecValue(displayValue, spec)} />}
+        <select
+          className="param-select"
+          value={displayValue}
+          disabled={!isEditMode}
+          onChange={e => commit(parseInt(e.target.value, 10))}
+        >
+          {choices.map(o => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+      </div>
     ) : (
       <RotaryKnob
         value={displayValue}
@@ -609,80 +622,6 @@ export default function PartsPanel({
       case 3: return 'TTRG'; // Envelope starts from current level on sample/trigless trig
       default: return value.toString();
     }
-  };
-
-  const formatFxType = (value: number): string => {
-    // FX effect types for Octatrack (from ot-tools-io documentation)
-    const fxTypes: { [key: number]: string } = {
-      0: 'OFF',
-      4: 'FILTER',
-      5: 'SPATIALIZER',
-      8: 'DELAY',
-      12: 'EQ',
-      13: 'DJ EQ',
-      16: 'PHASER',
-      17: 'FLANGER',
-      18: 'CHORUS',
-      19: 'COMB FILTER',
-      20: 'PLATE REVERB',
-      21: 'SPRING REVERB',
-      22: 'DARK REVERB',
-      24: 'COMPRESSOR',
-      28: 'LO-FI', // B.11 LO-FI COLLECTION
-    };
-    return fxTypes[value] || `FX ${value}`;
-  };
-
-  /**
-   * The six MAIN parameter labels of an effect, by position.
-   *
-   * Position matters: the label at index n names parameter n+1, so an effect whose
-   * page leaves a knob empty needs an empty entry there rather than a shorter list.
-   * Compacting them would point every later knob at the wrong parameter. Each layout
-   * is the one the manual's Appendix B shows.
-   */
-  const getFxMainLabels = (fxType: number): string[] => {
-    const mainMappings: { [key: number]: string[] } = {
-      0: ['', '', '', '', '', ''], // OFF - no params
-      4: ['BASE', 'WDTH', 'Q', 'DPTH', 'ATK', 'DEC'], // FILTER
-      5: ['INP', 'DPTH', 'WDTH', 'HP', 'LP', 'SEND'], // SPATIALIZER
-      8: ['TIME', 'FB', 'VOL', 'BASE', 'WDTH', 'SEND'], // DELAY
-      12: ['FRQ1', 'GN1', 'Q1', 'FRQ2', 'GN2', 'Q2'], // EQ
-      13: ['LS F', '', 'HS F', 'LOWG', 'MIDG', 'HI G'], // DJ EQ (B.4: a gap at slot 2)
-      16: ['CNTR', 'DEP', 'SPD', 'FB', 'WID', 'MIX'], // PHASER
-      17: ['DEL', 'DEP', 'SPD', 'FB', 'WID', 'MIX'], // FLANGER
-      18: ['DEL', 'DEP', 'SPD', 'FB', 'WID', 'MIX'], // CHORUS
-      19: ['PTCH', 'TUNE', 'LP', 'FB', '', 'MIX'], // COMB FILTER (B.9: a gap before MIX)
-      20: ['TIME', 'DAMP', 'GATE', 'HP', 'LP', 'MIX'], // PLATE REVERB
-      21: ['TIME', '', '', 'HP', 'LP', 'MIX'], // SPRING REVERB (B.14: TIME alone on the first row)
-      22: ['TIME', 'SHVG', 'SHVF', 'HP', 'LP', 'MIX'], // DARK REVERB
-      24: ['ATK', 'REL', 'THRS', 'RAT', 'GAIN', 'MIX'], // COMPRESSOR
-      28: ['DIST', '', 'AMF', 'SRR', 'BRR', 'AMD'], // LO-FI COLLECTION (B.11: a gap at slot 2)
-    };
-    return mainMappings[fxType] || ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'];
-  };
-
-  const getFxSetupLabels = (fxType: number): string[] => {
-    // Returns array of 6 SETUP parameter labels for given FX type
-    // Reference: Octatrack User Manual Appendix B (pages 122-136)
-    const setupMappings: { [key: number]: string[] } = {
-      0: ['', '', '', '', '', ''], // B.1 NONE - no setup params
-      4: ['HP', 'LP', 'ENV', 'HOLD', 'Q', 'DIST'], // B.2 12/24DB MULTI MODE FILTER
-      5: ['', 'PHSE', '', 'M/S', 'MG', 'SG'], // B.8 SPATIALIZER
-      8: ['X', 'TAPE', 'DIR', 'SYNC', 'LOCK', 'PASS'], // B.12 ECHO FREEZE DELAY
-      12: ['TYP1', '', '', 'TYP2', '', ''], // B.3 2-BAND PARAMETRIC EQ
-      13: ['', '', '', '', '', ''], // B.4 DJ STYLE KILL EQ - no setup params
-      16: ['', 'NUM', '', '', '', ''], // B.5 2-10 STAGE PHASER
-      17: ['', '', '', '', '', ''], // B.6 FLANGER - no setup params
-      18: ['TAPS', '', '', 'FBLP', '', ''], // B.7 2-10 TAP CHORUS
-      19: ['', '', '', '', '', ''], // B.9 COMB FILTER - no setup params
-      20: ['GVOL', 'BAL', 'MONO', '', '', 'MIXF'], // B.13 GATEBOX PLATE REVERB
-      21: ['TYPE', 'BAL', '', '', '', ''], // B.14 SPRING REVERB
-      22: ['PRE', 'BAL', 'MONO', '', '', 'MIXF'], // B.15 DARK REVERB
-      24: ['RMS', '', '', '', '', ''], // B.10 DYNAMIX COMPRESSOR
-      28: ['', '', 'AMPH', '', '', ''], // B.11 LO-FI COLLECTION
-    };
-    return setupMappings[fxType] || ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'];
   };
 
   /**
@@ -1351,7 +1290,7 @@ export default function PartsPanel({
             <div className={isGridMode ? "params-vertical-layout" : "parts-params-section"}>
               <div className={isGridMode ? "params-subsection" : ""}>
                 <div className="params-grid">
-                  {renderParamWithKnob(activePart.part_id, 'lfos', lfo.track_id, fieldNames.pmtr, lfoParams.pmtr, 'PMTR')}
+                  {renderParamWithKnob(activePart.part_id, 'lfos', lfo.track_id, fieldNames.pmtr, lfoParams.pmtr, 'PMTR', undefined, undefined, machineType)}
                   {renderParamWithKnob(activePart.part_id, 'lfos', lfo.track_id, fieldNames.wave, lfoParams.wave, 'WAVE')}
                   {renderParamWithKnob(activePart.part_id, 'lfos', lfo.track_id, fieldNames.mult, lfoParams.mult, 'MULT')}
                   {renderParamWithKnob(activePart.part_id, 'lfos', lfo.track_id, fieldNames.trig, lfoParams.trig, 'TRIG')}
@@ -2206,7 +2145,7 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo1_pmtr', lfo.lfo1_pmtr, 'PMTR')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo1_pmtr', lfo.lfo1_pmtr, 'PMTR', undefined, undefined, activePart.machines[trackIdx]?.machine_type)}
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo1_wave', lfo.lfo1_wave, 'WAVE')}
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo1_mult', lfo.lfo1_mult, 'MULT')}
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo1_trig', lfo.lfo1_trig, 'TRIG')}
@@ -2230,7 +2169,7 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo2_pmtr', lfo.lfo2_pmtr, 'PMTR')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo2_pmtr', lfo.lfo2_pmtr, 'PMTR', undefined, undefined, activePart.machines[trackIdx]?.machine_type)}
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo2_wave', lfo.lfo2_wave, 'WAVE')}
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo2_mult', lfo.lfo2_mult, 'MULT')}
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo2_trig', lfo.lfo2_trig, 'TRIG')}
@@ -2257,7 +2196,7 @@ export default function PartsPanel({
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
                       <div className="params-grid">
-                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo3_pmtr', lfo.lfo3_pmtr, 'PMTR')}
+                        {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo3_pmtr', lfo.lfo3_pmtr, 'PMTR', undefined, undefined, activePart.machines[trackIdx]?.machine_type)}
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo3_wave', lfo.lfo3_wave, 'WAVE')}
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo3_mult', lfo.lfo3_mult, 'MULT')}
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo3_trig', lfo.lfo3_trig, 'TRIG')}

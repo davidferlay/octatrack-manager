@@ -14,6 +14,9 @@
  * the device-made projects measure.
  */
 
+import { AMP_HOLD, RETRIG_COUNT, RETRIG_TIME } from './otValueTables';
+import { getFxMainLabels } from './fxLabels';
+
 export type Widget =
   /** 0..max, rising from the left - the usual knob. */
   | 'unipolar'
@@ -40,7 +43,12 @@ export interface FieldSpec {
    */
   options?: { value: number; label: string }[];
   /** How the number reads to a human, where it is not just the number. */
-  display?: 'semitones' | 'offset' | 'note' | 'times';
+  display?: 'semitones' | 'offset' | 'note' | 'times' | 'plusOne';
+  /**
+   * The exact string the device shows for each stored value, where the parameter is
+   * not a plain scale - a time, a note division, a word at one end.
+   */
+  table?: readonly string[] | Readonly<Record<number, string>>;
   /**
    * Set when the device's own ceiling has not been established and the spec falls
    * back to the byte's own limit. The floor is still the measured one.
@@ -139,10 +147,16 @@ const SRC: Record<MachineType, Record<string, FieldSpec>> = {
   Static: {
     'machine_params.ptch': PTCH,
     'machine_params.strt': U(0, 127, 0),
-    'machine_params.len': U(0, 127, 0),
-    'machine_params.rate': U(0, 127, 127),
-    'machine_params.rtrg': U(0, 127, 0),
-    'machine_params.rtim': U(0, 127, 79),
+    // LEN counts from one, so the byte reads one higher than it is stored
+    'machine_params.len': { min: 0, max: 127, default: 0, widget: 'unipolar', display: 'plusOne' },
+    // RATE runs backwards below its centre, where 0 is not playing at all
+    'machine_params.rate': {
+      min: 0, max: 127, default: 127, widget: 'bipolar', center: 64, display: 'offset',
+    },
+    // RTRG counts retrigs and ends at INF
+    'machine_params.rtrg': { min: 0, max: 127, default: 0, widget: 'unipolar', table: RETRIG_COUNT },
+    // RTIM is a time, written as a decimal or a note division depending where it sits
+    'machine_params.rtim': { min: 0, max: 127, default: 79, widget: 'unipolar', table: RETRIG_TIME },
     'machine_setup.xloop': SELECT(1, LOOP_MODES),
     'machine_setup.slic': TOGGLE(0, ['OFF', 'ON']),
     // Reads OFF/TIME or SLIC/TIME depending on SLIC - resolved in fieldSpec
@@ -319,9 +333,9 @@ for (const [section, numbers] of [
 /** AMP, LFO and the other pages, which every audio machine shares. */
 const SHARED: Record<string, FieldSpec> = {
   'atk': U(0, 127, 0),
-  'hold': U(0, 127, 127),
+  'hold': { min: 0, max: 127, default: 127, widget: 'unipolar', table: AMP_HOLD },
   'rel': U(0, 127, 127),
-  'vol': U(0, 127, 64),
+  'vol': { min: 0, max: 127, default: 64, widget: 'bipolar', center: 64, display: 'offset' },
   // Reads -64 to +63 around its centre
   'bal': { min: 0, max: 127, default: 64, widget: 'bipolar', center: 64, display: 'offset' },
 
@@ -370,24 +384,66 @@ export function isDeviceField(field: string): boolean {
  * parameters cannot be locked at all (manual A.5), but its names are here anyway for
  * anywhere else they are shown.
  */
-export function machineParamLabels(machineType?: string): (string | null)[] {
+export function machineParamLabels(machineType?: string, short = false): (string | null)[] {
+  const pick = (pairs: ([string, string] | null)[]) =>
+    pairs.map(p => (p === null ? null : short ? p[0] : `${p[0]} (${p[1]})`));
   switch (machineType) {
     case 'Static':
     case 'Flex':
-      return ['PTCH (Pitch)', 'STRT (Start)', 'LEN (Length)', 'RATE (Rate)',
-        'RTRG (Retrigs)', 'RTIM (Retrig Time)'];
+      return pick([['PTCH', 'Pitch'], ['STRT', 'Start'], ['LEN', 'Length'],
+        ['RATE', 'Rate'], ['RTRG', 'Retrigs'], ['RTIM', 'Retrig Time']]);
     case 'Thru':
-      return ['INAB (Input AB)', 'VOL (Volume AB)', null,
-        'INCD (Input CD)', 'VOL (Volume CD)', null];
+      return pick([['INAB', 'Input AB'], ['VOL', 'Volume AB'], null,
+        ['INCD', 'Input CD'], ['VOL', 'Volume CD'], null]);
     case 'Neighbor':
       return [null, null, null, null, null, null];
     case 'Pickup':
-      return ['PTCH (Pitch)', 'DIR (Direction)', 'LEN (Length)', null,
-        'GAIN (Gain)', 'OP (Recording behaviour)'];
+      return pick([['PTCH', 'Pitch'], ['DIR', 'Direction'], ['LEN', 'Length'], null,
+        ['GAIN', 'Gain'], ['OP', 'Recording behaviour']]);
     default:
       // An unknown machine still shows its locks rather than hiding them
       return ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'];
   }
+}
+
+/**
+ * What an LFO can modulate, named the way the device names it: the parameter page it
+ * belongs to, then the parameter itself.
+ *
+ * The first six depend on the machine the track runs - an LFO pointed at the second
+ * SRC parameter modulates STRT on a Flex machine and the AB volume on a Thru one - so
+ * the list is built for the track rather than being fixed.
+ *
+ * The picker order is not the storage order: the AMP targets are listed before the
+ * LFO ones but stored above them, so each entry carries the value it writes.
+ */
+export function lfoTargetOptions(
+  machineType?: string,
+  fx1Type?: number,
+  fx2Type?: number,
+): { value: number; label: string }[] {
+  // An effect target names that effect's own parameter - the device shows the effect
+  // and the parameter, so "MIX" on a plate reverb rather than a slot number
+  const fxNames = (slot: 'FX1' | 'FX2', type?: number) =>
+    [0, 1, 2, 3, 4, 5].map(i => {
+      const name = type === undefined ? null : getFxMainLabels(type)[i];
+      return `${slot} ${name || `P0${i + 1}`}`;
+    });
+  // A track whose machine is not known yet falls back to numbered parameters rather
+  // than borrowing another machine's names
+  const known = ['Static', 'Flex', 'Thru', 'Neighbor', 'Pickup'].includes(machineType ?? '');
+  const src = known ? machineParamLabels(machineType, true) : [];
+  return [
+    ...[0, 1, 2, 3, 4, 5].map(i => ({
+      value: i, label: `SRC ${src[i] ?? `P0${i + 1}`}`,
+    })),
+    ...['ATK', 'HOLD', 'REL', 'VOL', 'BAL', 'XVOL']
+      .map((name, i) => ({ value: 12 + i, label: `AMP ${name}` })),
+    ...[1, 2, 3].map((n, i) => ({ value: 6 + i, label: `LFO${n} SPD` })),
+    ...[1, 2, 3].map((n, i) => ({ value: 9 + i, label: `LFO${n} DEP` })),
+    ...fxNames('FX1', fx1Type).map((label, i) => ({ value: 18 + i, label })),
+    ...fxNames('FX2', fx2Type).map((label, i) => ({ value: 24 + i, label })),
+  ];
 }
 
 /**
@@ -401,11 +457,15 @@ export function machineParamLabels(machineType?: string): (string | null)[] {
 export function fieldSpec(
   field: string,
   machineType?: string,
-  ctx?: { slic?: number | null },
+  ctx?: { slic?: number | null; fx1Type?: number; fx2Type?: number },
 ): FieldSpec | null {
   if (!isDeviceField(field)) return null;
   const midi = MIDI[field] ?? RECORDER[field];
   if (midi) return midi;
+  // An LFO's target names the parameters of the machine the track runs
+  if (/^lfo[123]_pmtr$/.test(field)) {
+    return { ...TARGET, options: lfoTargetOptions(machineType, ctx?.fx1Type, ctx?.fx2Type) };
+  }
   if (field.startsWith('machine_')) {
     // SRC fields are enumerated per machine, so a miss here really is absent
     const machine = SRC[machineType as MachineType];
@@ -436,6 +496,8 @@ export function clampToSpec(value: number, spec: FieldSpec): number {
 export function formatSpecValue(value: number, spec: FieldSpec): string {
   const option = spec.options?.find(o => o.value === value);
   if (option) return option.label;
+  const tabled = spec.table?.[value as keyof typeof spec.table];
+  if (typeof tabled === 'string') return tabled;
   // Pitch is stored five steps to the semitone, and reads in semitones
   if (spec.display === 'semitones' && spec.center !== undefined) {
     return ((value - spec.center) / 5).toFixed(1);
@@ -445,6 +507,9 @@ export function formatSpecValue(value: number, spec: FieldSpec): string {
   }
   if (spec.display === 'note') return noteName(value);
   if (spec.display === 'times') return `x${value + 1}`;
+  if (spec.display === 'plusOne') return String(value + 1);
+  const fromTable = spec.table?.[value as keyof typeof spec.table];
+  if (typeof fromTable === 'string') return fromTable;
   return String(value);
 }
 
