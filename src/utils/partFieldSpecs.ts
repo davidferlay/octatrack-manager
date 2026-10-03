@@ -325,6 +325,35 @@ export function isDeviceField(field: string): boolean {
 }
 
 /**
+ * What a track's six SRC parameters are called, by position, for the machine it runs.
+ *
+ * Used where a parameter is shown without the Parts editor's own layout around it -
+ * a step's parameter locks, for one. A machine that does not use a position gets null
+ * there, so nothing is drawn for a byte the device never sets. A Pickup machine's
+ * parameters cannot be locked at all (manual A.5), but its names are here anyway for
+ * anywhere else they are shown.
+ */
+export function machineParamLabels(machineType?: string): (string | null)[] {
+  switch (machineType) {
+    case 'Static':
+    case 'Flex':
+      return ['PTCH (Pitch)', 'STRT (Start)', 'LEN (Length)', 'RATE (Rate)',
+        'RTRG (Retrigs)', 'RTIM (Retrig Time)'];
+    case 'Thru':
+      return ['INAB (Input AB)', 'VOL (Volume AB)', null,
+        'INCD (Input CD)', 'VOL (Volume CD)', null];
+    case 'Neighbor':
+      return [null, null, null, null, null, null];
+    case 'Pickup':
+      return ['PTCH (Pitch)', 'DIR (Direction)', 'LEN (Length)', null,
+        'GAIN (Gain)', 'OP (Recording behaviour)'];
+    default:
+      // An unknown machine still shows its locks rather than hiding them
+      return ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'];
+  }
+}
+
+/**
  * Whatever is known about a field, or null when the device has no such control here.
  *
  * Null means "established absent": a machine that does not carry this parameter, or a

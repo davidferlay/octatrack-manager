@@ -8,6 +8,7 @@ import { PatternSelector, ALL_PATTERNS } from "../components/PatternSelector";
 import { SampleSlotsTable } from "../components/SampleSlotsTable";
 import PartsPanel from "../components/PartsPanel";
 import { formatChainAfter } from "../utils/chainAfter";
+import { machineParamLabels } from "../utils/partFieldSpecs";
 import ToolsPanel from "../components/ToolsPanel";
 import { OverwriteModal } from "../components/OverwriteModal";
 import { TransferProgressPanel } from "../components/TransferProgressPanel";
@@ -2096,25 +2097,34 @@ export function ProjectDetail() {
                                             : null;
                                         })()}
 
-                                        {/* Audio P-Locks: Machine Parameters */}
-                                        {selectedStep.audio_plocks?.machine?.param1 != null && <div className="param-item"><span>PTCH (Pitch):</span> {selectedStep.audio_plocks?.machine?.param1}</div>}
-                                        {selectedStep.audio_plocks?.machine?.param2 != null && (() => {
-                                          // In slice mode, STRT selects a slice: the 0-127 range always
-                                          // addresses the max 64 slices, 2 per slice, regardless of the
-                                          // sample's actual slice count (verified with 4/32/64-slice
-                                          // test patterns): slice = value / 2 + 1.
-                                          // ponytail: skipped when the step sample-locks another slot,
-                                          // whose slice mode we don't know here.
-                                          const strt = selectedStep.audio_plocks!.machine!.param2!;
-                                          const sliceMode = trackData.slice_count != null && selectedStep.sample_slot === null;
-                                          return sliceMode
-                                            ? <div className="param-item"><span>STRT (Slice):</span> {Math.floor(strt / 2) + 1}</div>
-                                            : <div className="param-item"><span>STRT (Start):</span> {strt}</div>;
+                                        {/* Audio P-Locks: Machine Parameters, named for the machine the
+                                            track runs - a Thru machine's first lock is an input, not a pitch */}
+                                        {(() => {
+                                          const machine = selectedStep.audio_plocks?.machine;
+                                          if (!machine) return null;
+                                          const labels = machineParamLabels(audioTrackMachineTypes[trackData.track_id]);
+                                          const values = [machine.param1, machine.param2, machine.param3,
+                                            machine.param4, machine.param5, machine.param6];
+                                          return values.map((value, index) => {
+                                            const label = labels[index];
+                                            if (value == null || !label) return null;
+                                            // In slice mode, STRT selects a slice: the 0-127 range always
+                                            // addresses the max 64 slices, 2 per slice, regardless of the
+                                            // sample's actual slice count (verified with 4/32/64-slice
+                                            // test patterns): slice = value / 2 + 1.
+                                            // ponytail: skipped when the step sample-locks another slot,
+                                            // whose slice mode we don't know here.
+                                            const isStrt = label.startsWith('STRT');
+                                            const sliceMode = isStrt && trackData.slice_count != null
+                                              && selectedStep.sample_slot === null;
+                                            return (
+                                              <div className="param-item" key={index}>
+                                                <span>{sliceMode ? 'STRT (Slice)' : label}:</span>{' '}
+                                                {sliceMode ? Math.floor(value / 2) + 1 : value}
+                                              </div>
+                                            );
+                                          });
                                         })()}
-                                        {selectedStep.audio_plocks?.machine?.param3 != null && <div className="param-item"><span>LEN (Length):</span> {selectedStep.audio_plocks?.machine?.param3}</div>}
-                                        {selectedStep.audio_plocks?.machine?.param4 != null && <div className="param-item"><span>RATE (Rate):</span> {selectedStep.audio_plocks?.machine?.param4}</div>}
-                                        {selectedStep.audio_plocks?.machine?.param5 != null && <div className="param-item"><span>RTRG (Retrigs):</span> {selectedStep.audio_plocks?.machine?.param5}</div>}
-                                        {selectedStep.audio_plocks?.machine?.param6 != null && <div className="param-item"><span>RTIM (Retrig Time):</span> {selectedStep.audio_plocks?.machine?.param6}</div>}
 
                                         {/* Audio P-Locks: LFO Parameters */}
                                         {selectedStep.audio_plocks?.lfo?.spd1 != null && <div className="param-item"><span>LFO1 Speed:</span> {selectedStep.audio_plocks?.lfo?.spd1}</div>}

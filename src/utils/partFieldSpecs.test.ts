@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fieldSpec, clampToSpec, formatSpecValue, parseSpecValue, isDeviceField, noteName } from './partFieldSpecs'
+import { fieldSpec, clampToSpec, formatSpecValue, parseSpecValue, isDeviceField, noteName, machineParamLabels } from './partFieldSpecs'
 
 /**
  * The numbers asserted here are what the device itself wrote: each preset project was
@@ -215,6 +215,44 @@ describe('MIDI tracks', () => {
       expect(formatSpecValue(64, spec)).toBe('0')
       expect(formatSpecValue(70, spec)).toBe('6')
     }
+  })
+})
+
+describe('what a machine calls its six SRC parameters', () => {
+  it('names a sample machine the way the SRC page does', () => {
+    expect(machineParamLabels('Flex')).toEqual(machineParamLabels('Static'))
+    expect(machineParamLabels('Flex')!.map(l => l?.split(' ')[0]))
+      .toEqual(['PTCH', 'STRT', 'LEN', 'RATE', 'RTRG', 'RTIM'])
+  })
+
+  it('names a Thru machine its inputs, not a pitch', () => {
+    const thru = machineParamLabels('Thru')
+    expect(thru[0]).toMatch(/^INAB/)
+    expect(thru[3]).toMatch(/^INCD/)
+    // The two slots the device leaves empty stay empty
+    expect(thru[2]).toBeNull()
+    expect(thru[5]).toBeNull()
+  })
+
+  it('gives a Neighbor machine no parameters at all', () => {
+    expect(machineParamLabels('Neighbor')).toEqual([null, null, null, null, null, null])
+  })
+
+  it('names a Pickup machine, skipping the slot it does not use', () => {
+    const pickup = machineParamLabels('Pickup')
+    expect(pickup.map(l => l?.split(' ')[0]))
+      .toEqual(['PTCH', 'DIR', 'LEN', undefined, 'GAIN', 'OP'])
+    expect(pickup[3]).toBeNull()
+  })
+
+  it('always answers with six positions, so a value cannot shift onto another name', () => {
+    for (const m of ['Static', 'Flex', 'Thru', 'Neighbor', 'Pickup', undefined, 'Nonsense']) {
+      expect(machineParamLabels(m), String(m)).toHaveLength(6)
+    }
+  })
+
+  it('still shows the locks of a machine it does not recognise', () => {
+    expect(machineParamLabels(undefined).every(l => l !== null)).toBe(true)
   })
 })
 
