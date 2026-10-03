@@ -686,6 +686,152 @@ test.describe('Parts Editor - Track and Cue volume', () => {
   })
 })
 
+test.describe('Parts Editor - Field ranges and widgets', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await openPartsTab(page)
+    await selectTrack(page, '0')
+    await enterEditMode(page)
+  })
+
+  /**
+   * The parameter labelled `label` on the current page. Matched on the label element
+   * rather than any descendant text: a selector's own options carry names too, and
+   * RATE lists "TSTR" among its choices.
+   */
+  const paramItem = (page: Page, label: string) =>
+    page.locator('.param-item')
+      .filter({ has: page.locator('.param-label', { hasText: new RegExp(`^${label}$`) }) })
+      .first()
+
+  const paramInput = (page: Page, label: string) =>
+    paramItem(page, label).locator('input.param-value')
+
+  const paramSelect = (page: Page, label: string) =>
+    paramItem(page, label).locator('select.param-select')
+
+  test('the AMP page offers the five parameters the device has, and no sixth', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'AMP' }).click()
+    for (const label of ['ATK', 'HOLD', 'REL', 'VOL', 'BAL']) {
+      await expect(page.locator('.param-label', { hasText: new RegExp(`^${label}$`) }).first())
+        .toBeVisible()
+    }
+    // The sixth byte is not a control on the hardware, so it is not drawn
+    await expect(page.locator('.param-label', { hasText: /^F$/ })).toHaveCount(0)
+  })
+
+  test('PTCH is typed in semitones and will not exceed an octave', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'SRC' }).click()
+    const ptch = paramInput(page, 'PTCH')
+    // The fixture's default of 64 is the centre, so it reads as no change
+    await expect(ptch).toHaveValue('0.0')
+
+    await ptch.fill('999')
+    await ptch.blur()
+    await expect(ptch).toHaveValue('12.0')
+    const calls = await getInvokeCalls(page, 'save_parts')
+    expect(calls[calls.length - 1].args.partsData[0].machines[0].machine_params.ptch).toBe(124)
+  })
+
+  test('PTCH will not go below an octave down either', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'SRC' }).click()
+    const ptch = paramInput(page, 'PTCH')
+    await ptch.fill('-999')
+    await ptch.blur()
+    await expect(ptch).toHaveValue('-12.0')
+    const calls = await getInvokeCalls(page, 'save_parts')
+    expect(calls[calls.length - 1].args.partsData[0].machines[0].machine_params.ptch).toBe(4)
+  })
+
+  test('a plain parameter still clamps to its own range', async ({ page }) => {
+    const atk = paramInput(page, 'ATK')
+    await atk.fill('500')
+    await atk.blur()
+    await expect(atk).toHaveValue('127')
+    const calls = await getInvokeCalls(page, 'save_parts')
+    expect(calls[calls.length - 1].args.partsData[0].amps[0].atk).toBe(127)
+  })
+
+  test('a setting with fixed values is a selector, not a free number', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'AMP' }).click()
+    const amp = paramSelect(page, 'AMP')
+    await expect(amp).toBeVisible()
+    // The four envelope behaviours the device offers, by name
+    await expect(amp.locator('option')).toHaveCount(4)
+    await expect(amp.locator('option')).toHaveText(['ANLG', 'RTRG', 'R+T', 'TTRG'])
+  })
+
+  test('choosing from a selector saves the value behind the name', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'AMP' }).click()
+    await paramSelect(page, 'AMP').selectOption('3')
+    await expect
+      .poll(async () => (await getInvokeCalls(page, 'save_parts')).length)
+      .toBeGreaterThan(0)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    expect(calls[calls.length - 1].args.partsData[0].amps[0].amp_setup_amp).toBe(3)
+  })
+
+  test('a two-state setting reads as its two names', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'SRC' }).click()
+    const slic = paramSelect(page, 'SLIC')
+    await expect(slic.locator('option')).toHaveText(['OFF', 'ON'])
+  })
+
+  test('the settings a sample machine has read by the names the device uses', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'SRC' }).click()
+    await expect(paramSelect(page, 'LOOP').locator('option'))
+      .toHaveText(['OFF', 'AUTO', 'ON', 'PIPO'])
+    await expect(paramSelect(page, 'TSTR').locator('option'))
+      .toHaveText(['OFF', 'AUTO', 'NORM', 'BEAT'])
+  })
+
+  test('typing a semitone value stores the byte the device stores', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'SRC' }).click()
+    const ptch = paramInput(page, 'PTCH')
+    await ptch.fill('-12')
+    await ptch.blur()
+    const calls = await getInvokeCalls(page, 'save_parts')
+    expect(calls[calls.length - 1].args.partsData[0].machines[0].machine_params.ptch).toBe(4)
+  })
+
+  test('the LFO target list keeps the device order while storing its own values', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'LFO' }).click()
+    const pmtr = paramSelect(page, 'PMTR')
+    // The AMP targets are listed before the LFO ones
+    await expect(pmtr.locator('option').nth(6)).toHaveText('Amp Attack')
+    await expect(pmtr.locator('option').nth(12)).toHaveText('LFO 1 Speed')
+
+    // Picking "LFO 1 Speed" must store 6, not its position in the list
+    await pmtr.selectOption({ label: 'LFO 1 Speed' })
+    await expect
+      .poll(async () => (await getInvokeCalls(page, 'save_parts')).length)
+      .toBeGreaterThan(0)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    expect(calls[calls.length - 1].args.partsData[0].lfos[0].lfo1_pmtr).toBe(6)
+  })
+
+  test('the LFO target list offers exactly the targets the device has', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'LFO' }).click()
+    // LFO 1 is the page's own default tab
+    const pmtr = paramSelect(page, 'PMTR')
+    await expect(pmtr.locator('option')).toHaveCount(30)
+  })
+
+  test('nothing in the editor can produce a value outside the range', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'SRC' }).click()
+    await paramInput(page, 'STRT').fill('9999')
+    await paramInput(page, 'STRT').blur()
+    const calls = await getInvokeCalls(page, 'save_parts')
+    const machine = calls[calls.length - 1].args.partsData[0].machines[0]
+    for (const [field, value] of Object.entries(machine.machine_params)) {
+      if (typeof value === 'number') {
+        expect(value, field).toBeGreaterThanOrEqual(0)
+        expect(value, field).toBeLessThanOrEqual(127)
+      }
+    }
+  })
+})
+
 test.describe('Parts Editor - Editing and saving', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)

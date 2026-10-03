@@ -46,7 +46,8 @@ interface AmpParams {
   rel: number | null;
   vol: number | null;
   bal: number | null;
-  f: number | null;
+  /** XVOL - the crossfader volume, which the device exposes only under a SCENE key. */
+  xvol: number | null;
 }
 
 interface AudioParameterLocks {
@@ -2124,7 +2125,7 @@ export function ProjectDetail() {
                                         {selectedStep.audio_plocks?.amp?.hold != null && <div className="param-item"><span>HOLD (Hold):</span> {selectedStep.audio_plocks?.amp?.hold}</div>}
                                         {selectedStep.audio_plocks?.amp?.rel != null && <div className="param-item"><span>REL (Release):</span> {selectedStep.audio_plocks?.amp?.rel}</div>}
                                                                                 {selectedStep.audio_plocks?.amp?.bal != null && <div className="param-item"><span>BAL (Balance):</span> {selectedStep.audio_plocks?.amp?.bal}</div>}
-                                        {selectedStep.audio_plocks?.amp?.f != null && <div className="param-item"><span>FILT (Filter):</span> {selectedStep.audio_plocks?.amp?.f}</div>}
+                                        {selectedStep.audio_plocks?.amp?.xvol != null && <div className="param-item"><span>XVOL (Crossfader volume):</span> {selectedStep.audio_plocks?.amp?.xvol}</div>}
 
 
                                         {/* MIDI track parameters */}

@@ -5,6 +5,11 @@ interface RotaryKnobProps {
   value: number;
   min?: number;
   max?: number;
+  /**
+   * Value the arc grows out of, for a parameter that means "either side of here".
+   * Left out, the arc fills from the minimum as a level does.
+   */
+  center?: number;
   size?: number;
   onChange?: (value: number) => void;
   onChangeEnd?: (value: number) => void; // Called on mouse release
@@ -15,6 +20,7 @@ export function RotaryKnob({
   value,
   min = 0,
   max = 127,
+  center: centerValue,
   size = 36,
   onChange,
   onChangeEnd,
@@ -182,13 +188,22 @@ export function RotaryKnob({
   const bgEndX = center + radius * Math.cos(toRad(startAngleDeg + totalArc));
   const bgEndY = center + radius * Math.sin(toRad(startAngleDeg + totalArc));
 
-  // Value arc path (from start to current value position)
+  // Value arc path. A bipolar knob grows its arc out of the centre in whichever
+  // direction the value sits, so "no change" reads as an empty ring rather than a
+  // half-full one; everything else fills from the minimum.
+  const originFraction = centerValue !== undefined
+    ? (centerValue - min) / (max - min)
+    : 0;
+  const originAngleDeg = startAngleDeg + originFraction * totalArc;
+  const originX = center + radius * Math.cos(toRad(originAngleDeg));
+  const originY = center + radius * Math.sin(toRad(originAngleDeg));
   const valueEndX = center + radius * Math.cos(toRad(handAngleDeg));
   const valueEndY = center + radius * Math.sin(toRad(handAngleDeg));
-  const valueArcDeg = normalizedValue * totalArc;
+  const valueArcDeg = Math.abs(normalizedValue - originFraction) * totalArc;
   const largeArcFlag = valueArcDeg > 180 ? 1 : 0;
-  const valuePath = normalizedValue > 0.001
-    ? `M ${bgStartX} ${bgStartY} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${valueEndX} ${valueEndY}`
+  const sweepFlag = normalizedValue >= originFraction ? 1 : 0;
+  const valuePath = Math.abs(normalizedValue - originFraction) > 0.001
+    ? `M ${originX} ${originY} A ${radius} ${radius} 0 ${largeArcFlag} ${sweepFlag} ${valueEndX} ${valueEndY}`
     : '';
 
   // Hand indicator - single line from center to circle edge

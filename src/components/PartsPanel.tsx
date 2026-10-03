@@ -5,6 +5,7 @@ import { TrackBadge } from './TrackBadge';
 import { ALL_MIDI_TRACKS } from './TrackSelector';
 import { WriteStatus, writeStatus } from '../types/writeStatus';
 import { RotaryKnob } from './RotaryKnob';
+import { fieldSpec, clampToSpec, formatSpecValue, parseSpecValue } from '../utils/partFieldSpecs';
 import { SlotPickerModal } from './SlotPickerModal';
 import './PartsPanel.css';
 
@@ -482,6 +483,17 @@ export default function PartsPanel({
   }, [projectPath, bankId, partNames, onWriteStatusChange, onSlotAssignmentSaved]);
 
   // Render param with rotary knob for All view
+  /**
+   * One Part parameter, drawn the way the device draws it.
+   *
+   * The widget, the range and the step all come from the field's spec rather than
+   * being a 0-127 rotary for everything: a two-state setting gets a toggle, a short
+   * list gets a selector, and a value that means "either side of centre" gets a knob
+   * whose arc grows out of the middle. Nothing here can produce a value the hardware
+   * would not - typing out of range lands on the edge instead.
+   *
+   * A field the device has no control for (the AMP page's sixth byte) draws nothing.
+   */
   const renderParamWithKnob = (
     partId: number,
     section: keyof PartData,
@@ -490,48 +502,93 @@ export default function PartsPanel({
     value: number | null,
     label: string,
     formatter?: (value: number) => string,
-    key?: string | number
+    key?: string | number,
+    machineType?: string
   ) => {
-    const displayValue = value ?? 0;
-    const formattedValue = formatter ? formatter(displayValue) : displayValue.toString();
+    // SETUP LEN is named after the SLIC setting next to it, so that one field needs
+    // to see its neighbour's value. Read from state rather than threaded through all
+    // the call sites, which only ever pass values from this same part.
+    const slicContext = field === 'machine_setup.len'
+      ? {
+          slic: partsData.find(p => p.part_id === partId)
+            ?.machines[trackId]?.machine_setup?.slic,
+        }
+      : undefined;
+    const spec = fieldSpec(field, machineType, slicContext);
+    if (!spec) return null;
+
+    const displayValue = value ?? spec.default;
+    const formattedValue = formatter
+      ? formatter(displayValue)
+      : formatSpecValue(displayValue, spec);
+
+    // updatePartParam debounces its own save and reads the latest state when it fires,
+    // so there is nothing to save here - doing it now would write the previous value.
+    const commit = (raw: number) => {
+      updatePartParam(partId, section, trackId, field, clampToSpec(raw, spec));
+    };
+
+    const control = spec.widget === 'toggle' || spec.widget === 'selector' ? (
+      <select
+        className="param-select"
+        value={displayValue}
+        disabled={!isEditMode}
+        onChange={e => commit(parseInt(e.target.value, 10))}
+      >
+        {(spec.options
+          ?? Array.from({ length: spec.max - spec.min + 1 }, (_, i) =>
+            ({ value: spec.min + i, label: String(spec.min + i) }))
+        ).map(o => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    ) : (
+      <RotaryKnob
+        value={displayValue}
+        min={spec.min}
+        max={spec.max}
+        center={spec.center}
+        size={38}
+        onChange={isEditMode ? (newValue) => {
+          updatePartParamLocal(partId, section, trackId, field, clampToSpec(newValue, spec));
+        } : undefined}
+        onChangeEnd={isEditMode ? () => {
+          savePart(partId);
+        } : undefined}
+        disabled={!isEditMode}
+      />
+    );
+
+    const editableText = isEditMode && !formatter && spec.widget !== 'toggle'
+      && spec.widget !== 'selector';
 
     return (
       <div className="param-item" key={key}>
         <span className="param-label">{label}</span>
-        <RotaryKnob
-          value={displayValue}
-          min={0}
-          max={127}
-          size={38}
-          onChange={isEditMode ? (newValue) => {
-            updatePartParamLocal(partId, section, trackId, field, newValue);
-          } : undefined}
-          onChangeEnd={isEditMode ? () => {
-            savePart(partId);
-          } : undefined}
-          disabled={!isEditMode}
-        />
-        <input
-          type="text"
-          className={`param-value ${isEditMode ? 'editable' : ''}`}
-          value={formattedValue}
-          onChange={(e) => {
-            if (!isEditMode || formatter) return; // Don't allow editing formatted values
-            const newValue = parseInt(e.target.value, 10);
-            if (!isNaN(newValue)) {
-              updatePartParam(partId, section, trackId, field, newValue);
-            }
-          }}
-          onBlur={() => {
-            if (isEditMode) {
-              savePart(partId);
-            }
-          }}
-          readOnly={!isEditMode || !!formatter}
-          tabIndex={isEditMode && !formatter ? 0 : -1}
-          min={0}
-          max={127}
-        />
+        {control}
+        {spec.widget !== 'toggle' && spec.widget !== 'selector' && (
+          <input
+            type="text"
+            className={`param-value ${editableText ? 'editable' : ''}`}
+            value={formattedValue}
+            title={spec.center !== undefined ? `Stored as ${displayValue}` : undefined}
+            onChange={(e) => {
+              if (!editableText) return;
+              // Typed the way it reads - semitones for pitch, an offset for a
+              // centred value - and turned back into the raw byte by the spec
+              const raw = parseSpecValue(e.target.value, spec);
+              if (raw === null) return;
+              updatePartParam(partId, section, trackId, field, clampToSpec(raw, spec));
+            }}
+            onBlur={() => {
+              if (isEditMode) {
+                savePart(partId);
+              }
+            }}
+            readOnly={!editableText}
+            tabIndex={editableText ? 0 : -1}
+          />
+        )}
       </div>
     );
   };
@@ -623,29 +680,29 @@ export default function PartsPanel({
         <div className="params-grid">
           {machine.machine_type === 'Thru' ? (
             <>
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.in_ab', machine.machine_params.in_ab, 'INAB')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.vol_ab', machine.machine_params.vol_ab, 'VOL')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.in_cd', machine.machine_params.in_cd, 'INCD')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.vol_cd', machine.machine_params.vol_cd, 'VOL')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.in_ab', machine.machine_params.in_ab, 'INAB', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.vol_ab', machine.machine_params.vol_ab, 'VOL', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.in_cd', machine.machine_params.in_cd, 'INCD', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.vol_cd', machine.machine_params.vol_cd, 'VOL', undefined, undefined, machine.machine_type)}
             </>
           ) : machine.machine_type === 'Neighbor' ? (
             <div className="params-empty-message">-</div>
           ) : machine.machine_type === 'Pickup' ? (
             <>
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.ptch', machine.machine_params.ptch, 'PITCH')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.dir', machine.machine_params.dir, 'DIR')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.len', machine.machine_params.len, 'LEN')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.gain', machine.machine_params.gain, 'GAIN')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.op', machine.machine_params.op, 'OP')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.ptch', machine.machine_params.ptch, 'PITCH', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.dir', machine.machine_params.dir, 'DIR', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.len', machine.machine_params.len, 'LEN', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.gain', machine.machine_params.gain, 'GAIN', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.op', machine.machine_params.op, 'OP', undefined, undefined, machine.machine_type)}
             </>
           ) : (
             <>
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.ptch', machine.machine_params.ptch, 'PTCH')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.strt', machine.machine_params.strt, 'STRT')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.len', machine.machine_params.len, 'LEN')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rate', machine.machine_params.rate, 'RATE')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rtrg', machine.machine_params.rtrg, 'RTRG')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rtim', machine.machine_params.rtim, 'RTIM')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.ptch', machine.machine_params.ptch, 'PTCH', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.strt', machine.machine_params.strt, 'STRT', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.len', machine.machine_params.len, 'LEN', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rate', machine.machine_params.rate, 'RATE', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rtrg', machine.machine_params.rtrg, 'RTRG', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rtim', machine.machine_params.rtim, 'RTIM', undefined, undefined, machine.machine_type)}
             </>
           )}
         </div>
@@ -657,17 +714,17 @@ export default function PartsPanel({
             <div className="params-empty-message">-</div>
           ) : machine.machine_type === 'Pickup' ? (
             <>
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS', undefined, undefined, machine.machine_type)}
             </>
           ) : (
             <>
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.xloop', machine.machine_setup.xloop, 'LOOP')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.slic', machine.machine_setup.slic, 'SLIC')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.len', machine.machine_setup.len, 'LEN')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.rate', machine.machine_setup.rate, 'RATE')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR')}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS')}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.xloop', machine.machine_setup.xloop, 'LOOP', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.slic', machine.machine_setup.slic, 'SLIC', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.len', machine.machine_setup.len, 'LEN', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.rate', machine.machine_setup.rate, 'RATE', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR', undefined, undefined, machine.machine_type)}
+              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS', undefined, undefined, machine.machine_type)}
             </>
           )}
         </div>
@@ -710,31 +767,31 @@ export default function PartsPanel({
                 {machine.machine_type === 'Thru' ? (
                   <>
                     {/* THRU MAIN parameters */}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.in_ab', machine.machine_params.in_ab, 'INAB')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.vol_ab', machine.machine_params.vol_ab, 'VOL')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.in_cd', machine.machine_params.in_cd, 'INCD')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.vol_cd', machine.machine_params.vol_cd, 'VOL')}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.in_ab', machine.machine_params.in_ab, 'INAB', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.vol_ab', machine.machine_params.vol_ab, 'VOL', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.in_cd', machine.machine_params.in_cd, 'INCD', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.vol_cd', machine.machine_params.vol_cd, 'VOL', undefined, undefined, machine.machine_type)}
                   </>
                 ) : machine.machine_type === 'Neighbor' ? (
                   <div className="params-empty-message">-</div>
                 ) : machine.machine_type === 'Pickup' ? (
                   <>
                     {/* PICKUP MAIN parameters */}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.ptch', machine.machine_params.ptch, 'PITCH')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.dir', machine.machine_params.dir, 'DIR')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.len', machine.machine_params.len, 'LEN')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.gain', machine.machine_params.gain, 'GAIN')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.op', machine.machine_params.op, 'OP')}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.ptch', machine.machine_params.ptch, 'PITCH', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.dir', machine.machine_params.dir, 'DIR', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.len', machine.machine_params.len, 'LEN', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.gain', machine.machine_params.gain, 'GAIN', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.op', machine.machine_params.op, 'OP', undefined, undefined, machine.machine_type)}
                   </>
                 ) : (
                   <>
                     {/* FLEX/STATIC MAIN parameters */}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.ptch', machine.machine_params.ptch, 'PTCH')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.strt', machine.machine_params.strt, 'STRT')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.len', machine.machine_params.len, 'LEN')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rate', machine.machine_params.rate, 'RATE')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rtrg', machine.machine_params.rtrg, 'RTRG')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rtim', machine.machine_params.rtim, 'RTIM')}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.ptch', machine.machine_params.ptch, 'PTCH', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.strt', machine.machine_params.strt, 'STRT', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.len', machine.machine_params.len, 'LEN', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rate', machine.machine_params.rate, 'RATE', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rtrg', machine.machine_params.rtrg, 'RTRG', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rtim', machine.machine_params.rtim, 'RTIM', undefined, undefined, machine.machine_type)}
                   </>
                 )}
               </div>
@@ -748,18 +805,18 @@ export default function PartsPanel({
                 ) : machine.machine_type === 'Pickup' ? (
                   <>
                     {/* PICKUP SETUP parameters */}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS')}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS', undefined, undefined, machine.machine_type)}
                   </>
                 ) : (
                   <>
                     {/* FLEX/STATIC SETUP parameters */}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.xloop', machine.machine_setup.xloop, 'LOOP')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.slic', machine.machine_setup.slic, 'SLIC')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.len', machine.machine_setup.len, 'LEN')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.rate', machine.machine_setup.rate, 'RATE')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR')}
-                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS')}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.xloop', machine.machine_setup.xloop, 'LOOP', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.slic', machine.machine_setup.slic, 'SLIC', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.len', machine.machine_setup.len, 'LEN', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.rate', machine.machine_setup.rate, 'RATE', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR', undefined, undefined, machine.machine_type)}
+                    {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS', undefined, undefined, machine.machine_type)}
                   </>
                 )}
               </div>
@@ -888,7 +945,6 @@ export default function PartsPanel({
           {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'rel', amp.rel, 'REL')}
           {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'vol', amp.vol, 'VOL')}
           {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'bal', amp.bal, 'BAL')}
-          {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'f', amp.f, 'F')}
         </div>
       </div>
       <div className="params-subsection">
@@ -950,7 +1006,6 @@ export default function PartsPanel({
                   {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'rel', amp.rel, 'REL')}
                   {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'vol', amp.vol, 'VOL')}
                   {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'bal', amp.bal, 'BAL')}
-                  {renderParamWithKnob(activePart.part_id, 'amps', amp.track_id, 'f', amp.f, 'F')}
                 </div>
               </div>
 
@@ -1998,29 +2053,29 @@ export default function PartsPanel({
                       <div className="params-grid">
                         {machineType === 'Thru' ? (
                           <>
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.in_ab', machine.machine_params.in_ab, 'INAB')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.vol_ab', machine.machine_params.vol_ab, 'VOL')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.in_cd', machine.machine_params.in_cd, 'INCD')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.vol_cd', machine.machine_params.vol_cd, 'VOL')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.in_ab', machine.machine_params.in_ab, 'INAB', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.vol_ab', machine.machine_params.vol_ab, 'VOL', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.in_cd', machine.machine_params.in_cd, 'INCD', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.vol_cd', machine.machine_params.vol_cd, 'VOL', undefined, undefined, machine.machine_type)}
                           </>
                         ) : machineType === 'Neighbor' ? (
                           <div className="params-empty-message">-</div>
                         ) : machineType === 'Pickup' ? (
                           <>
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.ptch', machine.machine_params.ptch, 'PITCH')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.dir', machine.machine_params.dir, 'DIR')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.len', machine.machine_params.len, 'LEN')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.gain', machine.machine_params.gain, 'GAIN')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.op', machine.machine_params.op, 'OP')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.ptch', machine.machine_params.ptch, 'PITCH', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.dir', machine.machine_params.dir, 'DIR', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.len', machine.machine_params.len, 'LEN', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.gain', machine.machine_params.gain, 'GAIN', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.op', machine.machine_params.op, 'OP', undefined, undefined, machine.machine_type)}
                           </>
                         ) : (
                           <>
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.ptch', machine.machine_params.ptch, 'PTCH')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.strt', machine.machine_params.strt, 'STRT')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.len', machine.machine_params.len, 'LEN')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.rate', machine.machine_params.rate, 'RATE')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.rtrg', machine.machine_params.rtrg, 'RTRG')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.rtim', machine.machine_params.rtim, 'RTIM')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.ptch', machine.machine_params.ptch, 'PTCH', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.strt', machine.machine_params.strt, 'STRT', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.len', machine.machine_params.len, 'LEN', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.rate', machine.machine_params.rate, 'RATE', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.rtrg', machine.machine_params.rtrg, 'RTRG', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_params.rtim', machine.machine_params.rtim, 'RTIM', undefined, undefined, machine.machine_type)}
                           </>
                         )}
                       </div>
@@ -2032,17 +2087,17 @@ export default function PartsPanel({
                           <div className="params-empty-message">-</div>
                         ) : machineType === 'Pickup' ? (
                           <>
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS', undefined, undefined, machine.machine_type)}
                           </>
                         ) : (
                           <>
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.xloop', machine.machine_setup.xloop, 'LOOP')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.slic', machine.machine_setup.slic, 'SLIC')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.len', machine.machine_setup.len, 'LEN')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.rate', machine.machine_setup.rate, 'RATE')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR')}
-                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS')}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.xloop', machine.machine_setup.xloop, 'LOOP', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.slic', machine.machine_setup.slic, 'SLIC', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.len', machine.machine_setup.len, 'LEN', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.rate', machine.machine_setup.rate, 'RATE', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR', undefined, undefined, machine.machine_type)}
+                            {renderParamWithKnob(activePart.part_id, 'machines', trackIdx, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS', undefined, undefined, machine.machine_type)}
                           </>
                         )}
                       </div>
@@ -2062,7 +2117,6 @@ export default function PartsPanel({
                         {renderParamWithKnob(activePart.part_id, 'amps', trackIdx, 'rel', amp.rel, 'REL')}
                         {renderParamWithKnob(activePart.part_id, 'amps', trackIdx, 'vol', amp.vol, 'VOL')}
                         {renderParamWithKnob(activePart.part_id, 'amps', trackIdx, 'bal', amp.bal, 'BAL')}
-                        {renderParamWithKnob(activePart.part_id, 'amps', trackIdx, 'f', amp.f, 'F')}
                       </div>
                     </div>
                     <div className="params-subsection">

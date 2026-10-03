@@ -1183,3 +1183,32 @@
   }
 }
 
+
+/* A setting with a fixed set of values: a selector rather than a knob, so an invalid
+   value cannot be entered in the first place. Shaped like .param-value so a page that
+   mixes knobs and selectors still reads as one row. Sized for the widest label the
+   device uses, and tall enough to sit where a knob plus its readout would. */
+.parts-track .param-select,
+.parts-individual-section .param-select {
+  color: #ffffff;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  background: #333;
+  padding: 0 4px;
+  border-radius: 3px;
+  border: 1px solid #555;
+  width: 60px;
+  height: 26px;
+  text-align: center;
+  box-sizing: border-box;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  margin-top: 12px;
+  cursor: pointer;
+}
+
+.parts-track .param-select:disabled,
+.parts-individual-section .param-select:disabled {
+  cursor: default;
+  opacity: 0.75;
+}

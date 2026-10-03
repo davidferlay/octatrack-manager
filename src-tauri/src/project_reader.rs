@@ -183,7 +183,7 @@ pub struct AmpParams {
     pub rel: Option<u8>,
     pub vol: Option<u8>,
     pub bal: Option<u8>,
-    pub f: Option<u8>,
+    pub xvol: Option<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -336,7 +336,10 @@ pub struct PartTrackAmp {
     pub rel: u8,
     pub vol: u8,
     pub bal: u8,
-    pub f: u8,
+    /// The AMP page's sixth byte. The device calls it XVOL and only shows it while a
+    /// [SCENE] key is held - it can be locked to a scene but not set on the AMP page,
+    /// so the Parts editor carries it through untouched rather than offering a knob.
+    pub xvol: u8,
     // AMP SETUP parameters
     pub amp_setup_amp: u8,  // Envelope type
     pub amp_setup_sync: u8, // Sync setting
@@ -2012,7 +2015,7 @@ fn read_project_banks_internal(
                                             } else {
                                                 None
                                             },
-                                            f: if plock.amp.f != 255 {
+                                            xvol: if plock.amp.f != 255 {
                                                 Some(plock.amp.f)
                                             } else {
                                                 None
@@ -2677,7 +2680,7 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
                 rel: amp_params.rel,
                 vol: amp_params.vol,
                 bal: amp_params.bal,
-                f: amp_params.f,
+                xvol: amp_params.f,
                 amp_setup_amp: amp_setup.amp,
                 amp_setup_sync: amp_setup.sync,
                 amp_setup_atck: amp_setup.atck,
@@ -2920,6 +2923,83 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
 }
 
 /// Save modified Parts data back to a bank file
+/// Pulls a value into range, for a field whose floor is not zero.
+fn clamp_opt(value: &mut Option<u8>, min: u8, max: u8) {
+    if let Some(v) = value {
+        *v = (*v).clamp(min, max);
+    }
+}
+
+/// Holds every Part value to what the Octatrack itself produces.
+///
+/// The editor already offers only valid values, but this is what reaches the bank
+/// file, and a bank file is read by the hardware. Ranges are measured from projects
+/// made on the device with each field driven to its minimum and its maximum; fields
+/// whose range has not been measured (the effect pages) are left alone rather than
+/// guessed at.
+fn clamp_part_data(part: &mut PartData, machine_types: &[u8; 8]) {
+    for (track_id, machine) in part.machines.iter_mut().enumerate() {
+        // The bank's own byte decides which machine this is, not the payload's claim -
+        // the save path writes by that byte, so the ranges have to follow the same one
+        let kind = match machine_types.get(track_id) {
+            Some(0) => "Static",
+            Some(1) => "Flex",
+            Some(2) => "Thru",
+            Some(3) => "Neighbor",
+            Some(4) => "Pickup",
+            _ => "Unknown",
+        };
+        match kind {
+            "Static" | "Flex" => {
+                // PTCH stops one octave either side of centre, not at the byte edges
+                clamp_opt(&mut machine.machine_params.ptch, 4, 124);
+                clamp_opt(&mut machine.machine_setup.xloop, 0, 3);
+                clamp_opt(&mut machine.machine_setup.slic, 0, 1);
+                clamp_opt(&mut machine.machine_setup.len, 0, 1);
+                clamp_opt(&mut machine.machine_setup.rate, 0, 1);
+                clamp_opt(&mut machine.machine_setup.tstr, 0, 3);
+            }
+            "Thru" => {
+                clamp_opt(&mut machine.machine_params.in_ab, 0, 4);
+                clamp_opt(&mut machine.machine_params.in_cd, 0, 4);
+            }
+            "Pickup" => {
+                clamp_opt(&mut machine.machine_params.ptch, 4, 124);
+                // REV, PIPO, FWD
+                clamp_opt(&mut machine.machine_params.dir, 0, 2);
+                // OFF, x1, x2, x4, x8
+                clamp_opt(&mut machine.machine_params.len, 0, 4);
+                // GAIN, DUB
+                clamp_opt(&mut machine.machine_params.op, 0, 1);
+                // Timestretch cannot be turned off for a Pickup machine
+                clamp_opt(&mut machine.machine_setup.tstr, 1, 3);
+            }
+            _ => {}
+        }
+    }
+    for amp in part.amps.iter_mut() {
+        amp.amp_setup_amp = amp.amp_setup_amp.min(3);
+        amp.amp_setup_sync = amp.amp_setup_sync.min(1);
+        amp.amp_setup_atck = amp.amp_setup_atck.min(1);
+        amp.amp_setup_fx1 = amp.amp_setup_fx1.min(3);
+        amp.amp_setup_fx2 = amp.amp_setup_fx2.min(3);
+    }
+    for lfo in part.lfos.iter_mut() {
+        for pmtr in [&mut lfo.lfo1_pmtr, &mut lfo.lfo2_pmtr, &mut lfo.lfo3_pmtr] {
+            *pmtr = (*pmtr).min(29);
+        }
+        for wave in [&mut lfo.lfo1_wave, &mut lfo.lfo2_wave, &mut lfo.lfo3_wave] {
+            *wave = (*wave).min(18);
+        }
+        for mult in [&mut lfo.lfo1_mult, &mut lfo.lfo2_mult, &mut lfo.lfo3_mult] {
+            *mult = (*mult).min(6);
+        }
+        for trig in [&mut lfo.lfo1_trig, &mut lfo.lfo2_trig, &mut lfo.lfo3_trig] {
+            *trig = (*trig).min(7);
+        }
+    }
+}
+
 pub fn save_parts_data(
     project_path: &str,
     bank_id: &str,
@@ -2968,6 +3048,10 @@ pub fn save_parts_data(
 
         // Get mutable reference to the unsaved (working) copy only
         let part_unsaved = &mut bank_data.parts.unsaved.0[part_id];
+        // Hold every value to what the hardware produces before any of it is written
+        let mut part_data = part_data.clone();
+        clamp_part_data(&mut part_data, &part_unsaved.audio_track_machine_types);
+        let part_data = &part_data;
 
         // Update audio track parameters for each track
         for track_id in 0..8 {
@@ -2983,7 +3067,7 @@ pub fn save_parts_data(
                 part_unsaved.audio_track_params_values[track_id].amp.rel = amp.rel;
                 part_unsaved.audio_track_params_values[track_id].amp.vol = amp.vol;
                 part_unsaved.audio_track_params_values[track_id].amp.bal = amp.bal;
-                part_unsaved.audio_track_params_values[track_id].amp.f = amp.f;
+                part_unsaved.audio_track_params_values[track_id].amp.f = amp.xvol;
 
                 // AMP Setup parameters
                 part_unsaved.audio_track_params_setup[track_id].amp.amp = amp.amp_setup_amp;
@@ -18060,6 +18144,156 @@ mod tests {
             // Other tracks and other parts are left alone
             assert_eq!(reloaded.parts[1].machines[3].static_slot_id, 3);
             assert_eq!(reloaded.parts[0].machines[2].static_slot_id, 2);
+        }
+
+        /// A value outside what the hardware produces must never reach a bank file,
+        /// whatever asked for it - the editor, an older project, or a bad payload.
+        #[test]
+        fn test_save_parts_data_holds_values_to_the_device_range() {
+            let project = TestProject::new();
+            let mut parts = read_parts_data(&project.path, "A").unwrap();
+            let part = &mut parts.parts[0];
+
+            // Track 1 is a Static machine in the fixture
+            part.machines[0].machine_params.ptch = Some(255);
+            part.machines[0].machine_setup.xloop = Some(9);
+            part.machines[0].machine_setup.slic = Some(5);
+            part.amps[0].amp_setup_amp = 200;
+            part.amps[0].amp_setup_fx1 = 7;
+            part.lfos[0].lfo1_pmtr = 99;
+            part.lfos[0].lfo2_wave = 40;
+            part.lfos[0].lfo3_mult = 12;
+            part.lfos[0].lfo1_trig = 30;
+
+            save_parts_data(&project.path, "A", parts.parts.clone()).unwrap();
+
+            let reloaded = read_parts_data(&project.path, "A").unwrap();
+            let m = &reloaded.parts[0].machines[0];
+            assert_eq!(m.machine_params.ptch, Some(124), "PTCH stops an octave up");
+            assert_eq!(m.machine_setup.xloop, Some(3));
+            assert_eq!(m.machine_setup.slic, Some(1));
+            let amp = &reloaded.parts[0].amps[0];
+            assert_eq!(amp.amp_setup_amp, 3);
+            assert_eq!(amp.amp_setup_fx1, 3);
+            let lfo = &reloaded.parts[0].lfos[0];
+            assert_eq!(lfo.lfo1_pmtr, 29);
+            assert_eq!(lfo.lfo2_wave, 18);
+            assert_eq!(lfo.lfo3_mult, 6);
+            assert_eq!(lfo.lfo1_trig, 7);
+        }
+
+        /// XVOL is set from a scene, not from the AMP page, so the editor never offers
+        /// it - but it is a real value and a save must carry it through unchanged.
+        #[test]
+        fn test_save_parts_data_preserves_xvol() {
+            let project = TestProject::new();
+            let mut parts = read_parts_data(&project.path, "A").unwrap();
+            let before = parts.parts[0].amps[0].xvol;
+            assert_eq!(before, 127, "the factory value for the crossfader volume");
+
+            // An ordinary edit elsewhere on the page
+            parts.parts[0].amps[0].vol = 100;
+            save_parts_data(&project.path, "A", parts.parts.clone()).unwrap();
+
+            let reloaded = read_parts_data(&project.path, "A").unwrap();
+            assert_eq!(reloaded.parts[0].amps[0].vol, 100);
+            assert_eq!(
+                reloaded.parts[0].amps[0].xvol, before,
+                "a scene value is not the Parts editor's to change"
+            );
+        }
+
+        /// A Pickup machine's lists are short - three directions, five lengths, two
+        /// recording behaviours - so a value past the end of one must not be written.
+        #[test]
+        fn test_save_parts_data_holds_pickup_lists_to_their_length() {
+            let project = TestProject::with_modified_bank(0, |bank| {
+                bank.parts.unsaved.0[0].audio_track_machine_types[2] = 4; // Pickup
+            });
+            let mut parts = read_parts_data(&project.path, "A").unwrap();
+            let part = &mut parts.parts[0];
+            part.machines[2].machine_params.dir = Some(99);
+            part.machines[2].machine_params.len = Some(99);
+            part.machines[2].machine_params.op = Some(99);
+            part.machines[2].machine_setup.tstr = Some(0);
+
+            save_parts_data(&project.path, "A", parts.parts.clone()).unwrap();
+
+            let reloaded = read_parts_data(&project.path, "A").unwrap();
+            let m = &reloaded.parts[0].machines[2];
+            assert_eq!(m.machine_params.dir, Some(2), "FWD is the last direction");
+            assert_eq!(
+                m.machine_params.len,
+                Some(4),
+                "x8 is the longest slave loop"
+            );
+            assert_eq!(m.machine_params.op, Some(1), "DUB is the last behaviour");
+            assert_eq!(
+                m.machine_setup.tstr,
+                Some(1),
+                "timestretch cannot be turned off on a Pickup machine"
+            );
+        }
+
+        /// The ranges follow the bank's own machine type, not whatever the payload
+        /// claims - otherwise a mismatched payload would be checked against the
+        /// wrong machine's limits.
+        #[test]
+        fn test_save_parts_data_ranges_follow_the_bank_not_the_payload() {
+            let project = TestProject::new(); // track 1 is a Static machine
+            let mut parts = read_parts_data(&project.path, "A").unwrap();
+            // Claim it is something else, and send a value only Static would reject
+            parts.parts[0].machines[0].machine_type = "Pickup".to_string();
+            parts.parts[0].machines[0].machine_setup.xloop = Some(9);
+
+            save_parts_data(&project.path, "A", parts.parts.clone()).unwrap();
+
+            let reloaded = read_parts_data(&project.path, "A").unwrap();
+            assert_eq!(reloaded.parts[0].machines[0].machine_type, "Static");
+            assert_eq!(
+                reloaded.parts[0].machines[0].machine_setup.xloop,
+                Some(3),
+                "clamped as the Static machine the bank says it is"
+            );
+        }
+
+        /// A value the device does produce is written through untouched - clamping
+        /// must not quietly round off a legitimate edit.
+        #[test]
+        fn test_save_parts_data_leaves_valid_values_alone() {
+            let project = TestProject::new();
+            let mut parts = read_parts_data(&project.path, "A").unwrap();
+            let part = &mut parts.parts[0];
+            part.machines[0].machine_params.ptch = Some(4);
+            part.machines[0].machine_params.strt = Some(127);
+            part.amps[0].vol = 123;
+            part.lfos[0].spd1 = 127;
+            part.lfos[0].lfo1_pmtr = 29;
+
+            save_parts_data(&project.path, "A", parts.parts.clone()).unwrap();
+
+            let reloaded = read_parts_data(&project.path, "A").unwrap();
+            assert_eq!(reloaded.parts[0].machines[0].machine_params.ptch, Some(4));
+            assert_eq!(reloaded.parts[0].machines[0].machine_params.strt, Some(127));
+            assert_eq!(reloaded.parts[0].amps[0].vol, 123);
+            assert_eq!(reloaded.parts[0].lfos[0].spd1, 127);
+            assert_eq!(reloaded.parts[0].lfos[0].lfo1_pmtr, 29);
+        }
+
+        /// PTCH has a floor as well as a ceiling, which a plain `min()` would miss.
+        #[test]
+        fn test_save_parts_data_raises_a_value_below_the_floor() {
+            let project = TestProject::new();
+            let mut parts = read_parts_data(&project.path, "A").unwrap();
+            parts.parts[0].machines[0].machine_params.ptch = Some(0);
+            save_parts_data(&project.path, "A", parts.parts.clone()).unwrap();
+
+            let reloaded = read_parts_data(&project.path, "A").unwrap();
+            assert_eq!(
+                reloaded.parts[0].machines[0].machine_params.ptch,
+                Some(4),
+                "an octave down is as low as PTCH goes"
+            );
         }
 
         /// Editing a Part writes only the working copy: the device's "Reload Part"

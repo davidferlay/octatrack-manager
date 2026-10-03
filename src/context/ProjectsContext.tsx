@@ -147,7 +147,8 @@ interface AmpParams {
   rel: number | null;
   vol: number | null;
   bal: number | null;
-  f: number | null;
+  /** XVOL - the crossfader volume, which the device exposes only under a SCENE key. */
+  xvol: number | null;
 }
 
 interface AudioParameterLocks {
@@ -308,7 +309,8 @@ export interface PartTrackAmp {
   rel: number;
   vol: number;
   bal: number;
-  f: number;
+  /** XVOL - the crossfader volume, set from a scene rather than the AMP page. */
+  xvol: number;
   // AMP SETUP parameters
   amp_setup_amp: number;         // Envelope type
   amp_setup_sync: number;        // Sync setting
