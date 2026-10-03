@@ -3083,6 +3083,9 @@ fn clamp_part_data(part: &mut PartData, machine_types: &[u8; 8]) {
         rec.xloop = rec.xloop.min(1);
         rec.fin = rec.fin.min(112);
         rec.fout = rec.fout.min(112);
+        // The monitoring levels of the two input pairs
+        rec.ab = rec.ab.min(127);
+        rec.cd = rec.cd.min(127);
         // QREC and QPL keep 255 for OFF, which sits outside the ordinary range
         if rec.qrec != 255 {
             rec.qrec = rec.qrec.min(16);
@@ -18522,6 +18525,8 @@ mod tests {
             rec.src3 = 99;
             rec.xloop = 99;
             rec.fin = 200;
+            rec.ab = 200;
+            rec.cd = 200;
             rec.qrec = 99;
             rec.qpl = 255; // OFF, and it must stay OFF
 
@@ -18535,6 +18540,11 @@ mod tests {
             assert_eq!(back.src3, 10, "CUE is the last source");
             assert_eq!(back.xloop, 1);
             assert_eq!(back.fin, 112);
+            assert_eq!(
+                back.ab, 127,
+                "the input monitoring levels are ordinary bytes"
+            );
+            assert_eq!(back.cd, 127);
             assert_eq!(back.qrec, 16);
             assert_eq!(back.qpl, 255, "OFF sits outside the range and is kept");
         }

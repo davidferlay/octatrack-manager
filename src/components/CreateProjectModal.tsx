@@ -30,6 +30,13 @@ export function CreateProjectModal({
   const [shaking, setShaking] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const shakeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const shakeFrame = useRef<number | null>(null)
+
+  useEffect(() => () => {
+    if (shakeTimer.current !== null) clearTimeout(shakeTimer.current)
+    if (shakeFrame.current !== null) cancelAnimationFrame(shakeFrame.current)
+  }, [])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -45,10 +52,23 @@ export function CreateProjectModal({
   const error = empty ? 'Name is required' : duplicate ? (duplicateMessage ?? `A project named '${name}' already exists in this Set`) : null
   const canSubmit = !empty && !duplicate && !submitting
 
+  /**
+   * Flashes the shake animation. Both the frame request and the timer are held so
+   * they can be cancelled: the modal can be closed inside the 400ms the shake lasts,
+   * and a callback arriving after that would set state on a gone component.
+   */
   function triggerShake() {
     setShaking(false)
-    requestAnimationFrame(() => setShaking(true))
-    setTimeout(() => setShaking(false), 400)
+    if (shakeFrame.current !== null) cancelAnimationFrame(shakeFrame.current)
+    if (shakeTimer.current !== null) clearTimeout(shakeTimer.current)
+    shakeFrame.current = requestAnimationFrame(() => {
+      shakeFrame.current = null
+      setShaking(true)
+    })
+    shakeTimer.current = setTimeout(() => {
+      shakeTimer.current = null
+      setShaking(false)
+    }, 400)
   }
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
