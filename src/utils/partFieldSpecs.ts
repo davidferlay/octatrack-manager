@@ -169,9 +169,14 @@ const SRC: Record<MachineType, Record<string, FieldSpec>> = {
   Flex: {} as Record<string, FieldSpec>,
   Thru: {
     'machine_params.in_ab': SELECT(0, INPUTS_AB),
-    'machine_params.vol_ab': U(0, 127, 64),
+    // The input volumes read either side of their centre, as the AMP page's VOL does
+    'machine_params.vol_ab': {
+      min: 0, max: 127, default: 64, widget: 'bipolar', center: 64, display: 'offset',
+    },
     'machine_params.in_cd': SELECT(0, INPUTS_CD),
-    'machine_params.vol_cd': U(0, 127, 64),
+    'machine_params.vol_cd': {
+      min: 0, max: 127, default: 64, widget: 'bipolar', center: 64, display: 'offset',
+    },
   },
   // A Neighbor machine takes the track before it as its input and has nothing to set
   Neighbor: {},

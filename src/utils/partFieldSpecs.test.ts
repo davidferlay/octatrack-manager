@@ -390,6 +390,15 @@ describe('values the device does not show as plain numbers', () => {
     expect(formatSpecValue(1, flex('rtim'))).toBe('1')
   })
 
+  it('reads a Thru machine input volume either side of its centre', () => {
+    for (const f of ['vol_ab', 'vol_cd']) {
+      const spec = fieldSpec(`machine_params.${f}`, 'Thru')!
+      expect(formatSpecValue(0, spec), f).toBe('-64')
+      expect(formatSpecValue(64, spec), f).toBe('0')
+      expect(formatSpecValue(127, spec), f).toBe('63')
+    }
+  })
+
   it('shows a Pickup machine GAIN in dB, from silence upward', () => {
     const gain = fieldSpec('machine_params.gain', 'Pickup')!
     expect(formatSpecValue(0, gain)).toBe('-INF')
