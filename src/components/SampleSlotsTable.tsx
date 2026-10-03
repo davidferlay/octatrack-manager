@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useTransition, useCallback } from "react";
+import { formatSlotGain } from '../utils/format';
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
@@ -1156,7 +1157,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         row.push(`${entries.filter(e => e.audible).length}/${entries.length}`);
       }
       if (visibleColumns.source) row.push(slot.source_location || '');
-      if (visibleColumns.gain) row.push(slot.gain !== null && slot.gain !== undefined ? String(slot.gain) : '');
+      if (visibleColumns.gain) row.push(slot.gain !== null && slot.gain !== undefined ? formatSlotGain(slot.gain) : '');
       if (visibleColumns.timestretch) row.push(slot.timestretch_mode || '');
       if (visibleColumns.loop) row.push(slot.loop_mode || '');
       if (visibleColumns.format) row.push(slot.file_format || '');
@@ -1548,7 +1549,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
           <>
             <label className="dropdown-option"><input type="radio" name="gain" checked={gainFilter === 'all'} onChange={() => { setGainFilter('all'); closeDropdown(); }} /><span>All</span></label>
             {getUniqueGains().map((gain) => (
-              <label key={gain} className="dropdown-option"><input type="radio" name="gain" checked={gainFilter === gain.toString()} onChange={() => { setGainFilter(gain.toString()); closeDropdown(); }} /><span>{gain}</span></label>
+              <label key={gain} className="dropdown-option"><input type="radio" name="gain" checked={gainFilter === gain.toString()} onChange={() => { setGainFilter(gain.toString()); closeDropdown(); }} /><span>{formatSlotGain(gain)}</span></label>
             ))}
           </>
         );
@@ -1722,7 +1723,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       case 'source':
         return <td key={colId} className="col-source" title={slot.source_location === 'Project' ? getSetRelativePath(projectPath ?? null) : getDirectoryPath(slot.path)}>{slot.source_location || '-'}</td>;
       case 'gain':
-        return <td key={colId} className="col-gain">{slot.gain !== null && slot.gain !== undefined ? slot.gain : '-'}</td>;
+        return <td key={colId} className="col-gain">{slot.gain !== null && slot.gain !== undefined ? formatSlotGain(slot.gain) : '-'}</td>;
       case 'timestretch':
         return <td key={colId} className="col-timestretch">{slot.timestretch_mode || '-'}</td>;
       case 'loop':

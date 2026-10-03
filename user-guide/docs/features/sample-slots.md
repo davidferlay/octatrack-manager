@@ -45,9 +45,9 @@ Every row in the table represents a slot (S1–S128 or F1–F128). The table pro
 | **Status** | Whether or not the audio file is found at the exact location set for Sample Slot. |
 | **Usage** | If and where the slot is used across the project. See [Slot Usage](#slot-usage) below. |
 | **Source** | Whether the audio file is located in Project's directory or the Set's Audio pool. |
-| **Gain** | The gain setting for that sample slot. |
+| **Gain** | The gain of that sample slot, in dB, from -24.0 to +24.0. A slot at 0.0 is untouched. |
 | **Timestretch** | Shows the timestretch mode (Off, Normal, Beat). |
-| **Loop** | Shows whether the sample is set to loop (Off, Normal). |
+| **Loop** | Whether the sample loops: Off, On, or Ping Pong. |
 
 <div style={{display: 'flex', gap: '0.75rem', alignItems: 'flex-start', justifyContent: 'center'}}>
   <img src={require('@site/static/img/screenshots/sample-slots-hover-compat.png').default} alt="Sample Slots - Hover compat" style={{width: '32%'}} />

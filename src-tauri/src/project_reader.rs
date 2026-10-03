@@ -774,8 +774,8 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             attributes_at_default: slot_attributes_at_default(slot),
                             path: Some(path_str),
                             gain: Some(slot.gain),
-                            loop_mode: Some(format!("{:?}", slot.loop_mode)),
-                            timestretch_mode: Some(format!("{:?}", slot.timestrech_mode)),
+                            loop_mode: Some(loop_mode_name(slot.loop_mode)),
+                            timestretch_mode: Some(timestretch_mode_name(slot.timestrech_mode)),
                             source_location,
                             file_exists,
                             compatibility: Some(audio_info.compatibility),
@@ -796,8 +796,8 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             attributes_at_default: slot_attributes_at_default(slot),
                             path: None,
                             gain: Some(slot.gain),
-                            loop_mode: Some(format!("{:?}", slot.loop_mode)),
-                            timestretch_mode: Some(format!("{:?}", slot.timestrech_mode)),
+                            loop_mode: Some(loop_mode_name(slot.loop_mode)),
+                            timestretch_mode: Some(timestretch_mode_name(slot.timestrech_mode)),
                             source_location: None,
                             file_exists: false,
                             compatibility: None,
@@ -865,8 +865,8 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             attributes_at_default: slot_attributes_at_default(slot),
                             path: Some(path_str),
                             gain: Some(slot.gain),
-                            loop_mode: Some(format!("{:?}", slot.loop_mode)),
-                            timestretch_mode: Some(format!("{:?}", slot.timestrech_mode)),
+                            loop_mode: Some(loop_mode_name(slot.loop_mode)),
+                            timestretch_mode: Some(timestretch_mode_name(slot.timestrech_mode)),
                             source_location,
                             file_exists,
                             compatibility: Some(audio_info.compatibility),
@@ -887,8 +887,8 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                             attributes_at_default: slot_attributes_at_default(slot),
                             path: None,
                             gain: Some(slot.gain),
-                            loop_mode: Some(format!("{:?}", slot.loop_mode)),
-                            timestretch_mode: Some(format!("{:?}", slot.timestrech_mode)),
+                            loop_mode: Some(loop_mode_name(slot.loop_mode)),
+                            timestretch_mode: Some(timestretch_mode_name(slot.timestrech_mode)),
                             source_location: None,
                             file_exists: false,
                             compatibility: None,
@@ -1366,6 +1366,72 @@ pub fn read_single_bank(project_path: &str, bank_index: u8) -> Result<Option<Ban
     }
 }
 
+/// How far off the grid a trig sits, as the device shows it.
+///
+/// The value is five bits in the first byte - the rest of that
+/// byte is the trig repeat - plus a half-step carried in the top
+/// bit of the second. That gives 47 settings, a twelfth of a step
+/// either way in 384ths, and the device names each one.
+fn parse_micro_timing(bytes: [u8; 2]) -> Option<String> {
+    let raw = (bytes[0] % 32) + if bytes[1] >= 128 { 128 } else { 0 };
+    // 0 is on the grid, which is not worth showing
+    if raw == 0 {
+        return None;
+    }
+    const AHEAD: [&str; 11] = [
+        "+1/192", "+1/96", "+1/64", "+1/48", "+5/192", "+1/32", "+7/192", "+1/24", "+3/64",
+        "+5/96", "+11/192",
+    ];
+    const AHEAD_HALF: [&str; 12] = [
+        "+1/384", "+1/128", "+5/384", "+7/384", "+3/128", "+11/384", "+13/384", "+5/128",
+        "+17/384", "+19/384", "+7/128", "+23/384",
+    ];
+    const BEHIND: [&str; 11] = [
+        "-11/192", "-5/96", "-3/64", "-1/24", "-7/192", "-1/32", "-5/192", "-1/48", "-1/64",
+        "-1/96", "-1/192",
+    ];
+    const BEHIND_HALF: [&str; 12] = [
+        "-23/384", "-7/128", "-19/384", "-17/384", "-5/128", "-13/384", "-11/384", "-3/128",
+        "-7/384", "-5/384", "-1/128", "-1/384",
+    ];
+    let label = match raw {
+        1..=11 => AHEAD.get((raw - 1) as usize),
+        128..=139 => AHEAD_HALF.get((raw - 128) as usize),
+        21..=31 => BEHIND.get((raw - 21) as usize),
+        148..=159 => BEHIND_HALF.get((raw - 148) as usize),
+        _ => None,
+    };
+    label.map(|s| s.to_string())
+}
+
+/// A sample slot's timestretch setting, named the way the device names it.
+///
+/// These happen to match the dependency's own variant names today, but the column is
+/// read next to the device, so the words it shows are stated here rather than left to
+/// whatever an upstream rename produces.
+fn timestretch_mode_name(mode: ot_tools_io::settings::TimeStretchMode) -> String {
+    match mode {
+        ot_tools_io::settings::TimeStretchMode::Off => "Off",
+        ot_tools_io::settings::TimeStretchMode::Normal => "Normal",
+        ot_tools_io::settings::TimeStretchMode::Beat => "Beat",
+    }
+    .to_string()
+}
+
+/// A sample slot's loop setting, named the way the device names it.
+///
+/// ot-tools-io calls the middle setting `Normal`; the Octatrack calls it ON, and the
+/// last one Ping Pong rather than PingPong. The table reads next to the device, so it
+/// uses the device's words.
+fn loop_mode_name(mode: ot_tools_io::settings::LoopMode) -> String {
+    match mode {
+        ot_tools_io::settings::LoopMode::Off => "Off",
+        ot_tools_io::settings::LoopMode::Normal => "On",
+        ot_tools_io::settings::LoopMode::PingPong => "Ping Pong",
+    }
+    .to_string()
+}
+
 pub fn read_project_banks(project_path: &str) -> Result<Vec<Bank>, String> {
     read_project_banks_internal(project_path, None)
 }
@@ -1572,31 +1638,6 @@ fn read_project_banks_internal(
                             // Trig repeats are encoded as: repeats * 32
                             // So divide by 32 to get the actual repeat count (0-7)
                             repeat_byte / 32
-                        }
-
-                        // Helper function to parse micro-timing offset (simplified)
-                        fn parse_micro_timing(bytes: [u8; 2]) -> Option<String> {
-                            let first = bytes[0] % 32; // Remove trig repeat component
-                            let second_offset = bytes[1] >= 128;
-
-                            // Simple micro-timing detection
-                            if first == 0 && !second_offset {
-                                return None; // No offset
-                            }
-
-                            // Map common offset values (simplified)
-                            match (first, second_offset) {
-                                (0, false) => None,
-                                (1, true) => Some("+1/128".to_string()),
-                                (3, false) => Some("+1/64".to_string()),
-                                (6, false) => Some("+1/32".to_string()),
-                                (11, true) => Some("+23/384".to_string()),
-                                (20, true) => Some("-23/384".to_string()),
-                                (26, false) => Some("-1/32".to_string()),
-                                (29, false) => Some("-1/64".to_string()),
-                                (30, true) => Some("-1/128".to_string()),
-                                _ => Some(format!("{}{}", if first < 15 { "+" } else { "-" }, "μ")),
-                            }
                         }
 
                         // Helper function to count non-default parameter locks
@@ -18287,6 +18328,75 @@ mod tests {
                 Some(3),
                 "clamped as the Static machine the bank says it is"
             );
+        }
+
+        /// The slot attribute columns sit next to the device, so they use its words.
+        /// These came from the dependency's own variant names, where the loop setting
+        /// is called Normal and the device calls it On.
+        #[test]
+        fn test_slot_attribute_labels_use_the_device_wording() {
+            use ot_tools_io::settings::{LoopMode, TimeStretchMode};
+            assert_eq!(loop_mode_name(LoopMode::Off), "Off");
+            assert_eq!(loop_mode_name(LoopMode::Normal), "On");
+            assert_eq!(loop_mode_name(LoopMode::PingPong), "Ping Pong");
+
+            assert_eq!(timestretch_mode_name(TimeStretchMode::Off), "Off");
+            assert_eq!(timestretch_mode_name(TimeStretchMode::Normal), "Normal");
+            assert_eq!(timestretch_mode_name(TimeStretchMode::Beat), "Beat");
+        }
+
+        /// Micro timing is 47 named settings, a twelfth of a step either way. The
+        /// decoder used to name nine of them and print a placeholder for the rest.
+        #[test]
+        fn test_micro_timing_names_every_setting_the_device_offers() {
+            // On the grid is not an offset, so it shows nothing
+            assert_eq!(parse_micro_timing([0, 0]), None);
+
+            // Whole steps, ahead and behind
+            assert_eq!(parse_micro_timing([1, 0]).as_deref(), Some("+1/192"));
+            assert_eq!(parse_micro_timing([6, 0]).as_deref(), Some("+1/32"));
+            assert_eq!(parse_micro_timing([11, 0]).as_deref(), Some("+11/192"));
+            assert_eq!(parse_micro_timing([21, 0]).as_deref(), Some("-11/192"));
+            assert_eq!(parse_micro_timing([26, 0]).as_deref(), Some("-1/32"));
+            assert_eq!(parse_micro_timing([31, 0]).as_deref(), Some("-1/192"));
+
+            // The half-steps, carried in the top bit of the second byte
+            assert_eq!(parse_micro_timing([0, 128]).as_deref(), Some("+1/384"));
+            assert_eq!(parse_micro_timing([1, 128]).as_deref(), Some("+1/128"));
+            assert_eq!(parse_micro_timing([11, 128]).as_deref(), Some("+23/384"));
+            assert_eq!(parse_micro_timing([20, 128]).as_deref(), Some("-23/384"));
+            assert_eq!(parse_micro_timing([30, 128]).as_deref(), Some("-1/128"));
+            assert_eq!(parse_micro_timing([31, 128]).as_deref(), Some("-1/384"));
+        }
+
+        /// The first byte carries the trig repeat as well, above the five bits that
+        /// hold the timing - it must not leak into the name.
+        #[test]
+        fn test_micro_timing_ignores_the_trig_repeat_in_the_same_byte() {
+            for repeat in [0u8, 32, 64, 96, 128, 160, 192, 224] {
+                assert_eq!(
+                    parse_micro_timing([repeat + 6, 0]).as_deref(),
+                    Some("+1/32"),
+                    "repeat {repeat} changed the timing"
+                );
+            }
+        }
+
+        /// Nothing outside the device's settings gets a name, rather than a guess.
+        #[test]
+        fn test_micro_timing_has_no_name_for_a_value_the_device_cannot_make() {
+            for raw in [12u8, 15, 20, 140, 147] {
+                let (byte0, byte1) = if raw >= 128 {
+                    (raw - 128, 128)
+                } else {
+                    (raw, 0)
+                };
+                assert_eq!(
+                    parse_micro_timing([byte0, byte1]),
+                    None,
+                    "raw {raw} should have no name"
+                );
+            }
         }
 
         /// A MIDI track's own settings are short lists too, and the arpeggiator's

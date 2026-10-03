@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatBytes, formatMixerLevel, formatMetronomePitch } from './format'
+import { formatBytes, formatMixerLevel, formatMetronomePitch, formatSlotGain } from './format'
 
 describe('formatBytes', () => {
   it('formats 0 bytes', () => {
@@ -56,5 +56,26 @@ describe('formatMetronomePitch', () => {
 
   it('shows a sharp note', () => {
     expect(formatMetronomePitch(1)).toBe('C#5')
+  })
+})
+
+describe('formatSlotGain', () => {
+  it('shows the resting value as unity, not as 48', () => {
+    expect(formatSlotGain(48)).toBe('0.0')
+  })
+
+  it('spans the device range of -24 to +24 dB', () => {
+    expect(formatSlotGain(0)).toBe('-24.0')
+    expect(formatSlotGain(96)).toBe('+24.0')
+  })
+
+  it('steps in half a decibel, as the device does', () => {
+    expect(formatSlotGain(49)).toBe('+0.5')
+    expect(formatSlotGain(47)).toBe('-0.5')
+  })
+
+  it('signs a boost so it cannot be read as a cut', () => {
+    expect(formatSlotGain(60)).toBe('+6.0')
+    expect(formatSlotGain(36)).toBe('-6.0')
   })
 })
