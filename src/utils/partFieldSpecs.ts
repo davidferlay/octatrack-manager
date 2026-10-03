@@ -14,8 +14,8 @@
  * the device-made projects measure.
  */
 
-import { AMP_HOLD, RETRIG_COUNT, RETRIG_TIME, PICKUP_GAIN } from './otValueTables';
-import { getFxMainLabels } from './fxLabels';
+import { AMP_HOLD, RETRIG_COUNT, RETRIG_TIME, PICKUP_GAIN, RECORD_FADE } from './otValueTables';
+import { getFxMainLabels, fxShortName } from './fxLabels';
 
 export type Widget =
   /** 0..max, rising from the left - the usual knob. */
@@ -274,8 +274,9 @@ const RECORDER: Record<string, FieldSpec> = {
   'recorders.trig': SELECT(0, RECORD_TRIGS),
   'recorders.src3': SELECT(0, RECORD_SOURCES),
   'recorders.xloop': TOGGLE(1, ['OFF', 'ON']),
-  'recorders.fin': U(0, 112, 0),
-  'recorders.fout': U(0, 112, 0),
+  // The fades count sequencer steps, in sixteenths below the first whole one
+  'recorders.fin': { min: 0, max: 112, default: 0, widget: 'unipolar', table: RECORD_FADE },
+  'recorders.fout': { min: 0, max: 112, default: 0, widget: 'unipolar', table: RECORD_FADE },
   'recorders.ab': U(0, 127, 0),
   'recorders.cd': U(0, 127, 0),
   'recorders.qrec': { min: 0, max: 255, default: 255, widget: 'selector', options: RECORD_QUANTS },
@@ -429,11 +430,15 @@ export function lfoTargetOptions(
 ): { value: number; label: string }[] {
   // An effect target names that effect's own parameter - the device shows the effect
   // and the parameter, so "MIX" on a plate reverb rather than a slot number
-  const fxNames = (slot: 'FX1' | 'FX2', type?: number) =>
-    [0, 1, 2, 3, 4, 5].map(i => {
+  const fxNames = (slot: 'FX1' | 'FX2', type?: number) => {
+    const effect = fxShortName(type, slot);
+    return [0, 1, 2, 3, 4, 5].map(i => {
       const name = type === undefined ? null : getFxMainLabels(type)[i];
-      return `${slot} ${name || `P0${i + 1}`}`;
+      // The device names a slot the effect does not use after the slot itself,
+      // which is what <B> and the rest mean on its own display
+      return `${effect} ${name || `<${String.fromCharCode(65 + i)}>`}`;
     });
+  };
   // A track whose machine is not known yet falls back to numbered parameters rather
   // than borrowing another machine's names
   const known = ['Static', 'Flex', 'Thru', 'Neighbor', 'Pickup'].includes(machineType ?? '');

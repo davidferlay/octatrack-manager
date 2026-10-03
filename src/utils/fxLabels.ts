@@ -80,3 +80,31 @@ export function getFxSetupLabels(fxType: number): string[] {
   }
   return setupMappings[fxType] || ['S1', 'S2', 'S3', 'S4', 'S5', 'S6'];
 }
+
+/**
+ * How the device abbreviates each effect, as it appears on the LFO SETUP page when an
+ * LFO is pointed at one of that effect's parameters. Read off the hardware - they are
+ * not derivable from the full names (PLATE REVERB is PLTE, not PLAT).
+ */
+const FX_SHORT_NAMES: { [key: number]: string } = {
+  0: 'NONE',
+  4: 'FLTR',
+  5: 'SPAT',
+  8: 'DEL',
+  12: 'EQ',
+  13: 'DJEQ',
+  16: 'PHSR',
+  17: 'FLNG',
+  18: 'CHOR',
+  19: 'COMB',
+  20: 'PLTE',
+  21: 'SPRG',
+  22: 'DARK',
+  24: 'COMP',
+  28: 'LOFI',
+};
+
+/** The effect's short name, or the slot's own label when the effect is not known. */
+export function fxShortName(fxType: number | undefined, fallback: string): string {
+  return fxType === undefined ? fallback : (FX_SHORT_NAMES[fxType] ?? fallback);
+}

@@ -219,20 +219,28 @@ describe('MIDI tracks', () => {
     expect(flex.options![1].value).toBe(thru.options![1].value)
   })
 
-  it('names an effect target after that effect\'s own parameter', () => {
-    // 20 is the plate reverb, whose third main parameter is GATE
+  it('names an effect target the way the device does, effect then parameter', () => {
+    // 20 is the plate reverb, 8 the delay - both photographed on the hardware
     const spec = fieldSpec('lfo1_pmtr', 'Flex', { fx1Type: 20, fx2Type: 8 })!
     const byValue = (v: number) => spec.options!.find(o => o.value === v)!.label
-    expect(byValue(18)).toBe('FX1 TIME')
-    expect(byValue(20)).toBe('FX1 GATE')
-    // 8 is the delay, whose first parameter is also TIME
-    expect(byValue(24)).toBe('FX2 TIME')
-    expect(byValue(27)).toBe('FX2 BASE')
+    expect(byValue(18)).toBe('PLTE TIME')
+    expect(byValue(20)).toBe('PLTE GATE')
+    expect(byValue(24)).toBe('DEL TIME')
+    expect(byValue(27)).toBe('DEL BASE')
   })
 
-  it('falls back to numbered effect parameters when the effect is unknown', () => {
+  it('marks a slot the effect does not use the way the device marks it', () => {
+    // The DJ EQ leaves its second slot empty, and the device shows it as <B>
+    const spec = fieldSpec('lfo1_pmtr', 'Flex', { fx1Type: 13 })!
+    expect(spec.options!.find(o => o.value === 19)!.label).toBe('DJEQ <B>')
+    // The spring reverb leaves its second and third empty
+    const spring = fieldSpec('lfo1_pmtr', 'Flex', { fx1Type: 21 })!
+    expect(spring.options!.find(o => o.value === 19)!.label).toBe('SPRG <B>')
+  })
+
+  it('falls back to the slot when the effect is not known', () => {
     const spec = fieldSpec('lfo1_pmtr', 'Flex')!
-    expect(spec.options!.find(o => o.value === 18)!.label).toBe('FX1 P01')
+    expect(spec.options!.find(o => o.value === 18)!.label).toBe('FX1 <A>')
   })
 
   it('treats the extra notes and the transpose as offsets', () => {
@@ -388,6 +396,15 @@ describe('values the device does not show as plain numbers', () => {
   it('leaves a retrig time the device never produces as its number', () => {
     // The encoder steps over these nine values
     expect(formatSpecValue(1, flex('rtim'))).toBe('1')
+  })
+
+  it('shows the recorder fades as the step counts the device shows', () => {
+    const fin = fieldSpec('recorders.fin')!
+    expect(formatSpecValue(0, fin)).toBe('0')
+    // A sixteenth of a step at the bottom, whole steps higher up
+    expect(formatSpecValue(1, fin)).toBe('0.063')
+    expect(formatSpecValue(32, fin)).toBe('2')
+    expect(formatSpecValue(112, fin)).toBe('64')
   })
 
   it('reads a Thru machine input volume either side of its centre', () => {
