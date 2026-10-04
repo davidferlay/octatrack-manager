@@ -25041,3 +25041,277 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod exhaustive_fixture {
+    //! Builds a project that exercises every Part field and widget the editor draws.
+    //!
+    //! Run on demand, not as part of the suite:
+    //!
+    //! ```text
+    //! cargo test --lib exhaustive_fixture -- --ignored --nocapture
+    //! ```
+    //!
+    //! Every audio track gets a different machine where there is one to give, the
+    //! sixteen effect slots between them cover all fifteen effects, and the values are
+    //! chosen so each way a value can read appears somewhere: the ends of a bipolar
+    //! range, a time, a note division, INF and -INF, a named setting at both ends of
+    //! its list, and the settings that only exist on one machine.
+    use super::*;
+    use ot_tools_io::{BankFile, OctatrackFileIO, ProjectFile};
+
+    /// Where the fixture is written. A Set, so the project lands beside the others.
+    const SET: &str = "/home/dferlay/Downloads/ATOOLSTEST/OKTEST";
+    const NAME: &str = "AAA_FIELD_MATRIX";
+
+    #[test]
+    #[ignore]
+    fn build() {
+        let dir = Path::new(SET).join(NAME);
+        assert!(
+            Path::new(SET).is_dir(),
+            "Set not found at {SET} - mount or correct the path first"
+        );
+        std::fs::create_dir_all(&dir).expect("could not create the project directory");
+
+        ProjectFile::default()
+            .to_data_file(&dir.join("project.work"))
+            .expect("could not write project.work");
+
+        for bank_num in 1..=16 {
+            let mut bank = BankFile::default();
+            if bank_num == 1 {
+                for part_id in 0..4 {
+                    configure(&mut bank.parts.unsaved.0[part_id], part_id);
+                    // Keep the saved copy identical, so the Part does not open as
+                    // modified and "Reload Part" restores what is on screen
+                    let copy = bank.parts.unsaved.0[part_id];
+                    bank.parts.saved.0[part_id] = copy;
+                }
+            }
+            bank.to_data_file(&dir.join(format!("bank{:02}.work", bank_num)))
+                .unwrap_or_else(|e| panic!("could not write bank{bank_num:02}: {e:?}"));
+        }
+
+        println!("### wrote {}", dir.display());
+    }
+
+    /// Picks a value for a field whose range is `min..=max`.
+    ///
+    /// Part 1 takes every floor and Part 2 every ceiling, so the two ends of each
+    /// reading - INF, -INF, the negatives, the first and last entry of every list -
+    /// are each visible on one page. Parts 3 and 4 sweep the range on different
+    /// strides, which reaches the entries in between and pairs them differently.
+    fn pick(part_id: usize, t: usize, min: u8, max: u8) -> u8 {
+        match part_id {
+            0 => min,
+            1 => max,
+            _ => {
+                let span = (max - min) as usize + 1;
+                let step = if part_id == 2 { t } else { t * 3 + 1 };
+                min + (step % span) as u8
+            }
+        }
+    }
+
+    /// Steps through a list too long for the min/max/sweep pattern to cover.
+    ///
+    /// Four Parts of eight tracks give thirty-two slots, so a list of up to that many
+    /// entries is seen in full by walking it one slot at a time. The floor still lands
+    /// on the first track of Part 1, where the rest of the floors are.
+    fn cycle(part_id: usize, t: usize, len: u8) -> u8 {
+        ((part_id * 8 + t) % len as usize) as u8
+    }
+
+    /// Lays out one Part. Between the four of them every field is seen at both ends
+    /// and at a spread of values in between, and every machine and effect appears.
+    fn configure(part: &mut ot_tools_io::parts::Part, part_id: usize) {
+        let p = part_id;
+
+        // A track keeps its machine and its two effects in every Part, so switching
+        // Part changes only the values. All five machines and all fifteen effects are
+        // present within each Part, so nothing is lost by holding the layout still.
+        let machines: [u8; 8] = [0, 1, 2, 3, 4, 1, 0, 1];
+        let effects: [u8; 16] = [0, 4, 5, 8, 12, 13, 16, 17, 18, 19, 20, 21, 22, 24, 28, 0];
+
+        for t in 0..8 {
+            part.audio_track_machine_types[t] = machines[t];
+            part.audio_track_fx1[t] = effects[t * 2];
+            part.audio_track_fx2[t] = effects[t * 2 + 1];
+
+            let v = &mut part.audio_track_machine_params[t];
+            let s = &mut part.audio_track_machine_setup[t];
+
+            // SRC MAIN. PTCH stops an octave either side of centre rather than at the
+            // byte edges, so its floor is 4 and its ceiling 124
+            for sample in [&mut v.static_machine, &mut v.flex_machine] {
+                sample.ptch = pick(p, t, 4, 124);
+                sample.strt = pick(p, t, 0, 127);
+                sample.len = pick(p, t, 0, 127);
+                sample.rate = pick(p, t, 0, 127);
+                sample.rtrg = pick(p, t, 0, 127);
+                sample.rtim = pick(p, t, 0, 127);
+            }
+            // SRC SETUP. SLIC decides whether the LEN beside it reads OFF/TIME or
+            // SLIC/TIME, so both readings appear across the Parts
+            for setup in [&mut s.static_machine, &mut s.flex_machine] {
+                setup.xloop = pick(p, t, 0, 3);
+                setup.slic = pick(p, t, 0, 1);
+                setup.len = pick(p, t, 0, 1);
+                setup.rate = pick(p, t, 0, 1);
+                setup.tstr = pick(p, t, 0, 3);
+                setup.tsns = pick(p, t, 0, 127);
+            }
+
+            // Thru: its five inputs and its two centred volumes
+            v.thru_machine.in_ab = pick(p, t, 0, 4);
+            v.thru_machine.in_cd = pick(p, 7 - t, 0, 4);
+            v.thru_machine.vol_ab = pick(p, t, 0, 127);
+            v.thru_machine.vol_cd = pick(p, 7 - t, 0, 127);
+
+            // Pickup: its own fields, including a gain that reads from silence and a
+            // timestretch that cannot be switched off
+            v.pickup_machine.ptch = pick(p, t, 4, 124);
+            v.pickup_machine.dir = pick(p, t, 0, 2);
+            v.pickup_machine.len = pick(p, t, 0, 4);
+            v.pickup_machine.gain = pick(p, t, 0, 127);
+            v.pickup_machine.op = pick(p, t, 0, 1);
+            s.pickup_machine.tstr = pick(p, t, 1, 3);
+            s.pickup_machine.tsns = pick(p, 7 - t, 0, 127);
+
+            // AMP: the hold time runs to INF and the volume and balance are centred
+            let amp = &mut part.audio_track_params_values[t].amp;
+            amp.atk = pick(p, t, 0, 127);
+            amp.hold = pick(p, t, 0, 127);
+            amp.rel = pick(p, 7 - t, 0, 127);
+            amp.vol = pick(p, t, 0, 127);
+            amp.bal = pick(p, 7 - t, 0, 127);
+            let amp_setup = &mut part.audio_track_params_setup[t].amp;
+            amp_setup.amp = pick(p, t, 0, 3);
+            amp_setup.sync = pick(p, t, 0, 1);
+            amp_setup.atck = pick(p, 7 - t, 0, 1);
+            amp_setup.fx1 = pick(p, t + 1, 0, 3);
+            amp_setup.fx2 = pick(p, t + 2, 0, 3);
+
+            // LFO: three per track and four Parts gives ninety-six slots, enough to
+            // reach all thirty targets, all nineteen waveforms and every trig mode
+            let lfo = &mut part.audio_track_params_values[t].lfo;
+            lfo.spd1 = pick(p, t, 0, 127);
+            lfo.spd2 = pick(p, t + 1, 0, 127);
+            lfo.spd3 = pick(p, t + 2, 0, 127);
+            lfo.dep1 = pick(p, t, 0, 127);
+            lfo.dep2 = pick(p, 7 - t, 0, 127);
+            lfo.dep3 = pick(p, t + 3, 0, 127);
+            let l1 = &mut part.audio_track_params_setup[t].lfo_setup_1;
+            let slot = (p * 8 + t) as u8;
+            l1.lfo1_pmtr = slot % 30;
+            l1.lfo2_pmtr = (slot + 10) % 30;
+            l1.lfo3_pmtr = (slot + 20) % 30;
+            l1.lfo1_wave = slot % 19;
+            l1.lfo2_wave = (slot + 7) % 19;
+            l1.lfo3_wave = (slot + 13) % 19;
+            let l2 = &mut part.audio_track_params_setup[t].lfo_setup_2;
+            l2.lfo1_mult = slot % 7;
+            l2.lfo2_mult = (slot + 3) % 7;
+            l2.lfo3_mult = (slot + 5) % 7;
+            l2.lfo1_trig = slot % 8;
+            l2.lfo2_trig = (slot + 3) % 8;
+            l2.lfo3_trig = (slot + 6) % 8;
+
+            // The effect pages, so no effect sits at its defaults
+            let fx = &mut part.audio_track_params_values[t];
+            let spread = |i: usize| pick(p, t + i, 0, 127);
+            fx.fx1.param_1 = spread(0);
+            fx.fx1.param_2 = spread(1);
+            fx.fx1.param_3 = spread(2);
+            fx.fx1.param_4 = spread(3);
+            fx.fx1.param_5 = spread(4);
+            fx.fx1.param_6 = spread(5);
+            fx.fx2.param_1 = spread(5);
+            fx.fx2.param_2 = spread(4);
+            fx.fx2.param_3 = spread(3);
+            fx.fx2.param_4 = spread(2);
+            fx.fx2.param_5 = spread(1);
+            fx.fx2.param_6 = spread(0);
+            let fxs = &mut part.audio_track_params_setup[t];
+            fxs.fx1.setting1 = pick(p, t, 0, 3);
+            fxs.fx1.setting2 = pick(p, t + 1, 0, 3);
+            fxs.fx1.setting3 = pick(p, t + 2, 0, 3);
+            fxs.fx1.setting4 = pick(p, t + 3, 0, 3);
+            fxs.fx1.setting5 = pick(p, t + 4, 0, 3);
+            fxs.fx1.setting6 = pick(p, t + 5, 0, 127);
+            fxs.fx2.setting1 = pick(p, t + 5, 0, 3);
+            fxs.fx2.setting2 = pick(p, t + 4, 0, 3);
+            fxs.fx2.setting3 = pick(p, t + 3, 0, 3);
+            fxs.fx2.setting4 = pick(p, t + 2, 0, 3);
+            fxs.fx2.setting5 = pick(p, t + 1, 0, 3);
+            fxs.fx2.setting6 = pick(p, t, 0, 127);
+
+            // Track and Cue levels
+            part.audio_track_volumes[t].main = pick(p, t, 0, 127);
+            part.audio_track_volumes[t].cue = pick(p, 7 - t, 0, 127);
+
+            // The recorder. QREC and QPL keep 255 for OFF, which sits outside their
+            // ordinary range, so that reading gets its own tracks rather than a sweep
+            let rec = &mut part.recorder_setup[t];
+            rec.src.in_ab = pick(p, t, 0, 4);
+            rec.src.in_cd = pick(p, 7 - t, 0, 4);
+            rec.src.rlen = pick(p, t, 0, 64);
+            rec.src.trig = pick(p, t, 0, 2);
+            // Eleven sources, walked across the Parts so every one is seen
+            rec.src.src3 = cycle(p, t, 11);
+            rec.src.xloop = pick(p, t, 0, 1);
+            rec.proc.fin = pick(p, t, 0, 112);
+            rec.proc.fout = pick(p, 7 - t, 0, 112);
+            rec.proc.ab = pick(p, t, 0, 127);
+            rec.proc.cd = pick(p, 7 - t, 0, 127);
+            rec.proc.qrec = if (t + p).is_multiple_of(3) {
+                255
+            } else {
+                pick(p, t, 0, 16)
+            };
+            rec.proc.qpl = if (t + p) % 3 == 1 {
+                255
+            } else {
+                pick(p, 7 - t, 0, 16)
+            };
+
+            // MIDI tracks: note names, the extra notes as offsets, the arpeggiator's
+            // named settings, and Bank, Program and Sub Bank both off and set
+            let m = &mut part.midi_track_params_values[t];
+            m.midi.note = pick(p, t, 0, 127);
+            m.midi.vel = pick(p, 7 - t, 0, 127);
+            m.midi.len = pick(p, t, 0, 127);
+            m.midi.not2 = pick(p, t, 0, 127);
+            m.midi.not3 = pick(p, 7 - t, 0, 127);
+            m.midi.not4 = pick(p, t + 2, 0, 127);
+            m.arp.tran = pick(p, t, 0, 127);
+            m.arp.leg = pick(p, t, 0, 1);
+            m.arp.mode = pick(p, t, 0, 6);
+            m.arp.spd = pick(p, t, 0, 95);
+            m.arp.rnge = pick(p, t, 0, 7);
+            m.arp.nlen = pick(p, 7 - t, 0, 127);
+            let ms = &mut part.midi_track_params_setup[t];
+            ms.note.chan = cycle(p, t, 16);
+            // 128 is Off, one past the byte, so it gets its own tracks
+            ms.note.bank = if (t + p).is_multiple_of(3) {
+                128
+            } else {
+                pick(p, t, 0, 127)
+            };
+            ms.note.prog = if (t + p) % 3 == 1 {
+                128
+            } else {
+                pick(p, 7 - t, 0, 127)
+            };
+            ms.note.sbank = if (t + p) % 3 == 2 {
+                128
+            } else {
+                pick(p, t + 1, 0, 127)
+            };
+            ms.arp.len = cycle(p, t, 16);
+            // Off plus the twenty-four major and minor keys
+            ms.arp.key = cycle(p, t, 25);
+        }
+    }
+}
