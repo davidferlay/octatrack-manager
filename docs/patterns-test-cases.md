@@ -56,3 +56,6 @@
 | PT35 | Pattern header | The PAT.LEN default is named, not shown as 0 | Open a project whose CHAIN AFTER is at the device default | The badge reads "Chain after: PLEN (project)" - never "0" |
 | PT36 | Pattern header | The badge follows the project setting | Change CHAIN AFTER on the device (or open two projects with different values) and compare patterns that follow the project | Each project's patterns show that project's own value, not a fixed word |
 
+| PT37 | Step details | Micro timing is named, not approximated | Nudge a trig off the grid on the device, then open that step in the app | The offset reads as the device writes it, such as +1/32, -5/192 or +23/384 - never a placeholder symbol. A trig on the grid shows no offset at all |
+| PT38 | Step details | Micro timing is unaffected by trig repeat | Set a trig repeat on a step that also carries a micro-timing offset | The offset still reads the same: the repeat shares the same byte but does not change the timing shown |
+| PT39 | Step details | Chain after counts sixteenths | Compare the Chain after badge with the CHAIN AFTER setting on the device for several settings | Each reads the same, including the ones past the fourth where the stored number and the step count differ - setting 8 reads 16/16 and the highest reads 256/16 |

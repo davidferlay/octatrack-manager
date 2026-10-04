@@ -296,6 +296,33 @@ describe('SampleSlotsTable — Audio Pool integration', () => {
     expect(screen.getByText('Gain')).toBeInTheDocument()
   })
 
+  /**
+   * The Gain column reads in dB, not as the stored byte. Testing the formatter alone
+   * is not enough: the cell and the filter are two separate render sites, and one was
+   * once fixed without the other.
+   */
+  it('shows the gain in dB rather than as the stored byte', () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode audioPoolPath="/set/AUDIO" />
+    )
+    // The fixture stores 72, which is twelve decibels above unity
+    expect(screen.getByText('+12.0')).toBeInTheDocument()
+    expect(screen.queryByText('72')).not.toBeInTheDocument()
+  })
+
+  it('offers the gain filter in dB too, matching the column beside it', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode audioPoolPath="/set/AUDIO" />
+    )
+    const header = screen.getByText('Gain').closest('.header-content')!
+    await user.click(header.querySelector('.filter-icon')!)
+    const dropdown = document.querySelector('.filter-dropdown') as HTMLElement
+    expect(dropdown).not.toBeNull()
+    expect(within(dropdown).getByText('+12.0')).toBeInTheDocument()
+    expect(within(dropdown).queryByText('72')).not.toBeInTheDocument()
+  })
+
   it("keyboard 'a' toggles the Audio Pool pane", async () => {
     renderWithProvider(
       <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" audioPoolPath="/set/AUDIO" />

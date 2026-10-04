@@ -371,6 +371,31 @@ test.describe('Patterns tab - step grid indicators', () => {
     await expect(panel).toContainText('4')
   })
 
+  test('a p-lock is named for the machine the track runs', async ({ page }) => {
+    // The same stored lock means a different parameter on a different machine, so a
+    // Thru track must not borrow a sample machine's names
+    await page.addInitScript(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const orig = internals.invoke
+      internals.invoke = async (cmd: string, args?: any) => {
+        const res = await orig(cmd, args)
+        if (cmd === 'load_parts_data') {
+          res.parts.forEach((p: any) => p.machines.forEach((m: any) => { m.machine_type = 'Thru' }))
+        }
+        return res
+      }
+    })
+    await page.reload()
+    await page.locator('.header-tab', { hasText: 'Patterns' }).click()
+    await expect(page.locator('.pattern-step').first()).toBeVisible({ timeout: 10000 })
+
+    await stepCell(page, 15).click()
+    const panel = page.locator('.parameter-details-panel:not(.rec-details)')
+    // The second SRC parameter is the AB volume on a Thru machine, not STRT
+    await expect(panel).toContainText('VOL (Volume AB):')
+    await expect(panel).not.toContainText('STRT')
+  })
+
   test('STRT p-lock shows the raw start value without slice mode', async ({ page }) => {
     // switch to track 2, which has no slice mode
     await page.locator('#patterns-track-select').selectOption('1')

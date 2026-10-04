@@ -78,7 +78,14 @@ export const RETRIG_TIME: Readonly<Record<number, string>> = {
   123: '6.349', 124: '6.727', 125: '7.127', 126: '7.550', 127: '8.000',
 };
 
-/** A Pickup machine's GAIN, in dB, from silence up to about +12. */
+/**
+ * A Pickup machine's GAIN, in dB, from silence up to about +12.
+ *
+ * Raw 61 is corrected here. The source table reads -0.083, which is a dropped digit:
+ * its neighbours step by about 0.28 either side (-1.41, -1.12, then -0.55, -0.27, 0),
+ * so the device shows -0.83. The monotonic check in the tests is what caught it and
+ * is what will catch it again if this table is ever regenerated without the fix.
+ */
 export const PICKUP_GAIN: readonly string[] = [
   '-INF', '-72.2', '-60.2', '-53.2', '-48.2', '-44.3', '-41.1', '-38.4',
   '-36.1', '-34.1', '-32.3', '-30.6', '-29.1', '-27.7', '-26.4', '-25.2',
@@ -87,7 +94,7 @@ export const PICKUP_GAIN: readonly string[] = [
   '-12.0', '-11.5', '-11.0', '-10.5', '-10.0', '-9.52', '-9.06', '-8.6',
   '-8.16', '-7.74', '-7.32', '-6.91', '-6.51', '-6.12', '-5.74', '-5.36',
   '-5.0', '-4.64', '-4.29', '-3.94', '-3.61', '-3.28', '-2.95', '-2.63',
-  '-2.32', '-2.01', '-1.71', '-1.41', '-1.12', '-0.083', '-0.55', '-0.27',
+  '-2.32', '-2.01', '-1.71', '-1.41', '-1.12', '-0.83', '-0.55', '-0.27',
   '0', '0.269', '0.535', '0.796', '1.053', '1.307', '1.557', '1.803',
   '2.046', '2.286', '2.522', '2.755', '2.985', '3.212', '3.437', '3.658',
   '3.876', '4.092', '4.305', '4.516', '4.724', '4.930', '5.133', '5.334',
