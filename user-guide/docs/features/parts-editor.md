@@ -28,9 +28,9 @@ Note that in the future, more than Parts will be editable in projects.
 
 ### Navigation Within the Editor
 
-Use the PAGE tabs to switch between the different parameter pages (SRC, AMP, LFO, etc). 
+Use the PAGE tabs to switch between the different parameter pages (SRC, AMP, LFO, etc).
 
-Both your parameter page selection and part selection persist when switching between banks, so you can quickly compare the same page across different banks. 
+Both your parameter page selection and part selection persist when switching between banks, so you can quickly compare the same page across different banks.
 
 The dropdown fields let you switch quickly between all Audio tracks, MIDI tracks, partrs and the 16 banks.
 
@@ -42,7 +42,7 @@ The Parts Editor is organized into several pages, mirroring exactly the Octatrac
 
 ### Audio Track Pages (T1–T8)
 
-- **SRC Page:** Configure the core parameters (Pitch, Start, Length, Rate, etc.) of selected machine (Flex, Static, Thru, Neighbor, etc). A Static or Flex track also shows which Sample Slot it plays - see [Changing the Sample a track plays](#changing-the-sample-a-track-plays) below.
+- **SRC Page:** Configure the core parameters (Pitch, Start, Length, Rate, etc.) of selected machine (Flex, Static, Thru, Neighbor, etc). The machine itself can be changed from the track header - see [Changing a track's machine](#changing-a-tracks-machine) below. A Static or Flex track also shows which Sample Slot it plays - see [Changing the Sample a track plays](#changing-the-sample-a-track-plays) below.
 
 ![Parts Editor - SRC page](/img/screenshots/parts-editor-src.png)
 
@@ -57,6 +57,28 @@ The Parts Editor is organized into several pages, mirroring exactly the Octatrac
 - **LFO Pages:** Configure the three LFOs per track, including speed, depth, and destination.
 
 ![Parts Editor - LFO page](/img/screenshots/parts-editor-lfo.png)
+
+#### Changing a track's machine
+
+The machine badge in the track header - the one that reads STATIC, FLEX, THRU, NEIGHBOR or PICKUP - becomes a selector in Edit mode.
+
+Like everything else on these pages, the machine is per Part. The same track can run a Flex machine in Part 1 and a Thru machine in Part 2, and switching Part on the device switches it.
+
+##### SRC parameters reset
+
+Switching the machine resets that track's SRC MAIN and SETUP pages to the new machine's defaults.
+
+Every machine reads those same twelve slots differently: The third MAIN slot is LEN on a Flex machine and also LEN on a Pickup machine, but they mean different things; the second slot is STRT on a Flex machine and DIR on a Pickup one. That goes for each machine type.
+
+So each field the new machine actually uses is set to that machine's own default.
+
+That is not the same as the change being reversible. Switching back to Flex resets those six again, because Flex is now the machine that uses them. The rule is simply "the machine you pick starts at its own defaults", in both directions. If you switch by mistake, Reload Part puts the whole Part back as it was, provided you have not saved since, and that state was saved before.
+
+##### T1 and T5 cannot run Neighbor machine
+
+The picker offers four machines on T1 and T5, and five everywhere else. Neighbor is missing from those two.
+
+A Neighbor machine does not play a sample at all - it takes its audio from the track before it, which is how effect chains are built across tracks. T1 and T5 are the first of their group of four, so there is no preceding track for them to listen to, and the Octatrack will not let them run one. The Octatrack manual states it outright in its machine reference, section A.4. The editor withholds it for the same reason.
 
 #### Changing the Sample a track plays
 

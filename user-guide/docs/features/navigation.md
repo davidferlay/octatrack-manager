@@ -33,7 +33,7 @@ The **Track Selector** allows you to focus on a specific audio or MIDI track, or
 - **MIDI Tracks (M1–M8):** The 8 MIDI tracks for sequencing external gear.
 - **"All Audio" / "All MIDI":** View all 8 tracks of a given type simultaneously.
 
-The machine type shown updates automatically when you switch banks or change the active part.
+The machine type shown updates automatically when you switch banks or change the active part, and also when you change a track's machine in the [Parts Editor](./parts-editor.md#changing-a-tracks-machine).
 
 ![Project details track selector](/img/screenshots/parts-editor-track-selector.png)
 
