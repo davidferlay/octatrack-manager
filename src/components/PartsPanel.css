@@ -806,11 +806,14 @@
   display: contents;
 }
 
+/* Each pane draws the line under itself rather than borrowing the top border of the
+   pane below it. The last row is short - seven panes on an audio track, six on a MIDI
+   one, in a grid four wide - so the panes sitting above its empty cells have nothing
+   underneath to draw that line for them, and used to end on nothing. */
 .parts-all-section {
   background: #252525;
   border: 1px solid #333;
   border-right: none;
-  border-bottom: none;
   border-radius: 0;
   padding: 12px;
   display: flex;
@@ -821,8 +824,9 @@
   border-right: 1px solid #333;
 }
 
-.parts-all-row:last-child .parts-all-section {
-  border-bottom: 1px solid #333;
+/* Only the first row needs a top border; every other row sits under one already */
+.parts-all-row + .parts-all-row .parts-all-section {
+  border-top: none;
 }
 
 .parts-all-section > .params-label {
