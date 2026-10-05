@@ -576,12 +576,29 @@ export default function PartsPanel({
     );
 
     const editableText = isEditMode && !formatter && !isList;
+    // A setting with exactly two values switches on click rather than opening a list.
+    // Counted from the choices rather than the widget kind: SETUP LEN is a two-state
+    // setting until SLIC turns it into a longer one.
+    const twoState = isList && choices.length === 2;
+    const otherIndex = choices.findIndex(o => o.value === displayValue) === 0 ? 1 : 0;
 
     return (
       <div className="param-item" key={key}>
         <span className="param-label">{label}</span>
         <div className="param-control">{indicator}</div>
-        {isList ? (
+        {twoState ? (
+          // Two settings is a switch, not a list: the device flips it, and a drop-down
+          // that only ever offers the one other value is a click wasted
+          <button
+            type="button"
+            className={`param-value param-toggle ${isEditMode ? 'editable' : ''}`}
+            disabled={!isEditMode}
+            title={isEditMode ? `Switch to ${choices[otherIndex].label}` : undefined}
+            onClick={() => commit(choices[otherIndex].value)}
+          >
+            {formattedValue}
+          </button>
+        ) : isList ? (
           <select
             className={`param-value param-select ${isEditMode ? 'editable' : ''}`}
             value={displayValue}
@@ -2147,7 +2164,7 @@ export default function PartsPanel({
 
                 {/* LFO1 Section */}
                 <div className="parts-all-section">
-                  <div className="params-label">LFO1</div>
+                  <div className="params-label">LFO 1</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
@@ -2160,18 +2177,12 @@ export default function PartsPanel({
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'dep1', lfo.dep1, 'DEP')}
                       </div>
                     </div>
-                    <div className="params-subsection">
-                      <div className="params-column-label">SETUP</div>
-                      <div className="params-grid">
-                        <div className="params-empty-message">-</div>
-                      </div>
-                    </div>
                   </div>
                 </div>
 
                 {/* LFO2 Section */}
                 <div className="parts-all-section">
-                  <div className="params-label">LFO2</div>
+                  <div className="params-label">LFO 2</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
@@ -2184,12 +2195,6 @@ export default function PartsPanel({
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'dep2', lfo.dep2, 'DEP')}
                       </div>
                     </div>
-                    <div className="params-subsection">
-                      <div className="params-column-label">SETUP</div>
-                      <div className="params-grid">
-                        <div className="params-empty-message">-</div>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -2198,7 +2203,7 @@ export default function PartsPanel({
               <div className="parts-all-row">
                 {/* LFO3 Section */}
                 <div className="parts-all-section">
-                  <div className="params-label">LFO3</div>
+                  <div className="params-label">LFO 3</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
@@ -2209,12 +2214,6 @@ export default function PartsPanel({
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo3_trig', lfo.lfo3_trig, 'TRIG')}
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'spd3', lfo.spd3, 'SPD')}
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'dep3', lfo.dep3, 'DEP')}
-                      </div>
-                    </div>
-                    <div className="params-subsection">
-                      <div className="params-column-label">SETUP</div>
-                      <div className="params-grid">
-                        <div className="params-empty-message">-</div>
                       </div>
                     </div>
                   </div>
@@ -2301,6 +2300,14 @@ export default function PartsPanel({
                   </div>
                 </div>
               </div>
+
+              {/* Row 3: REC - the track recorder's two setup pages */}
+              <div className="parts-all-row">
+                <div className="parts-all-section">
+                  <div className="params-label">REC</div>
+                  {renderRecSectionContent(activePart, trackIdx)}
+                </div>
+              </div>
             </div>
           );
         })}
@@ -2385,7 +2392,7 @@ export default function PartsPanel({
 
                 {/* LFO1 Section */}
                 <div className="parts-all-section">
-                  <div className="params-label">LFO1</div>
+                  <div className="params-label">LFO 1</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
@@ -2398,18 +2405,12 @@ export default function PartsPanel({
                         {renderParamWithKnob(activePart.part_id, 'midi_lfos', trackIdx, 'dep1', midi_lfo.dep1, 'DEP')}
                       </div>
                     </div>
-                    <div className="params-subsection">
-                      <div className="params-column-label">SETUP</div>
-                      <div className="params-grid">
-                        <div className="params-empty-message">-</div>
-                      </div>
-                    </div>
                   </div>
                 </div>
 
                 {/* LFO2 Section */}
                 <div className="parts-all-section">
-                  <div className="params-label">LFO2</div>
+                  <div className="params-label">LFO 2</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
@@ -2422,12 +2423,6 @@ export default function PartsPanel({
                         {renderParamWithKnob(activePart.part_id, 'midi_lfos', trackIdx, 'dep2', midi_lfo.dep2, 'DEP')}
                       </div>
                     </div>
-                    <div className="params-subsection">
-                      <div className="params-column-label">SETUP</div>
-                      <div className="params-grid">
-                        <div className="params-empty-message">-</div>
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -2436,7 +2431,7 @@ export default function PartsPanel({
               <div className="parts-all-row">
                 {/* LFO3 Section */}
                 <div className="parts-all-section">
-                  <div className="params-label">LFO3</div>
+                  <div className="params-label">LFO 3</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
@@ -2447,12 +2442,6 @@ export default function PartsPanel({
                         {renderParamWithKnob(activePart.part_id, 'midi_lfos', trackIdx, 'lfo3_trig', midi_lfo.lfo3_trig, 'TRIG')}
                         {renderParamWithKnob(activePart.part_id, 'midi_lfos', trackIdx, 'spd3', midi_lfo.spd3, 'SPD')}
                         {renderParamWithKnob(activePart.part_id, 'midi_lfos', trackIdx, 'dep3', midi_lfo.dep3, 'DEP')}
-                      </div>
-                    </div>
-                    <div className="params-subsection">
-                      <div className="params-column-label">SETUP</div>
-                      <div className="params-grid">
-                        <div className="params-empty-message">-</div>
                       </div>
                     </div>
                   </div>

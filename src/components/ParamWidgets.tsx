@@ -45,8 +45,10 @@ export function PositionBar({ count, index }: PositionBarProps) {
  * Worth noting, because it is not obvious: SAW is a plain rising line while RMP is a
  * rising ramp that resets - they are different shapes, not synonyms.
  *
- * The eight designer slots have no fixed shape - they are whatever was drawn into
- * them - so they show no glyph.
+ * The eight designer slots (T1-T8) have no fixed shape - they hold whatever was drawn
+ * into that track's DESIGN page - so they get a stand-in stepped outline, dimmed to say
+ * it stands for a shape rather than being one. A dashed stroke was tried first and
+ * broke into scattered dots at this size, which read as noise.
  */
 const WAVE_PATHS: Record<string, string> = {
   TRI: 'M1 11 L8 1 L15 11',
@@ -62,11 +64,21 @@ const WAVE_PATHS: Record<string, string> = {
   RND: 'M1 8 L3 8 L3 3 L6 3 L6 10 L9 10 L9 5 L12 5 L12 9 L15 9',
 };
 
+/** Stands in for a designer slot: a drawn shape, without claiming to be its shape. */
+const DESIGNED = 'M1 10 L4 10 L4 4 L7 4 L7 8 L10 8 L10 2 L13 2 L13 10 L15 10';
+
 export function WaveGlyph({ wave }: { wave: string }) {
-  const path = WAVE_PATHS[wave];
+  // Named rather than "anything not in the table", so a name that is neither a fixed
+  // shape nor a designer slot still draws nothing instead of being papered over
+  const designed = /^T[1-8]$/.test(wave);
+  const path = WAVE_PATHS[wave] ?? (designed ? DESIGNED : null);
   if (!path) return null;
   return (
-    <svg className="param-wave-glyph" viewBox="0 0 16 12" aria-hidden="true">
+    <svg
+      className={`param-wave-glyph${designed ? ' designed' : ''}`}
+      viewBox="0 0 16 12"
+      aria-hidden="true"
+    >
       <path d={path} fill="none" stroke="currentColor" strokeWidth="1.5" />
     </svg>
   );

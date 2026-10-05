@@ -787,10 +787,44 @@ test.describe('Parts Editor - Field ranges and widgets', () => {
     expect(calls[calls.length - 1].args.partsData[0].amps[0].amp_setup_amp).toBe(3)
   })
 
-  test('a two-state setting reads as its two names', async ({ page }) => {
+  /**
+   * The device flips a two-setting parameter rather than offering a list of the one
+   * other value, so the app does too - and SETUP LEN shows why this follows the number
+   * of settings and not the kind of field: SLIC turns it into a longer list.
+   */
+  test('a two-state setting switches on click, naming both settings', async ({ page }) => {
     await page.locator('.parts-page-tabs .parts-tab', { hasText: 'SRC' }).click()
-    const slic = paramSelect(page, 'SLIC')
-    await expect(slic.locator('option')).toHaveText(['OFF', 'ON'])
+    const slic = paramItem(page, 'SLIC').locator('button.param-toggle')
+    await expect(slic).toHaveText('OFF')
+    await expect(paramItem(page, 'SLIC').locator('select.param-select')).toHaveCount(0)
+    await slic.click()
+    await expect(slic).toHaveText('ON')
+    await slic.click()
+    await expect(slic).toHaveText('OFF')
+  })
+
+  test('switching a two-state setting saves the value behind the name', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'SRC' }).click()
+    await paramItem(page, 'SLIC').locator('button.param-toggle').click()
+    await expect
+      .poll(async () => (await getInvokeCalls(page, 'save_parts')).length)
+      .toBeGreaterThan(0)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    expect(calls[calls.length - 1].args.partsData[0].machines[0].machine_setup.slic).toBe(1)
+  })
+
+  test('a two-state setting is inert in View mode', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'SRC' }).click()
+    await page.locator('.mode-toggle').click()
+    const slic = paramItem(page, 'SLIC').locator('button.param-toggle')
+    await expect(slic).toBeDisabled()
+    await expect(slic).toHaveText('OFF')
+  })
+
+  test('a list of more than two keeps its drop-down', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'SRC' }).click()
+    await expect(paramSelect(page, 'LOOP').locator('option')).toHaveCount(4)
+    await expect(paramItem(page, 'LOOP').locator('button.param-toggle')).toHaveCount(0)
   })
 
   test('the settings a sample machine has read by the names the device uses', async ({ page }) => {
@@ -863,9 +897,14 @@ test.describe('Parts Editor - Field ranges and widgets', () => {
     const wave = page.locator('.param-item')
       .filter({ has: page.locator('.param-label', { hasText: /^WAVE$/ }) }).first()
     await expect(wave.locator('svg.param-wave-glyph')).toBeVisible()
-    // The designer slots have no fixed shape, so they draw none
+    // A designer slot holds whatever was drawn on its DESIGN page, so it gets a
+    // stand-in rather than an empty space - marked as a stand-in, not passed off
+    // as one of the fixed shapes
     await wave.locator('select.param-select').selectOption('11') // T1
-    await expect(wave.locator('svg.param-wave-glyph')).toHaveCount(0)
+    await expect(wave.locator('svg.param-wave-glyph')).toBeVisible()
+    await expect(wave.locator('svg.param-wave-glyph')).toHaveClass(/designed/)
+    await wave.locator('select.param-select').selectOption('0') // TRI
+    await expect(wave.locator('svg.param-wave-glyph')).not.toHaveClass(/designed/)
   })
 
   test('the LFO target list keeps the device order while storing its own values', async ({ page }) => {
@@ -1063,7 +1102,14 @@ test.describe('Parts Editor - Recorder setup', () => {
     expect(await options('TRIG')).toEqual(['ONE', 'ONE2', 'HOLD'])
     expect(await options('SRC3'))
       .toEqual(['-', 'T1', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7', 'T8', 'MAIN', 'CUE'])
-    expect(await options('LOOP')).toEqual(['OFF', 'ON'])
+    // LOOP has two settings, so it is a switch: it names one at a time, both in turn
+    const loop = page.locator('.param-item')
+      .filter({ has: page.locator('.param-label', { hasText: /^LOOP$/ }) })
+      .first().locator('button.param-toggle')
+    const first = await loop.textContent()
+    await enterEditMode(page)
+    await loop.click()
+    expect([first, await loop.textContent()].sort()).toEqual(['OFF', 'ON'])
     // Quantisation keeps OFF outside its ordinary range
     expect((await options('QREC')).slice(0, 3)).toEqual(['OFF', 'PLEN', '1'])
   })

@@ -77,10 +77,20 @@ describe('WaveGlyph', () => {
     }
   })
 
-  it('draws nothing for a designer slot, which has no fixed shape', () => {
-    for (const w of ['T1', 'T8']) {
-      expect(render(<WaveGlyph wave={w} />).container.firstChild).toBeNull()
+  it('stands in for a designer slot, which has no fixed shape of its own', () => {
+    for (const w of ['T1', 'T4', 'T8']) {
+      const { container } = render(<WaveGlyph wave={w} />)
+      // Drawn, so the slot is not an empty space, but marked as a stand-in for the
+      // shape on that track's DESIGN page rather than passed off as a fixed one
+      expect(container.querySelector('path'), w).not.toBeNull()
+      expect(container.querySelector('svg')?.getAttribute('class'), w)
+        .toContain('designed')
     }
+  })
+
+  it('does not mark a fixed shape as a stand-in', () => {
+    const { container } = render(<WaveGlyph wave="TRI" />)
+    expect(container.querySelector('svg')?.getAttribute('class')).not.toContain('designed')
   })
 
   it('draws nothing for a name it does not know', () => {

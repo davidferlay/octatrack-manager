@@ -1198,14 +1198,16 @@
 }
 
 /* Where this value sits in its list. The device fills the bar with a half-tone and
-   marks the position with a solid block; the block is the accent here rather than
-   white, so it reads the same way against this panel. */
+   marks the position with a solid block. Kept near the device's own light block rather
+   than the panel accent: orange at this size glares, and the bar is an indicator, not
+   something to look at. */
 .parts-track .param-position-bar,
 .parts-individual-section .param-position-bar {
   position: relative;
-  /* As wide as the value box underneath, so the pair reads as one control */
+  /* As wide as the value box underneath, so the pair reads as one control, and tall
+     enough to carry the half-tone fill the way the device's own bar does */
   width: 54px;
-  height: 14px;
+  height: 20px;
   border: 1px solid #5a5a5a;
   border-radius: 2px;
   box-sizing: border-box;
@@ -1223,8 +1225,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  background: var(--elektron-orange);
-  box-shadow: 0 0 3px rgba(245, 158, 11, 0.45);
+  background: #b9c2cb;
   /* A thirty-entry list would otherwise mark its position with two pixels */
   min-width: 5px;
 }
@@ -1235,6 +1236,13 @@
   width: 36px;
   height: 20px;
   color: var(--elektron-text-primary);
+}
+
+/* A designer slot holds whatever was drawn on its DESIGN page, so its glyph is a
+   stand-in. Dimmed as well as dashed, so it is not mistaken for a real shape. */
+.parts-track .param-wave-glyph.designed,
+.parts-individual-section .param-wave-glyph.designed {
+  color: var(--elektron-text-secondary);
 }
 
 /* A setting with a fixed set of values: a selector rather than a free number, so an
@@ -1270,4 +1278,31 @@
 .parts-individual-section .param-select option {
   background: #2a2a2a;
   color: #ffffff;
+}
+
+/* A setting with exactly two values. The same box as any other value, but it switches
+   on click instead of opening a list of one alternative. */
+.parts-track .param-value.param-toggle,
+.parts-individual-section .param-value.param-toggle {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: auto;
+  min-width: 54px;
+  max-width: 100px;
+  padding: 0 6px;
+  cursor: pointer;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+}
+
+.parts-track .param-value.param-toggle:hover:not(:disabled),
+.parts-individual-section .param-value.param-toggle:hover:not(:disabled) {
+  border-color: #fbbf24;
+}
+
+.parts-track .param-value.param-toggle:disabled,
+.parts-individual-section .param-value.param-toggle:disabled {
+  cursor: default;
+  color: #ffffff;
+  opacity: 1;
 }
