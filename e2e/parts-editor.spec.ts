@@ -823,6 +823,41 @@ test.describe('Parts Editor - Field ranges and widgets', () => {
     expect(await markerLeft()).toBeGreaterThan(atFirst)
   })
 
+  /**
+   * The device stacks every parameter the same way - name, indicator, value - so the
+   * values line up across a page whatever the control above them is. Reserving the
+   * knob's height for a list's indicator is what holds that line; without it a list
+   * sits higher than the knob beside it and the row staggers.
+   */
+  test('a list and a knob put their values on the same line', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'SRC' }).click()
+    // TSTR is a list and TSNS a knob, and the device puts them side by side. RATE
+    // completes that row but is not used here: SRC MAIN has a RATE as well.
+    const tops = await Promise.all(['TSTR', 'TSNS'].map(async label => {
+      const box = await paramItem(page, label).locator('.param-value').boundingBox()
+      return Math.round(box!.y)
+    }))
+    expect(new Set(tops).size, `tops were ${tops.join(', ')}`).toBe(1)
+  })
+
+  test('a value is wide enough to be read in full', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'AMP' }).click()
+    // ANLG is the widest label on this page and used to be cut down to ANL
+    const amp = paramSelect(page, 'AMP')
+    await expect(amp).toHaveValue('0')
+    const clipped = await amp.evaluate(el => el.scrollWidth > el.clientWidth)
+    expect(clipped).toBe(false)
+  })
+
+  test('edit mode marks a list the same way it marks a number', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'AMP' }).click()
+    await expect(paramSelect(page, 'AMP')).toHaveClass(/editable/)
+    await expect(paramInput(page, 'ATK')).toHaveClass(/editable/)
+    await page.locator('.mode-toggle').click()
+    await expect(paramSelect(page, 'AMP')).not.toHaveClass(/editable/)
+    await expect(paramInput(page, 'ATK')).not.toHaveClass(/editable/)
+  })
+
   test('the LFO waveform is drawn, not only named', async ({ page }) => {
     await page.locator('.parts-page-tabs .parts-tab', { hasText: 'LFO' }).click()
     const wave = page.locator('.param-item')

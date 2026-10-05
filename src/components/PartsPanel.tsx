@@ -544,23 +544,20 @@ export default function PartsPanel({
     const choices = spec.options
       ?? Array.from({ length: spec.max - spec.min + 1 }, (_, i) =>
         ({ value: spec.min + i, label: String(spec.min + i) }));
-    const control = isList ? (
-      // The device shows where you are in the list above the value, and draws the
-      // LFO waveform rather than naming it - the name is kept here as well
-      <div className="param-list-control">
-        <PositionBar count={choices.length} index={choices.findIndex(o => o.value === displayValue)} />
-        {field.endsWith('_wave') && <WaveGlyph wave={formatSpecValue(displayValue, spec)} />}
-        <select
-          className="param-select"
-          value={displayValue}
-          disabled={!isEditMode}
-          onChange={e => commit(parseInt(e.target.value, 10))}
-        >
-          {choices.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-        </select>
-      </div>
+
+    // Every parameter is drawn the way the device draws one: the name, then the
+    // indicator where a knob would be, then the value as text underneath. A list
+    // puts its position bar in the knob's place - except an LFO shape, which the
+    // device draws as the waveform itself.
+    const indicator = isList ? (
+      field.endsWith('_wave')
+        ? <WaveGlyph wave={formatSpecValue(displayValue, spec)} />
+        : (
+          <PositionBar
+            count={choices.length}
+            index={choices.findIndex(o => o.value === displayValue)}
+          />
+        )
     ) : (
       <RotaryKnob
         value={displayValue}
@@ -578,14 +575,24 @@ export default function PartsPanel({
       />
     );
 
-    const editableText = isEditMode && !formatter && spec.widget !== 'toggle'
-      && spec.widget !== 'selector';
+    const editableText = isEditMode && !formatter && !isList;
 
     return (
       <div className="param-item" key={key}>
         <span className="param-label">{label}</span>
-        {control}
-        {spec.widget !== 'toggle' && spec.widget !== 'selector' && (
+        <div className="param-control">{indicator}</div>
+        {isList ? (
+          <select
+            className={`param-value param-select ${isEditMode ? 'editable' : ''}`}
+            value={displayValue}
+            disabled={!isEditMode}
+            onChange={e => commit(parseInt(e.target.value, 10))}
+          >
+            {choices.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        ) : (
           <input
             type="text"
             className={`param-value ${editableText ? 'editable' : ''}`}
