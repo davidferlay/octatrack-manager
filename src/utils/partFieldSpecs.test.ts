@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fieldSpec, clampToSpec, formatSpecValue, parseSpecValue, isDeviceField, noteName, machineParamLabels } from './partFieldSpecs'
+import { machineTypesForTrack, MACHINE_TYPES, fieldSpec, clampToSpec, formatSpecValue, parseSpecValue, isDeviceField, noteName, machineParamLabels } from './partFieldSpecs'
 
 /**
  * The numbers asserted here are what the device itself wrote: each preset project was
@@ -547,5 +547,43 @@ describe('how a value reads', () => {
     // Every raw value 0-29 is reachable exactly once
     expect([...new Set(spec.options!.map(o => o.value))].sort((a, b) => a - b))
       .toEqual(Array.from({ length: 30 }, (_, i) => i))
+  })
+})
+
+describe('which machines a track can run', () => {
+  it('lists the five in the order the device lists them', () => {
+    expect(MACHINE_TYPES).toEqual(['Static', 'Flex', 'Thru', 'Neighbor', 'Pickup'])
+  })
+
+  /**
+   * A Neighbor machine takes its audio from the track before it. T1 and T5 are the
+   * first of their group and have none, so the device refuses it there (manual A.4).
+   */
+  it('withholds Neighbor from the tracks that have no neighbour', () => {
+    for (const track of [0, 4]) {
+      expect(machineTypesForTrack(track), `T${track + 1}`).not.toContain('Neighbor')
+      expect(machineTypesForTrack(track)).toHaveLength(4)
+    }
+  })
+
+  it('offers Neighbor on every other track', () => {
+    for (const track of [1, 2, 3, 5, 6, 7]) {
+      expect(machineTypesForTrack(track), `T${track + 1}`).toContain('Neighbor')
+      expect(machineTypesForTrack(track)).toHaveLength(5)
+    }
+  })
+
+  it('keeps the device order whichever track it is', () => {
+    expect(machineTypesForTrack(0)).toEqual(['Static', 'Flex', 'Thru', 'Pickup'])
+    expect(machineTypesForTrack(1)).toEqual(MACHINE_TYPES)
+  })
+
+  it('gives every machine it offers a set of SRC fields, or none on purpose', () => {
+    // Neighbor is the one with none - it has no parameters of its own
+    for (const machine of MACHINE_TYPES) {
+      const ptch = fieldSpec('machine_params.ptch', machine)
+      if (machine === 'Thru' || machine === 'Neighbor') expect(ptch, machine).toBeNull()
+      else expect(ptch, machine).not.toBeNull()
+    }
   })
 })

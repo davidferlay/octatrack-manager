@@ -117,121 +117,141 @@ sits, then the value as text. The app follows that.
 | PE71 | Value | Nothing can leave the range | Work through a page typing out-of-range numbers into every value | No parameter can be left holding a value the device would not produce |
 | PE72 | Value | OFF is preserved, not clamped | On the REC page set QREC and QPL to OFF, save, reopen | Both still read OFF - the setting is not folded into the ordinary range |
 
+## Changing a track's machine
+
+| # | Operation | Test | Steps | Pass Criteria |
+|---|-----------|------|-------|---------------|
+| PE73 | Machine | Badge in View mode | Look at the machine badge in a track header in View mode | It names the machine and cannot be changed |
+| PE74 | Machine | Picker in Edit mode | Switch to Edit mode | The badge becomes a picker, outlined like every other editable field |
+| PE75 | Machine | Reachable from every page | Switch page tabs in Edit mode | The picker is in the track header, so it is on SRC, AMP, LFO, FX, REC and All alike |
+| PE76 | Machine | The five machines | Open the picker on a track other than T1 or T5 | It offers Static, Flex, Thru, Neighbor and Pickup, in that order |
+| PE77 | Machine | Neighbor is withheld from T1 and T5 | Open the picker on T1, then on T5 | Neighbor is not offered - those tracks have no preceding track to listen to |
+| PE78 | Machine | The SRC page follows | On the SRC page, switch a Flex track to Thru | The page changes to INAB, VOL, INCD, VOL and the setup page empties |
+| PE79 | Machine | Parameters reset to the new machine | Switch a track to Pickup, then look at SRC | PTCH is at centre and DIR and OP are at their defaults, not at bytes left by the old machine |
+| PE80 | Machine | The rest of the track is untouched | Note the AMP, LFO, FX and REC values and the TRK level, then change the machine | All of them are unchanged - they belong to the track, not to its machine |
+| PE81 | Machine | Both sample slots survive | Note the slot on a Flex track, switch to Static and back | The Flex slot is as it was; the Static slot was never disturbed |
+| PE82 | Machine | Saved per Part and track | Change a machine, save, open the project on the device | Only that Part and that track changed machine |
+| PE83 | Machine | Other Parts keep theirs | Change the machine on one Part, then look at the same track on the others | They keep the machine they had |
+| PE84 | Machine | Marks the Part modified | Change a machine | The Part tab shows as modified, and Reload puts the old machine back |
+| PE85 | Machine | The track selector follows | Change a machine and open the track selector | That track is now named after the new machine |
+| PE86 | Machine | A MIDI track has none | Select a MIDI track in Edit mode | The header shows a plain MIDI badge with no picker |
+| PE87 | Machine | The device accepts it | Change each of the five machines in turn, save, open each on the device | Each reads as the machine that was picked |
+
 ## Machine-specific SRC pages
 
 | # | Operation | Test | Steps | Pass Criteria |
 |---|-----------|------|-------|---------------|
-| PE73 | SRC | Static and Flex | Select a track running Static, then one running Flex | SRC MAIN shows PTCH, STRT, LEN, RATE, RTRG, RTIM |
-| PE74 | SRC | Thru | Select a track running Thru | SRC MAIN shows INAB and its VOL, then INCD and its VOL - not the sample settings |
-| PE75 | SRC | Thru has no setup | Look at a Thru track's SRC SETUP | No setup parameters are offered, as on the device |
-| PE76 | SRC | Thru VOL is centred | Look at a Thru track's VOL | It reads either side of its centre, as the device shows it |
-| PE77 | SRC | Neighbor | Select a track running Neighbor | SRC MAIN and SRC SETUP both offer nothing - a Neighbor machine listens to the preceding track and has no parameters of its own |
-| PE78 | SRC | Pickup | Select a track running Pickup | SRC MAIN shows PTCH, DIR, LEN, GAIN and OP, as the device does |
-| PE79 | SRC | Pickup GAIN reads in decibels | Look at a Pickup machine's GAIN | It reads in dB as the device does, from -INF at the bottom |
-| PE80 | SRC | Pickup timestretch cannot be off | Open a Pickup machine's SRC SETUP and open TSTR | OFF is not offered - the manual states a Pickup machine cannot disable timestretch |
-| PE81 | SRC | SETUP LEN follows SLIC | With SLIC off note SETUP LEN's entries, then turn SLIC on | The LEN entries change to the ones the device offers in slice mode |
-| PE82 | SRC | Machine type shown | Look at any track header | It names the machine the track runs, and that name matches the device |
+| PE88 | SRC | Static and Flex | Select a track running Static, then one running Flex | SRC MAIN shows PTCH, STRT, LEN, RATE, RTRG, RTIM |
+| PE89 | SRC | Thru | Select a track running Thru | SRC MAIN shows INAB and its VOL, then INCD and its VOL - not the sample settings |
+| PE90 | SRC | Thru has no setup | Look at a Thru track's SRC SETUP | No setup parameters are offered, as on the device |
+| PE91 | SRC | Thru VOL is centred | Look at a Thru track's VOL | It reads either side of its centre, as the device shows it |
+| PE92 | SRC | Neighbor | Select a track running Neighbor | SRC MAIN and SRC SETUP both offer nothing - a Neighbor machine listens to the preceding track and has no parameters of its own |
+| PE93 | SRC | Pickup | Select a track running Pickup | SRC MAIN shows PTCH, DIR, LEN, GAIN and OP, as the device does |
+| PE94 | SRC | Pickup GAIN reads in decibels | Look at a Pickup machine's GAIN | It reads in dB as the device does, from -INF at the bottom |
+| PE95 | SRC | Pickup timestretch cannot be off | Open a Pickup machine's SRC SETUP and open TSTR | OFF is not offered - the manual states a Pickup machine cannot disable timestretch |
+| PE96 | SRC | SETUP LEN follows SLIC | With SLIC off note SETUP LEN's entries, then turn SLIC on | The LEN entries change to the ones the device offers in slice mode |
+| PE97 | SRC | Machine type shown | Look at any track header | It names the machine the track runs, and that name matches the device |
 
 ## AMP page
 
 | # | Operation | Test | Steps | Pass Criteria |
 |---|-----------|------|-------|---------------|
-| PE83 | AMP | Five parameters, not six | Open the AMP page | ATK, HOLD, REL, VOL and BAL are shown; there is no sixth knob (the device has none on this page) |
-| PE84 | AMP | SETUP settings | Look at AMP SETUP | AMP, SYNC, ATCK, FX1 and FX2 are shown, each as a list |
-| PE85 | AMP | HOLD runs to INF | Drive HOLD to its maximum | It reads INF, as the device does |
-| PE86 | AMP | AMP VOL is not the track level | Change AMP VOL, then look at the TRK level in the header | They are separate values; changing one does not move the other |
+| PE98 | AMP | Five parameters, not six | Open the AMP page | ATK, HOLD, REL, VOL and BAL are shown; there is no sixth knob (the device has none on this page) |
+| PE99 | AMP | SETUP settings | Look at AMP SETUP | AMP, SYNC, ATCK, FX1 and FX2 are shown, each as a list |
+| PE100 | AMP | HOLD runs to INF | Drive HOLD to its maximum | It reads INF, as the device does |
+| PE101 | AMP | AMP VOL is not the track level | Change AMP VOL, then look at the TRK level in the header | They are separate values; changing one does not move the other |
 
 ## LFO pages
 
 | # | Operation | Test | Steps | Pass Criteria |
 |---|-----------|------|-------|---------------|
-| PE87 | LFO | Three LFOs and a designer | Open the LFO page | LFO 1, LFO 2, LFO 3 and DESIGN are offered |
-| PE88 | LFO | Parameters per LFO | Select each LFO in turn | Each shows PMTR, WAVE, MULT, TRIG, SPD and DEP |
-| PE89 | LFO | Targets are named after the track | Open PMTR on a track and compare with the same track on the device | The SRC targets are named after that machine's own parameters, not generic numbers |
-| PE90 | LFO | Targets are named after the effects | Load an effect in FX1, then open PMTR | The FX1 targets name that effect and its parameter, such as PLTE MIX |
-| PE91 | LFO | Unused effect slots named by letter | Point PMTR at a knob position the effect does not use | It reads as the device names it, such as DJEQ <B> |
-| PE92 | LFO | Target list order matches the device | Scroll PMTR and compare the order with the device | The entries are in the same order, with the AMP targets before the LFO ones |
-| PE93 | LFO | Target stores the right parameter | Pick a target in the app, save, open on the device | The device shows the same target - not a neighbouring one |
-| PE94 | LFO | Changing the effect renames the targets | Change FX1 to a different effect, reopen PMTR | The FX1 target names follow the new effect |
-| PE95 | LFO | MIDI LFO targets | Open a MIDI track's LFO page and open PMTR | The targets are that MIDI track's own parameters, not an audio track's |
-| PE96 | LFO | MIDI targets read like the audio ones | Compare a MIDI track's PMTR list with an audio track's | Both name the page then the parameter in the device's abbreviations - NOTE VEL and ARP TRAN beside SRC PTCH and AMP ATK, never a long prose name |
-| PE97 | LFO | MIDI target names match their pages | Pick a MIDI target, then open the page it names | The parameter is there under that exact name |
-| PE98 | LFO | MIDI target stores the right parameter | Point a MIDI LFO at CTRL2 CC10, save, open on the device | The device shows that same target |
+| PE102 | LFO | Three LFOs and a designer | Open the LFO page | LFO 1, LFO 2, LFO 3 and DESIGN are offered |
+| PE103 | LFO | Parameters per LFO | Select each LFO in turn | Each shows PMTR, WAVE, MULT, TRIG, SPD and DEP |
+| PE104 | LFO | Targets are named after the track | Open PMTR on a track and compare with the same track on the device | The SRC targets are named after that machine's own parameters, not generic numbers |
+| PE105 | LFO | Targets are named after the effects | Load an effect in FX1, then open PMTR | The FX1 targets name that effect and its parameter, such as PLTE MIX |
+| PE106 | LFO | Unused effect slots named by letter | Point PMTR at a knob position the effect does not use | It reads as the device names it, such as DJEQ <B> |
+| PE107 | LFO | Target list order matches the device | Scroll PMTR and compare the order with the device | The entries are in the same order, with the AMP targets before the LFO ones |
+| PE108 | LFO | Target stores the right parameter | Pick a target in the app, save, open on the device | The device shows the same target - not a neighbouring one |
+| PE109 | LFO | Changing the effect renames the targets | Change FX1 to a different effect, reopen PMTR | The FX1 target names follow the new effect |
+| PE110 | LFO | MIDI LFO targets | Open a MIDI track's LFO page and open PMTR | The targets are that MIDI track's own parameters, not an audio track's |
+| PE111 | LFO | MIDI targets read like the audio ones | Compare a MIDI track's PMTR list with an audio track's | Both name the page then the parameter in the device's abbreviations - NOTE VEL and ARP TRAN beside SRC PTCH and AMP ATK, never a long prose name |
+| PE112 | LFO | MIDI target names match their pages | Pick a MIDI target, then open the page it names | The parameter is there under that exact name |
+| PE113 | LFO | MIDI target stores the right parameter | Point a MIDI LFO at CTRL2 CC10, save, open on the device | The device shows that same target |
 
 ## Effect pages
 
 | # | Operation | Test | Steps | Pass Criteria |
 |---|-----------|------|-------|---------------|
-| PE99 | FX | Parameters follow the effect | Change the effect loaded in FX1 | The FX1 parameter names change to that effect's |
-| PE100 | FX | Six positions per page | Open any effect's MAIN and SETUP pages | Each page has six knob positions |
-| PE101 | FX | Gaps are kept | Open the DJ EQ MAIN page | LS F is first, the second position is empty, then HS F, LOWG, MIDG, HI G - matching the device |
-| PE102 | FX | Comb filter gap | Open the comb filter MAIN page | MIX is the sixth parameter, past an empty fifth |
-| PE103 | FX | Spring reverb gap | Open the spring reverb MAIN page | TIME is alone on the first row, then HP, LP, MIX |
-| PE104 | FX | Reverb setup gap | Open the plate or dark reverb SETUP page | MIXF is the last position, not the fourth |
-| PE105 | FX | No setup page | Open the DJ EQ, flanger or comb filter SETUP page | No setup parameters are offered - the device gives these effects none |
-| PE106 | FX | Device wording | Compare the filter's MAIN labels with the device | They read WDTH and DPTH, as the device writes them |
-| PE107 | FX | A knob writes its own parameter | Change the last knob on a page that has a gap, save, open on the device | The device shows that same parameter changed, not the one beside it |
+| PE114 | FX | Parameters follow the effect | Change the effect loaded in FX1 | The FX1 parameter names change to that effect's |
+| PE115 | FX | Six positions per page | Open any effect's MAIN and SETUP pages | Each page has six knob positions |
+| PE116 | FX | Gaps are kept | Open the DJ EQ MAIN page | LS F is first, the second position is empty, then HS F, LOWG, MIDG, HI G - matching the device |
+| PE117 | FX | Comb filter gap | Open the comb filter MAIN page | MIX is the sixth parameter, past an empty fifth |
+| PE118 | FX | Spring reverb gap | Open the spring reverb MAIN page | TIME is alone on the first row, then HP, LP, MIX |
+| PE119 | FX | Reverb setup gap | Open the plate or dark reverb SETUP page | MIXF is the last position, not the fourth |
+| PE120 | FX | No setup page | Open the DJ EQ, flanger or comb filter SETUP page | No setup parameters are offered - the device gives these effects none |
+| PE121 | FX | Device wording | Compare the filter's MAIN labels with the device | They read WDTH and DPTH, as the device writes them |
+| PE122 | FX | A knob writes its own parameter | Change the last knob on a page that has a gap, save, open on the device | The device shows that same parameter changed, not the one beside it |
 
 ## Recorder setup
 
 | # | Operation | Test | Steps | Pass Criteria |
 |---|-----------|------|-------|---------------|
-| PE108 | REC | Two setup pages | Open the REC page | Two sections are shown, in the device's order |
-| PE109 | REC | Page one settings | Look at the first section | INAB, INCD, RLEN, TRIG, SRC3 and LOOP are shown, named as the device names them |
-| PE110 | REC | Page two settings | Look at the second section | FIN, FOUT, AB, QREC, QPL and CD are shown |
-| PE111 | REC | Fades read in steps | Look at FIN and FOUT | They read as sequencer steps, as the device shows them |
-| PE112 | REC | RLEN MAX | Drive RLEN to its maximum | It reads MAX |
-| PE113 | REC | Saves against the right Part and track | Change a recorder setting, save, reopen on the device | Only that Part and that track's recorder changed |
+| PE123 | REC | Two setup pages | Open the REC page | Two sections are shown, in the device's order |
+| PE124 | REC | Page one settings | Look at the first section | INAB, INCD, RLEN, TRIG, SRC3 and LOOP are shown, named as the device names them |
+| PE125 | REC | Page two settings | Look at the second section | FIN, FOUT, AB, QREC, QPL and CD are shown |
+| PE126 | REC | Fades read in steps | Look at FIN and FOUT | They read as sequencer steps, as the device shows them |
+| PE127 | REC | RLEN MAX | Drive RLEN to its maximum | It reads MAX |
+| PE128 | REC | Saves against the right Part and track | Change a recorder setting, save, reopen on the device | Only that Part and that track's recorder changed |
 
 ## MIDI track pages
 
 | # | Operation | Test | Steps | Pass Criteria |
 |---|-----------|------|-------|---------------|
-| PE114 | MIDI | NOTE page | Open a MIDI track's NOTE page | NOTE, VEL, LEN and the three extra notes are shown, then CHAN, BANK, PROG and SBNK on setup |
-| PE115 | MIDI | Bank and program can be Off | Set BANK, PROG or SBNK to its Off value, save, reopen | It still reads Off, not a number |
-| PE116 | MIDI | ARP page | Open the ARP page | TRAN, LEG, MODE, SPD, RNGE and NLEN are shown on MAIN, LEN and KEY on SETUP |
-| PE117 | MIDI | ARP key names | Open the ARP key list | It offers Off and the twenty-four major and minor keys, named as the device names them |
-| PE118 | MIDI | CTRL pages | Open CTRL 1 and CTRL 2 | The controller assignments and their values are shown |
-| PE119 | MIDI | Pitchbend is centred | Look at CTRL 1 PB | It reads either side of zero, with the device's centre reading 0 |
+| PE129 | MIDI | NOTE page | Open a MIDI track's NOTE page | NOTE, VEL, LEN and the three extra notes are shown, then CHAN, BANK, PROG and SBNK on setup |
+| PE130 | MIDI | Bank and program can be Off | Set BANK, PROG or SBNK to its Off value, save, reopen | It still reads Off, not a number |
+| PE131 | MIDI | ARP page | Open the ARP page | TRAN, LEG, MODE, SPD, RNGE and NLEN are shown on MAIN, LEN and KEY on SETUP |
+| PE132 | MIDI | ARP key names | Open the ARP key list | It offers Off and the twenty-four major and minor keys, named as the device names them |
+| PE133 | MIDI | CTRL pages | Open CTRL 1 and CTRL 2 | The controller assignments and their values are shown |
+| PE134 | MIDI | Pitchbend is centred | Look at CTRL 1 PB | It reads either side of zero, with the device's centre reading 0 |
 
 ## Sample slot per track and Part
 
 | # | Operation | Test | Steps | Pass Criteria |
 |---|-----------|------|-------|---------------|
-| PE120 | Slot | Slot shown in the header | Look at a track header | The sample slot number is shown beside the machine type |
-| PE121 | Slot | Read-only in View mode | In View mode, click the slot control | Nothing opens |
-| PE122 | Slot | Picker lists the right pool | In Edit mode, open the slot picker on a Flex machine, then on a Static one | Each lists its own pool, with the current assignment marked |
-| PE123 | Slot | Keyboard selection | In the picker, use the arrow keys then press Enter | The highlighted slot is assigned |
-| PE124 | Slot | Search | Press Ctrl+F in the picker, then type | The search box takes focus and the list filters |
-| PE125 | Slot | Sorting | Click a picker column header | The slot list sorts by that column |
-| PE126 | Slot | Preview | Preview a sample from the picker | It plays, as on the Sample Slots pages |
-| PE127 | Slot | Escape closes without assigning | Open the picker, press Escape | The picker closes and the assignment is unchanged |
-| PE128 | Slot | Row context menu | Right-click a slot row in the picker | The menu reads Play, then Un-assign on the assigned row only, then Open in file explorer and Copy path to clipboard |
-| PE129 | Slot | Un-assign | Choose Un-assign on the assigned row | The track points at an empty slot |
-| PE130 | Slot | Escape closes the menu, not the picker | With the context menu open, press Escape | The menu closes and the picker stays open |
-| PE131 | Slot | Saved per Part and track | Assign a slot, save, open on the device | Only that Part and that track changed |
-| PE132 | Slot | Usage badges follow | Assign a slot and watch the Flex/Static tab counts | The counts update and nothing else changes |
+| PE135 | Slot | Slot shown in the header | Look at a track header | The sample slot number is shown beside the machine type |
+| PE136 | Slot | Read-only in View mode | In View mode, click the slot control | Nothing opens |
+| PE137 | Slot | Picker lists the right pool | In Edit mode, open the slot picker on a Flex machine, then on a Static one | Each lists its own pool, with the current assignment marked |
+| PE138 | Slot | Keyboard selection | In the picker, use the arrow keys then press Enter | The highlighted slot is assigned |
+| PE139 | Slot | Search | Press Ctrl+F in the picker, then type | The search box takes focus and the list filters |
+| PE140 | Slot | Sorting | Click a picker column header | The slot list sorts by that column |
+| PE141 | Slot | Preview | Preview a sample from the picker | It plays, as on the Sample Slots pages |
+| PE142 | Slot | Escape closes without assigning | Open the picker, press Escape | The picker closes and the assignment is unchanged |
+| PE143 | Slot | Row context menu | Right-click a slot row in the picker | The menu reads Play, then Un-assign on the assigned row only, then Open in file explorer and Copy path to clipboard |
+| PE144 | Slot | Un-assign | Choose Un-assign on the assigned row | The track points at an empty slot |
+| PE145 | Slot | Escape closes the menu, not the picker | With the context menu open, press Escape | The menu closes and the picker stays open |
+| PE146 | Slot | Saved per Part and track | Assign a slot, save, open on the device | Only that Part and that track changed |
+| PE147 | Slot | Usage badges follow | Assign a slot and watch the Flex/Static tab counts | The counts update and nothing else changes |
 
 ## Track and Cue levels
 
 | # | Operation | Test | Steps | Pass Criteria |
 |---|-----------|------|-------|---------------|
-| PE133 | Levels | Shown in the header | Look at a track header | TRK and CUE are shown there, on every page including All |
-| PE134 | Levels | Read-only in View mode | In View mode, try to change TRK | Nothing changes |
-| PE135 | Levels | Saved per Part and track | Change TRK, save, open on the device | That Part and track's level changed, and nothing else |
+| PE148 | Levels | Shown in the header | Look at a track header | TRK and CUE are shown there, on every page including All |
+| PE149 | Levels | Read-only in View mode | In View mode, try to change TRK | Nothing changes |
+| PE150 | Levels | Saved per Part and track | Change TRK, save, open on the device | That Part and track's level changed, and nothing else |
 
 ## Editing, saving and reloading
 
 | # | Operation | Test | Steps | Pass Criteria |
 |---|-----------|------|-------|---------------|
-| PE136 | Save | Buttons disabled when clean | Enter Edit mode without changing anything | Reload, Save and Save All are all disabled |
-| PE137 | Save | Editing marks the Part | Change any parameter | That Part's tab is marked as modified |
-| PE138 | Save | Save commits the active Part | Change a parameter, press Save | The modified marking clears for that Part only |
-| PE139 | Save | Save All commits every Part | Modify two Parts, press Save All | Every modified marking clears |
-| PE140 | Save | Reload restores the Part | Modify a Part, press Reload | Its values return to the last saved ones and the marking clears |
-| PE141 | Save | Reload affects one Part | Modify two Parts, Reload one | Only that Part reverts; the other keeps its changes |
-| PE142 | Save | Edited on the device | Edit a Part on the device without saving it there, then open the bank in the app | The app shows that Part as modified |
-| PE143 | Save | Reload blocked without a saved state | On a Part the device has never saved, press Reload | Reload is refused rather than clearing the Part |
-| PE144 | Save | Changes survive a reopen | Change a parameter, leave the Parts tab, come back | The change is still there and the Part is still marked modified |
-| PE145 | Save | Committed values reach the device | Save, eject, open the project on the device | The device shows the edited values in that Part |
-| PE146 | Save | Other Parts untouched | Change one Part, save, compare the other three on the device | They are unchanged |
+| PE151 | Save | Buttons disabled when clean | Enter Edit mode without changing anything | Reload, Save and Save All are all disabled |
+| PE152 | Save | Editing marks the Part | Change any parameter | That Part's tab is marked as modified |
+| PE153 | Save | Save commits the active Part | Change a parameter, press Save | The modified marking clears for that Part only |
+| PE154 | Save | Save All commits every Part | Modify two Parts, press Save All | Every modified marking clears |
+| PE155 | Save | Reload restores the Part | Modify a Part, press Reload | Its values return to the last saved ones and the marking clears |
+| PE156 | Save | Reload affects one Part | Modify two Parts, Reload one | Only that Part reverts; the other keeps its changes |
+| PE157 | Save | Edited on the device | Edit a Part on the device without saving it there, then open the bank in the app | The app shows that Part as modified |
+| PE158 | Save | Reload blocked without a saved state | On a Part the device has never saved, press Reload | Reload is refused rather than clearing the Part |
+| PE159 | Save | Changes survive a reopen | Change a parameter, leave the Parts tab, come back | The change is still there and the Part is still marked modified |
+| PE160 | Save | Committed values reach the device | Save, eject, open the project on the device | The device shows the edited values in that Part |
+| PE161 | Save | Other Parts untouched | Change one Part, save, compare the other three on the device | They are unchanged |

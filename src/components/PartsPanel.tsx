@@ -5,7 +5,10 @@ import { TrackBadge } from './TrackBadge';
 import { ALL_MIDI_TRACKS } from './TrackSelector';
 import { WriteStatus, writeStatus } from '../types/writeStatus';
 import { RotaryKnob } from './RotaryKnob';
-import { fieldSpec, clampToSpec, formatSpecValue, parseSpecValue } from '../utils/partFieldSpecs';
+import {
+  fieldSpec, clampToSpec, formatSpecValue, parseSpecValue,
+  machineTypesForTrack, MachineType,
+} from '../utils/partFieldSpecs';
 import { PositionBar, WaveGlyph } from './ParamWidgets';
 import {
   fieldHelp, helpTitle, pageHelp, sectionHelp, machineHelp, LEVEL_HELP,
@@ -37,6 +40,14 @@ interface PartsPanelProps {
    * knob turn would rescan the Set for nothing.
    */
   onSlotAssignmentSaved?: () => void;
+  /**
+   * A track was switched to a different machine.
+   *
+   * The track selector names each track after its machine, and that name is read once
+   * when the bank loads - without this it would keep saying Flex until the next bank
+   * or Part change.
+   */
+  onMachineTypeChanged?: (trackId: number, machineType: string) => void;
   /** The project's Sample Slots, so a Static/Flex track can be pointed at another one. */
   sampleSlots?: { static_slots: SlotChoice[]; flex_slots: SlotChoice[] };
 }
@@ -67,6 +78,7 @@ export default function PartsPanel({
   onSharedActivePartChange,
   onWriteStatusChange,
   onSlotAssignmentSaved,
+  onMachineTypeChanged,
   sampleSlots,
 }: PartsPanelProps) {
   const [partsData, setPartsData] = useState<PartData[]>([]);
@@ -275,6 +287,57 @@ export default function PartsPanel({
 
 
   // Generic function to update a parameter value and auto-save to parts.unsaved
+  /**
+   * Marks the Part as modified and queues the debounced write to parts.unsaved.
+   *
+   * Split out of updatePartParam because changing a track's machine rewrites a dozen
+   * fields in one go: calling the single-field path once per field would read a stale
+   * snapshot each time and only the last write would survive.
+   */
+  const queuePartSave = useCallback((partId: number, what: string) => {
+    setModifiedPartIds(prev => new Set([...prev, partId]));
+
+    if (saveDebounceRef.current.timer) {
+      clearTimeout(saveDebounceRef.current.timer);
+    }
+    onWriteStatusChange?.(writeStatus.writing());
+
+    saveDebounceRef.current.timer = setTimeout(() => {
+      // Read the latest state at save time rather than closing over a snapshot
+      setPartsData(currentPartsData => {
+        const currentPartIndex = currentPartsData.findIndex(p => p.part_id === partId);
+        if (currentPartIndex === -1) {
+          console.error('[PartsPanel] Part not found at save time:', partId);
+          return currentPartsData;
+        }
+
+        const partToSave = currentPartsData[currentPartIndex];
+        console.log('[PartsPanel] Debounced save - saving part', partId, what);
+
+        invoke('save_parts', {
+          path: projectPath,
+          bankId: bankId,
+          partsData: [partToSave]
+        }).then(() => {
+          console.log('[PartsPanel] Auto-saved part', partId, 'to parts.unsaved');
+          const partName = partNames[partId] || `Part ${partId + 1}`;
+          onWriteStatusChange?.(writeStatus.success(`Part ${partName} saved as *`));
+          setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
+        }).catch(err => {
+          console.error('Failed to auto-save part:', err);
+          onWriteStatusChange?.(writeStatus.error('Auto-save failed'));
+          setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
+        });
+
+        return currentPartsData; // Read only - the mutation already happened
+      });
+
+      saveDebounceRef.current.timer = null;
+    }, 500);
+
+    saveDebounceRef.current.partId = partId;
+  }, [projectPath, bankId, partNames, onWriteStatusChange]);
+
   const updatePartParam = useCallback(<T extends keyof PartData>(
     partId: number,
     section: T,
@@ -315,55 +378,53 @@ export default function PartsPanel({
       return newData;
     });
 
-    // Track which part was modified (shows * indicator)
-    setModifiedPartIds(prev => new Set([...prev, partId]));
+    queuePartSave(partId, `${String(section)}.${field}`);
+  }, [partsData, queuePartSave]);
 
-    // Debounced auto-save to backend (parts.unsaved)
-    // Clear any existing debounce timer
-    if (saveDebounceRef.current.timer) {
-      clearTimeout(saveDebounceRef.current.timer);
-    }
+  /**
+   * Switches a track's machine, and resets that track's SRC pages to the new one's
+   * defaults.
+   *
+   * The six MAIN and six SETUP slots are shared storage that each machine reads
+   * differently, so a byte left behind by the old machine lands on a parameter it was
+   * never meant for - the start point of a sample becomes a Pickup machine's playback
+   * direction. Each field the new machine uses goes to that machine's own default;
+   * a field it does not use is left alone, so switching back finds it as it was.
+   *
+   * Nothing outside SRC is touched. The AMP, LFO, effect and recorder pages belong to
+   * the track rather than to its machine, and both sample slots are kept so a track
+   * switched from Flex to Static still points where it did.
+   */
+  const changeMachineType = useCallback((
+    partId: number,
+    trackId: number,
+    nextType: MachineType,
+  ) => {
+    setPartsData(prev => {
+      const partIndex = prev.findIndex(p => p.part_id === partId);
+      if (partIndex === -1) return prev;
 
-    // Show "writing" status immediately for user feedback
-    onWriteStatusChange?.(writeStatus.writing());
+      const updatedPart = JSON.parse(JSON.stringify(prev[partIndex])) as PartData;
+      const machine = updatedPart.machines[trackId];
+      if (!machine || machine.machine_type === nextType) return prev;
 
-    // Set new debounce timer - save after 500ms of no changes
-    saveDebounceRef.current.timer = setTimeout(() => {
-      // Get the latest part data from state at save time
-      setPartsData(currentPartsData => {
-        const currentPartIndex = currentPartsData.findIndex(p => p.part_id === partId);
-        if (currentPartIndex === -1) {
-          console.error('[PartsPanel] Part not found at save time:', partId);
-          return currentPartsData;
+      machine.machine_type = nextType;
+      for (const group of ['machine_params', 'machine_setup'] as const) {
+        const values = machine[group] as unknown as Record<string, number | null>;
+        for (const name of Object.keys(values)) {
+          const spec = fieldSpec(`${group}.${name}`, nextType);
+          if (spec) values[name] = spec.default;
         }
+      }
 
-        const partToSave = currentPartsData[currentPartIndex];
-        console.log('[PartsPanel] Debounced save - saving part', partId, 'field', field, '=', value);
+      const newData = [...prev];
+      newData[partIndex] = updatedPart;
+      return newData;
+    });
 
-        invoke('save_parts', {
-          path: projectPath,
-          bankId: bankId,
-          partsData: [partToSave]
-        }).then(() => {
-          console.log('[PartsPanel] Auto-saved part', partId, 'to parts.unsaved');
-          const partName = partNames[partId] || `Part ${partId + 1}`;
-          onWriteStatusChange?.(writeStatus.success(`Part ${partName} saved as *`));
-          // Reset to idle after a short delay
-          setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
-        }).catch(err => {
-          console.error('Failed to auto-save part:', err);
-          onWriteStatusChange?.(writeStatus.error('Auto-save failed'));
-          setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
-        });
-
-        return currentPartsData; // Don't modify state, just use it to get current data
-      });
-
-      saveDebounceRef.current.timer = null;
-    }, 500);
-
-    saveDebounceRef.current.partId = partId;
-  }, [projectPath, bankId, partsData, partNames, onWriteStatusChange]);
+    queuePartSave(partId, `machine type -> ${nextType}`);
+    onMachineTypeChanged?.(trackId, nextType);
+  }, [queuePartSave, onMachineTypeChanged]);
 
   // Update a single point in the LFO design array (local state only, no save)
   const updateLfoDesignLocal = useCallback((
@@ -928,6 +989,39 @@ export default function PartsPanel({
   };
 
   /**
+   * The track's machine: a badge in View mode, a picker in Edit mode.
+   *
+   * It lives in the header rather than on the SRC page so it is reachable from every
+   * page - the machine decides what the SRC page even shows, and being able to change
+   * it only from the page it rewrites is a poor place for it.
+   *
+   * MIDI tracks have no machine, so they keep the plain badge.
+   */
+  const renderMachineField = (activePart: PartData, trackId: number, machineType: string) => {
+    const choices = machineTypesForTrack(trackId);
+    const known = choices.includes(machineType as MachineType);
+    if (!isEditMode || trackId >= 8 || !known) {
+      return (
+        <span className="machine-type" title={machineHelp(machineType)}>{machineType}</span>
+      );
+    }
+    return (
+      <select
+        className="machine-type machine-type-select editable"
+        value={machineType}
+        title={machineHelp(machineType)}
+        onChange={e => changeMachineType(
+          activePart.part_id, trackId, e.target.value as MachineType,
+        )}
+      >
+        {choices.map(name => (
+          <option key={name} value={name}>{name}</option>
+        ))}
+      </select>
+    );
+  };
+
+  /**
    * The track's Track and Cue levels, compact enough to live in the header.
    *
    * They belong to the track rather than to any one parameter page, and a MIXER block
@@ -983,7 +1077,7 @@ export default function PartsPanel({
       {opts.withLevels && renderHeaderLevels(activePart, trackId)}
       <div className="parts-track-header-right">
         {opts.withSample && renderSlotField(activePart, activePart.machines[trackId])}
-        <span className="machine-type" title={machineHelp(machineType)}>{machineType}</span>
+        {renderMachineField(activePart, trackId, machineType)}
       </div>
     </div>
   );

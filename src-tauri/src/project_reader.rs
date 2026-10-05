@@ -3023,10 +3023,28 @@ fn clamp_opt(value: &mut Option<u8>, min: u8, max: u8) {
 /// made on the device with each field driven to its minimum and its maximum; fields
 /// whose range has not been measured (the effect pages) are left alone rather than
 /// guessed at.
+/// The byte the device stores for a machine name, or None for a name it does not know.
+///
+/// The inverse of what `read_parts_data` does. Unknown names return None rather than a
+/// default so that a payload carrying something unexpected leaves the bank's own byte
+/// alone instead of silently turning the track into a Static machine.
+fn machine_type_byte(name: &str) -> Option<u8> {
+    match name {
+        "Static" => Some(0),
+        "Flex" => Some(1),
+        "Thru" => Some(2),
+        "Neighbor" => Some(3),
+        "Pickup" => Some(4),
+        _ => None,
+    }
+}
+
 fn clamp_part_data(part: &mut PartData, machine_types: &[u8; 8]) {
     for (track_id, machine) in part.machines.iter_mut().enumerate() {
-        // The bank's own byte decides which machine this is, not the payload's claim -
-        // the save path writes by that byte, so the ranges have to follow the same one
+        // The byte the save path is about to write decides which machine this is, so
+        // the ranges follow it. The caller has already applied any machine type change
+        // to that byte, which is why a track switched to Pickup is clamped as a Pickup
+        // and not as whatever it used to be.
         let kind = match machine_types.get(track_id) {
             Some(0) => "Static",
             Some(1) => "Flex",
@@ -3190,6 +3208,20 @@ pub fn save_parts_data(
 
         // Get mutable reference to the unsaved (working) copy only
         let part_unsaved = &mut bank_data.parts.unsaved.0[part_id];
+
+        // A track's machine can be changed from the editor, so the payload decides it.
+        // This has to land before anything else: both the clamping below and the
+        // per-track writes further down read this byte to know which machine's layout
+        // they are working with. A name the mapping does not recognise leaves the
+        // bank's own byte untouched.
+        for track_id in 0..8 {
+            if let Some(machine) = part_data.machines.get(track_id) {
+                if let Some(byte) = machine_type_byte(&machine.machine_type) {
+                    part_unsaved.audio_track_machine_types[track_id] = byte;
+                }
+            }
+        }
+
         // Hold every value to what the hardware produces before any of it is written
         let mut part_data = part_data.clone();
         clamp_part_data(&mut part_data, &part_unsaved.audio_track_machine_types);
@@ -18393,15 +18425,65 @@ mod tests {
             );
         }
 
-        /// The ranges follow the bank's own machine type, not whatever the payload
-        /// claims - otherwise a mismatched payload would be checked against the
-        /// wrong machine's limits.
+        /// A track's machine can be changed from the editor, so the payload decides it.
         #[test]
-        fn test_save_parts_data_ranges_follow_the_bank_not_the_payload() {
+        fn test_save_parts_data_changes_the_machine_type() {
             let project = TestProject::new(); // track 1 is a Static machine
             let mut parts = read_parts_data(&project.path, "A").unwrap();
-            // Claim it is something else, and send a value only Static would reject
             parts.parts[0].machines[0].machine_type = "Pickup".to_string();
+
+            save_parts_data(&project.path, "A", parts.parts.clone()).unwrap();
+
+            let reloaded = read_parts_data(&project.path, "A").unwrap();
+            assert_eq!(reloaded.parts[0].machines[0].machine_type, "Pickup");
+        }
+
+        /// The machine type is per Part, as everything else on these pages is - one
+        /// Part switching a track to Thru must leave the other three alone.
+        #[test]
+        fn test_save_parts_data_changes_the_machine_type_for_one_part_only() {
+            let project = TestProject::new();
+            let mut parts = read_parts_data(&project.path, "A").unwrap();
+            let before = parts.parts[1].machines[0].machine_type.clone();
+            parts.parts[0].machines[0].machine_type = "Thru".to_string();
+
+            save_parts_data(&project.path, "A", parts.parts.clone()).unwrap();
+
+            let reloaded = read_parts_data(&project.path, "A").unwrap();
+            assert_eq!(reloaded.parts[0].machines[0].machine_type, "Thru");
+            assert_eq!(reloaded.parts[1].machines[0].machine_type, before);
+        }
+
+        /// The ranges follow the machine being written, not the one the bank used to
+        /// hold - a track switched to Pickup is held to a Pickup machine's limits in
+        /// the same save that switches it.
+        #[test]
+        fn test_save_parts_data_ranges_follow_the_machine_being_written() {
+            let project = TestProject::new(); // track 1 is a Static machine
+            let mut parts = read_parts_data(&project.path, "A").unwrap();
+            parts.parts[0].machines[0].machine_type = "Pickup".to_string();
+            // DIR has three settings on a Pickup machine; a Static machine has no DIR
+            // at all and would have left this byte alone
+            parts.parts[0].machines[0].machine_params.dir = Some(99);
+
+            save_parts_data(&project.path, "A", parts.parts.clone()).unwrap();
+
+            let reloaded = read_parts_data(&project.path, "A").unwrap();
+            assert_eq!(reloaded.parts[0].machines[0].machine_type, "Pickup");
+            assert_eq!(
+                reloaded.parts[0].machines[0].machine_params.dir,
+                Some(2),
+                "clamped as the Pickup machine it is being turned into"
+            );
+        }
+
+        /// A name the mapping does not know leaves the bank's byte alone rather than
+        /// defaulting the track to Static, and the ranges then follow that byte.
+        #[test]
+        fn test_save_parts_data_ignores_an_unknown_machine_name() {
+            let project = TestProject::new(); // track 1 is a Static machine
+            let mut parts = read_parts_data(&project.path, "A").unwrap();
+            parts.parts[0].machines[0].machine_type = "Nonsense".to_string();
             parts.parts[0].machines[0].machine_setup.xloop = Some(9);
 
             save_parts_data(&project.path, "A", parts.parts.clone()).unwrap();
@@ -18411,8 +18493,24 @@ mod tests {
             assert_eq!(
                 reloaded.parts[0].machines[0].machine_setup.xloop,
                 Some(3),
-                "clamped as the Static machine the bank says it is"
+                "still clamped as the Static machine the bank kept"
             );
+        }
+
+        /// Every name the editor can send has to round-trip, or a machine the picker
+        /// offers would quietly not take.
+        #[test]
+        fn test_save_parts_data_accepts_every_machine_the_device_has() {
+            for name in ["Static", "Flex", "Thru", "Neighbor", "Pickup"] {
+                let project = TestProject::new();
+                let mut parts = read_parts_data(&project.path, "A").unwrap();
+                parts.parts[0].machines[0].machine_type = name.to_string();
+
+                save_parts_data(&project.path, "A", parts.parts.clone()).unwrap();
+
+                let reloaded = read_parts_data(&project.path, "A").unwrap();
+                assert_eq!(reloaded.parts[0].machines[0].machine_type, name);
+            }
         }
 
         /// The slot attribute columns sit next to the device, so they use its words.

@@ -303,6 +303,37 @@
   letter-spacing: 0.5px;
 }
 
+/* In Edit mode the badge becomes a picker. It keeps the badge's own look rather than
+   growing a second one - what changes is the orange outline that marks everything
+   editable on these pages, and the drop-down arrow the device has no equivalent for
+   is dropped, as it is on the parameter selectors. */
+.machine-type-select {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-align: center;
+  text-align-last: center;
+  font-family: inherit;
+  outline: none;
+}
+
+.machine-type-select.editable {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+}
+
+.machine-type-select:hover {
+  border-color: #fbbf24;
+}
+
+.machine-type-select option {
+  background: #2a2a2a;
+  color: #ffffff;
+  text-transform: none;
+}
+
 .parts-params-section {
   margin-bottom: 10px;
   overflow: hidden;

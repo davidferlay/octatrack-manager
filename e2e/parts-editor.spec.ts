@@ -1336,3 +1336,156 @@ test.describe('Parts Editor - Tab and header help', () => {
       .toContain('Click to pick another slot')
   })
 })
+
+/**
+ * Changing a track's machine from the editor. The machine decides what the SRC page
+ * even shows, so the picker lives in the track header where every page carries it.
+ */
+test.describe('Parts Editor - Machine type', () => {
+  const machinePicker = (page: Page) =>
+    page.locator('.parts-track-header select.machine-type').first()
+
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await openPartsTab(page)
+    await selectTrack(page, '0')
+  })
+
+  test('is a badge in View mode and a picker in Edit mode', async ({ page }) => {
+    await expect(page.locator('.parts-track-header span.machine-type').first())
+      .toHaveText('Flex')
+    await expect(machinePicker(page)).toHaveCount(0)
+
+    await enterEditMode(page)
+    await expect(machinePicker(page)).toHaveValue('Flex')
+  })
+
+  test('offers the five machines the device has', async ({ page }) => {
+    await enterEditMode(page)
+    await selectTrack(page, '1') // T2 has a neighbour, so it can run a Neighbor machine
+    await expect(machinePicker(page).locator('option'))
+      .toHaveText(['Static', 'Flex', 'Thru', 'Neighbor', 'Pickup'])
+  })
+
+  /** Manual A.4: a Neighbor machine listens to the track before it, and T1 and T5
+   *  are the first of their group, so the device will not let them run one. */
+  test('does not offer Neighbor on the tracks that have no neighbour', async ({ page }) => {
+    await enterEditMode(page)
+    for (const track of ['0', '4']) {
+      await selectTrack(page, track)
+      await expect(machinePicker(page).locator('option')).toHaveText(
+        ['Static', 'Flex', 'Thru', 'Pickup'],
+        { timeout: 5000 },
+      )
+    }
+  })
+
+  test('saves the machine against that Part and track', async ({ page }) => {
+    await enterEditMode(page)
+    await machinePicker(page).selectOption('Pickup')
+
+    await expect
+      .poll(async () => (await getInvokeCalls(page, 'save_parts')).length)
+      .toBeGreaterThan(0)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    const saved = calls[calls.length - 1].args.partsData[0]
+    expect(saved.part_id).toBe(0)
+    expect(saved.machines[0].machine_type).toBe('Pickup')
+    // Only the track that was changed
+    expect(saved.machines[1].machine_type).toBe('Flex')
+  })
+
+  test('marks the Part modified', async ({ page }) => {
+    await enterEditMode(page)
+    await machinePicker(page).selectOption('Thru')
+    await expect(page.locator('.parts-part-tab').first()).toHaveClass(/modified/)
+  })
+
+  test('the SRC page becomes the new machine\'s', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^SRC$/ }).click()
+    // A Flex machine's SRC MAIN
+    await expect(page.locator('.param-label', { hasText: /^STRT$/ })).toHaveCount(1)
+
+    await machinePicker(page).selectOption('Thru')
+    // A Thru machine has the inputs instead, and no setup parameters at all
+    await expect(page.locator('.param-label', { hasText: /^INAB$/ })).toHaveCount(1)
+    await expect(page.locator('.param-label', { hasText: /^STRT$/ })).toHaveCount(0)
+  })
+
+  /**
+   * The six SRC slots are shared storage each machine reads differently, so a byte
+   * left by the old machine would land on a parameter it was never meant for.
+   */
+  test('resets the SRC parameters to the new machine\'s defaults', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^SRC$/ }).click()
+    await machinePicker(page).selectOption('Pickup')
+
+    await expect
+      .poll(async () => (await getInvokeCalls(page, 'save_parts')).length)
+      .toBeGreaterThan(0)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    const machine = calls[calls.length - 1].args.partsData[0].machines[0]
+    expect(machine.machine_params.ptch).toBe(64) // centre, not whatever Flex held
+    expect(machine.machine_params.dir).toBe(2)
+    expect(machine.machine_params.op).toBe(1)
+  })
+
+  /**
+   * Switching back is not an undo. The rule is that the machine you pick starts at its
+   * own defaults, in both directions - Reload Part is what puts a Part back.
+   */
+  test('switching back resets again rather than restoring', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^SRC$/ }).click()
+    const strt = page.locator('.param-item')
+      .filter({ has: page.locator('.param-label', { hasText: /^STRT$/ }) })
+      .first().locator('input.param-value')
+    await strt.fill('99')
+    await strt.blur()
+    await expect(strt).toHaveValue('99')
+
+    // Thru does not use that slot, so the byte survives while the track runs Thru
+    await machinePicker(page).selectOption('Thru')
+    await expect(page.locator('.param-label', { hasText: /^STRT$/ })).toHaveCount(0)
+
+    // ...but Flex does use it, so coming back starts it at the Flex default
+    await machinePicker(page).selectOption('Flex')
+    await expect(strt).toHaveValue('0')
+  })
+
+  test('leaves the rest of the track alone', async ({ page }) => {
+    await enterEditMode(page)
+    await machinePicker(page).selectOption('Thru')
+
+    await expect
+      .poll(async () => (await getInvokeCalls(page, 'save_parts')).length)
+      .toBeGreaterThan(0)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    const saved = calls[calls.length - 1].args.partsData[0]
+    // The AMP page, the levels and both sample slots belong to the track, not to its
+    // machine - switching back has to find them where they were
+    expect(saved.amps[0].atk).toBe(20)
+    expect(saved.volumes[0].main).toBe(100)
+    expect(saved.machines[0].flex_slot_id).toBe(0)
+    expect(saved.machines[0].static_slot_id).toBe(0)
+  })
+
+  test('the track selector follows the new machine', async ({ page }) => {
+    await enterEditMode(page)
+    // The first entry is "All Audio Tracks", so T1 is the option whose value is 0
+    const t1 = page.locator('#parts-track-select option[value="0"]')
+    await expect(t1).toContainText('Flex')
+    await machinePicker(page).selectOption('Thru')
+    await expect(t1).toContainText('Thru')
+  })
+
+  test('a MIDI track keeps its plain badge', async ({ page }) => {
+    await enterEditMode(page)
+    await selectTrack(page, '8')
+    await expect(page.locator('.parts-track-header span.machine-type').first())
+      .toHaveText('MIDI')
+    await expect(machinePicker(page)).toHaveCount(0)
+  })
+})

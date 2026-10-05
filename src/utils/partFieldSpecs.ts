@@ -59,6 +59,21 @@ export interface FieldSpec {
 /** Machine types that carry their own SRC MAIN and SRC SETUP fields. */
 export type MachineType = 'Static' | 'Flex' | 'Thru' | 'Neighbor' | 'Pickup';
 
+/** The five machines, in the order the device lists them, which is also their raw order. */
+export const MACHINE_TYPES: MachineType[] = ['Static', 'Flex', 'Thru', 'Neighbor', 'Pickup'];
+
+/**
+ * The machines a given track can run, by its zero-based index.
+ *
+ * A Neighbor machine takes its audio from the track before it, so tracks 1 and 5 - the
+ * first of each group of four - have no neighbour to take it from and the device will
+ * not let them run one (manual A.4).
+ */
+export function machineTypesForTrack(trackId: number): MachineType[] {
+  const hasNeighbour = trackId !== 0 && trackId !== 4;
+  return MACHINE_TYPES.filter(m => m !== 'Neighbor' || hasNeighbour);
+}
+
 const U = (min: number, max: number, def: number): FieldSpec =>
   ({ min, max, default: def, widget: 'unipolar' });
 

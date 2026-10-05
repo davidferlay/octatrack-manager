@@ -1552,6 +1552,9 @@ export function ProjectDetail() {
                           sharedActivePartIndex={sharedPartsActivePartIndex}
                           onSharedActivePartChange={setSharedPartsActivePartIndex}
                           onSlotAssignmentSaved={refreshSampleUsage}
+                          onMachineTypeChanged={(trackId, machineType) =>
+                            setAudioTrackMachineTypes(prev => ({ ...prev, [trackId]: machineType }))
+                          }
                           sampleSlots={metadata ? {
                             static_slots: metadata.sample_slots.static_slots,
                             flex_slots: metadata.sample_slots.flex_slots,
