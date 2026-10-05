@@ -236,6 +236,28 @@ test.describe('Parts Editor - Layout', () => {
     await openPartsTab(page)
   })
 
+  /**
+   * The ALL page packs the panes the device's own pages leave half empty: an LFO has
+   * six settings and no setup page, so two LFOs share a pane rather than each taking
+   * one. REC rides along in the space that frees up.
+   */
+  test('the ALL page pairs the LFO panes and carries REC', async ({ page }) => {
+    const titles = await page.locator('.parts-track-wide .params-label').allTextContents()
+    expect(titles).toEqual([
+      'SRC', 'AMP', 'LFO 1 / LFO 2', 'LFO 3 / DESIGN',
+      'FX1 - FILTER', 'FX2 - DELAY', 'REC',
+    ])
+  })
+
+  test('the paired panes name each LFO inside', async ({ page }) => {
+    const lfo = page.locator('.parts-all-section')
+      .filter({ has: page.locator('.params-label', { hasText: 'LFO 1 / LFO 2' }) })
+    await expect(lfo.locator('.params-column-label')).toHaveText(['LFO 1', 'LFO 2'])
+    const design = page.locator('.parts-all-section')
+      .filter({ has: page.locator('.params-label', { hasText: 'LFO 3 / DESIGN' }) })
+    await expect(design.locator('.params-column-label')).toHaveText(['LFO 3', 'DESIGN'])
+  })
+
   test('shows four part tabs named from the bank', async ({ page }) => {
     const partTabs = page.locator('.parts-part-tab')
     await expect(partTabs).toHaveCount(4)

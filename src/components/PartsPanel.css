@@ -1198,9 +1198,11 @@
 }
 
 /* Where this value sits in its list. The device fills the bar with a half-tone and
-   marks the position with a solid block. Kept near the device's own light block rather
-   than the panel accent: orange at this size glares, and the bar is an indicator, not
-   something to look at. */
+   marks the position with a solid block.
+
+   The block is the same blue the knob draws its value arc in, because it says the same
+   thing: this is where the value sits in its travel. Orange was tried and glared at this
+   size, and plain grey read as disabled rather than as a reading. */
 .parts-track .param-position-bar,
 .parts-individual-section .param-position-bar {
   position: relative;
@@ -1225,7 +1227,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  background: #b9c2cb;
+  background: #5dade2;
   /* A thirty-entry list would otherwise mark its position with two pixels */
   min-width: 5px;
 }

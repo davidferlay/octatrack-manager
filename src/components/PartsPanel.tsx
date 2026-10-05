@@ -2162,12 +2162,12 @@ export default function PartsPanel({
                   </div>
                 </div>
 
-                {/* LFO1 Section */}
+                {/* LFO 1 and LFO 2 Section */}
                 <div className="parts-all-section">
-                  <div className="params-label">LFO 1</div>
+                  <div className="params-label">LFO 1 / LFO 2</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
-                      <div className="params-column-label">MAIN</div>
+                      <div className="params-column-label">LFO 1</div>
                       <div className="params-grid">
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo1_pmtr', lfo.lfo1_pmtr, 'PMTR', undefined, undefined, activePart.machines[trackIdx]?.machine_type)}
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo1_wave', lfo.lfo1_wave, 'WAVE')}
@@ -2177,15 +2177,8 @@ export default function PartsPanel({
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'dep1', lfo.dep1, 'DEP')}
                       </div>
                     </div>
-                  </div>
-                </div>
-
-                {/* LFO2 Section */}
-                <div className="parts-all-section">
-                  <div className="params-label">LFO 2</div>
-                  <div className="params-vertical-layout">
                     <div className="params-subsection">
-                      <div className="params-column-label">MAIN</div>
+                      <div className="params-column-label">LFO 2</div>
                       <div className="params-grid">
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo2_pmtr', lfo.lfo2_pmtr, 'PMTR', undefined, undefined, activePart.machines[trackIdx]?.machine_type)}
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo2_wave', lfo.lfo2_wave, 'WAVE')}
@@ -2197,16 +2190,13 @@ export default function PartsPanel({
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Row 2: LFO3, DESIGN, FX1, FX2 */}
-              <div className="parts-all-row">
-                {/* LFO3 Section */}
+                {/* LFO 3 and DESIGN Section */}
                 <div className="parts-all-section">
-                  <div className="params-label">LFO 3</div>
+                  <div className="params-label">LFO 3 / DESIGN</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
-                      <div className="params-column-label">MAIN</div>
+                      <div className="params-column-label">LFO 3</div>
                       <div className="params-grid">
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo3_pmtr', lfo.lfo3_pmtr, 'PMTR', undefined, undefined, activePart.machines[trackIdx]?.machine_type)}
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'lfo3_wave', lfo.lfo3_wave, 'WAVE')}
@@ -2216,20 +2206,16 @@ export default function PartsPanel({
                         {renderParamWithKnob(activePart.part_id, 'lfos', trackIdx, 'dep3', lfo.dep3, 'DEP')}
                       </div>
                     </div>
-                  </div>
-                </div>
-
-                {/* DESIGN Section */}
-                <div className="parts-all-section">
-                  <div className="params-label">DESIGN</div>
-                  <div className="params-vertical-layout">
                     <div className="params-subsection">
-                      <div className="params-column-label">MAIN</div>
+                      <div className="params-column-label">DESIGN</div>
                       {renderLfoEnvelope(lfo.custom_lfo_design, activePart.part_id, 'lfos', trackIdx)}
                     </div>
                   </div>
                 </div>
+              </div>
 
+              {/* Row 2: FX1, FX2, REC */}
+              <div className="parts-all-row">
                 {/* FX1 Section */}
                 <div className="parts-all-section">
                   <div className="params-label">FX1 - {formatFxType(fx.fx1_type)}</div>
@@ -2299,10 +2285,8 @@ export default function PartsPanel({
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Row 3: REC - the track recorder's two setup pages */}
-              <div className="parts-all-row">
+                {/* REC Section - the track recorder's two setup pages */}
                 <div className="parts-all-section">
                   <div className="params-label">REC</div>
                   {renderRecSectionContent(activePart, trackIdx)}
@@ -2390,12 +2374,12 @@ export default function PartsPanel({
                   </div>
                 </div>
 
-                {/* LFO1 Section */}
+                {/* LFO 1 and LFO 2 Section */}
                 <div className="parts-all-section">
-                  <div className="params-label">LFO 1</div>
+                  <div className="params-label">LFO 1 / LFO 2</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
-                      <div className="params-column-label">MAIN</div>
+                      <div className="params-column-label">LFO 1</div>
                       <div className="params-grid">
                         {renderParamWithKnob(activePart.part_id, 'midi_lfos', trackIdx, 'lfo1_pmtr', midi_lfo.lfo1_pmtr, 'PMTR')}
                         {renderParamWithKnob(activePart.part_id, 'midi_lfos', trackIdx, 'lfo1_wave', midi_lfo.lfo1_wave, 'WAVE')}
@@ -2405,15 +2389,8 @@ export default function PartsPanel({
                         {renderParamWithKnob(activePart.part_id, 'midi_lfos', trackIdx, 'dep1', midi_lfo.dep1, 'DEP')}
                       </div>
                     </div>
-                  </div>
-                </div>
-
-                {/* LFO2 Section */}
-                <div className="parts-all-section">
-                  <div className="params-label">LFO 2</div>
-                  <div className="params-vertical-layout">
                     <div className="params-subsection">
-                      <div className="params-column-label">MAIN</div>
+                      <div className="params-column-label">LFO 2</div>
                       <div className="params-grid">
                         {renderParamWithKnob(activePart.part_id, 'midi_lfos', trackIdx, 'lfo2_pmtr', midi_lfo.lfo2_pmtr, 'PMTR')}
                         {renderParamWithKnob(activePart.part_id, 'midi_lfos', trackIdx, 'lfo2_wave', midi_lfo.lfo2_wave, 'WAVE')}
@@ -2429,12 +2406,12 @@ export default function PartsPanel({
 
               {/* Row 2: LFO3, DESIGN, CTRL1, CTRL2 */}
               <div className="parts-all-row">
-                {/* LFO3 Section */}
+                {/* LFO 3 and DESIGN Section */}
                 <div className="parts-all-section">
-                  <div className="params-label">LFO 3</div>
+                  <div className="params-label">LFO 3 / DESIGN</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
-                      <div className="params-column-label">MAIN</div>
+                      <div className="params-column-label">LFO 3</div>
                       <div className="params-grid">
                         {renderParamWithKnob(activePart.part_id, 'midi_lfos', trackIdx, 'lfo3_pmtr', midi_lfo.lfo3_pmtr, 'PMTR')}
                         {renderParamWithKnob(activePart.part_id, 'midi_lfos', trackIdx, 'lfo3_wave', midi_lfo.lfo3_wave, 'WAVE')}
@@ -2444,15 +2421,8 @@ export default function PartsPanel({
                         {renderParamWithKnob(activePart.part_id, 'midi_lfos', trackIdx, 'dep3', midi_lfo.dep3, 'DEP')}
                       </div>
                     </div>
-                  </div>
-                </div>
-
-                {/* DESIGN Section */}
-                <div className="parts-all-section">
-                  <div className="params-label">DESIGN</div>
-                  <div className="params-vertical-layout">
                     <div className="params-subsection">
-                      <div className="params-column-label">MAIN</div>
+                      <div className="params-column-label">DESIGN</div>
                       {renderLfoEnvelope(midi_lfo.custom_lfo_design, activePart.part_id, 'midi_lfos', trackIdx)}
                     </div>
                   </div>
