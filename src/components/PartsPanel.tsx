@@ -7,6 +7,7 @@ import { WriteStatus, writeStatus } from '../types/writeStatus';
 import { RotaryKnob } from './RotaryKnob';
 import { fieldSpec, clampToSpec, formatSpecValue, parseSpecValue } from '../utils/partFieldSpecs';
 import { PositionBar, WaveGlyph } from './ParamWidgets';
+import { fieldHelp, helpTitle } from '../utils/partFieldHelp';
 import { formatFxType, getFxMainLabels, getFxSetupLabels } from '../utils/fxLabels';
 import { SlotPickerModal } from './SlotPickerModal';
 import './PartsPanel.css';
@@ -529,6 +530,15 @@ export default function PartsPanel({
     const spec = fieldSpec(specKey, machineType, slicContext);
     if (!spec) return null;
 
+    // An effect knob means whatever the loaded effect says it means, so the help has
+    // to be looked up against that effect rather than against the slot
+    const fxType = field.startsWith('fx1_')
+      ? part?.fxs[trackId]?.fx1_type
+      : field.startsWith('fx2_')
+        ? part?.fxs[trackId]?.fx2_type
+        : undefined;
+    const help = fieldHelp(specKey, machineType, { label, fxType });
+
     const displayValue = value ?? spec.default;
     const formattedValue = formatter
       ? formatter(displayValue)
@@ -583,7 +593,15 @@ export default function PartsPanel({
     const otherIndex = choices.findIndex(o => o.value === displayValue) === 0 ? 1 : 0;
 
     return (
-      <div className="param-item" key={key}>
+      <div
+        className="param-item"
+        key={key}
+        title={helpTitle(
+          label,
+          help,
+          spec.center !== undefined ? `Stored as ${displayValue}` : undefined,
+        )}
+      >
         <span className="param-label">{label}</span>
         <div className="param-control">{indicator}</div>
         {twoState ? (
@@ -614,7 +632,6 @@ export default function PartsPanel({
             type="text"
             className={`param-value ${editableText ? 'editable' : ''}`}
             value={formattedValue}
-            title={spec.center !== undefined ? `Stored as ${displayValue}` : undefined}
             onChange={(e) => {
               if (!editableText) return;
               // Typed the way it reads - semitones for pitch, an offset for a

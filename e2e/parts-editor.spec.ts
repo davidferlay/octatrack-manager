@@ -1193,3 +1193,64 @@ test.describe('Parts Editor - Effect page layout', () => {
       .toEqual(['TIME', 'HP', 'LP', 'MIX', 'TYPE', 'BAL'])
   })
 })
+
+/**
+ * Hovering a parameter has to say what it does. The wording lives in the app; what is
+ * worth guarding here is that every parameter the editor draws actually carries it -
+ * a field added to a page without a line of help hovers blank, and nothing else notices.
+ */
+test.describe('Parts Editor - Parameter help', () => {
+  const blankTips = (page: Page) =>
+    page.locator('.param-item').evaluateAll(els =>
+      els
+        .filter(e => !(e.getAttribute('title') ?? '').trim())
+        .map(e => e.querySelector('.param-label')?.textContent ?? '?'))
+
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await openPartsTab(page)
+  })
+
+  test('every audio parameter says what it does', async ({ page }) => {
+    await selectTrack(page, '0')
+    for (const tab of ['SRC', 'AMP', 'LFO', 'FX1', 'FX2', 'REC', 'All']) {
+      await page.locator('.parts-page-tabs .parts-tab', { hasText: new RegExp(`^${tab}$`) }).click()
+      await expect.poll(() => blankTips(page), { message: `${tab} page` }).toEqual([])
+    }
+  })
+
+  test('every MIDI parameter says what it does', async ({ page }) => {
+    await selectTrack(page, '8')
+    for (const tab of ['NOTE', 'ARP', 'LFO', 'CTRL 1', 'CTRL 2', 'All']) {
+      await page.locator('.parts-page-tabs .parts-tab', { hasText: new RegExp(`^${tab}$`) }).click()
+      await expect.poll(() => blankTips(page), { message: `${tab} page` }).toEqual([])
+    }
+  })
+
+  test('a setting with named values explains each of them', async ({ page }) => {
+    await selectTrack(page, '0')
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^SRC$/ }).click()
+    const tip = await page.locator('.param-item')
+      .filter({ has: page.locator('.param-label', { hasText: /^LOOP$/ }) })
+      .first().getAttribute('title')
+    const lines = tip!.split('\n')
+    expect(lines[0]).toMatch(/^LOOP - /)
+    expect(lines.slice(1).map(l => l.split(':')[0])).toEqual(['OFF', 'AUTO', 'ON', 'PIPO'])
+  })
+
+  test('an effect knob is explained by the effect that is loaded', async ({ page }) => {
+    await selectTrack(page, '0')
+    // The mocks load a filter in FX1 and a delay in FX2; both label a knob BASE
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
+    const filter = await page.locator('.param-item')
+      .filter({ has: page.locator('.param-label', { hasText: /^BASE$/ }) })
+      .first().getAttribute('title')
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX2$/ }).click()
+    const delay = await page.locator('.param-item')
+      .filter({ has: page.locator('.param-label', { hasText: /^BASE$/ }) })
+      .first().getAttribute('title')
+    expect(filter).toContain('cutoff')
+    expect(delay).toContain('feedback')
+    expect(filter).not.toBe(delay)
+  })
+})
