@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { fieldHelp, helpTitle } from './partFieldHelp'
+import {
+  fieldHelp, helpTitle, pageHelp, sectionHelp, machineHelp, LEVEL_HELP,
+} from './partFieldHelp'
 import { fieldSpec } from './partFieldSpecs'
 import { getFxMainLabels, getFxSetupLabels } from './fxLabels'
 
@@ -191,5 +193,52 @@ describe('the tooltip text', () => {
   it('falls back to the raw value note alone when nothing was written', () => {
     expect(helpTitle('NOPE', undefined, 'Stored as 64')).toBe('Stored as 64')
     expect(helpTitle('NOPE', undefined)).toBeUndefined()
+  })
+})
+
+describe('pages, Parts and the track header', () => {
+  it('explains every audio page tab', () => {
+    for (const page of ['All', 'SRC', 'AMP', 'LFO', 'FX1', 'FX2', 'REC']) {
+      expect(pageHelp(page), page).toBeTruthy()
+    }
+  })
+
+  it('explains every MIDI page tab', () => {
+    for (const page of ['All', 'NOTE', 'ARP', 'LFO', 'CTRL 1', 'CTRL 2']) {
+      expect(pageHelp(page), page).toBeTruthy()
+    }
+  })
+
+  it('explains the Part tabs and the LFO sub-tabs', () => {
+    for (const name of ['Part', 'LFO 1', 'LFO 2', 'LFO 3', 'DESIGN']) {
+      expect(sectionHelp(name), name).toBeTruthy()
+    }
+  })
+
+  /**
+   * Which LFO can reach which is the thing the device does not tell you anywhere, and
+   * it only runs downwards - so each sub-tab has to say its own side of that.
+   */
+  it('says which way the LFOs can modulate each other', () => {
+    expect(sectionHelp('LFO 1')).toContain('modulated by LFO 2 and LFO 3')
+    expect(sectionHelp('LFO 3')).toContain('nothing modulates it')
+  })
+
+  it('explains every machine a track header can show', () => {
+    for (const machine of ['Static', 'Flex', 'Thru', 'Neighbor', 'Pickup', 'MIDI']) {
+      expect(machineHelp(machine), machine).toBeTruthy()
+    }
+    expect(machineHelp('Nonsense')).toBeUndefined()
+  })
+
+  it('tells the two header levels apart', () => {
+    expect(LEVEL_HELP.TRK).toContain('after the effects')
+    expect(LEVEL_HELP.CUE).toContain('cue outputs')
+    expect(LEVEL_HELP.TRK).not.toBe(LEVEL_HELP.CUE)
+  })
+
+  it('says nothing for a tab name it does not know', () => {
+    expect(pageHelp('NOPE')).toBeUndefined()
+    expect(sectionHelp('NOPE')).toBeUndefined()
   })
 })

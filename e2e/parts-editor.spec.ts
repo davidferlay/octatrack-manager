@@ -1254,3 +1254,85 @@ test.describe('Parts Editor - Parameter help', () => {
     expect(filter).not.toBe(delay)
   })
 })
+
+test.describe('Parts Editor - Tab and header help', () => {
+  const blank = (page: Page, sel: string) =>
+    page.locator(sel).evaluateAll(els =>
+      els
+        .filter(e => !(e.getAttribute('title') ?? '').trim())
+        .map(e => e.textContent?.trim() ?? '?'))
+
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await openPartsTab(page)
+  })
+
+  test('every Part tab says what a Part is', async ({ page }) => {
+    await expect.poll(() => blank(page, '.parts-part-tab')).toEqual([])
+    const tip = await page.locator('.parts-part-tab').first().getAttribute('title')
+    // Named first, so the tooltip says which Part before it says what a Part is
+    expect(tip!.split('\n')[0]).toMatch(/^PART 1 \(1\) - /)
+    expect(tip).toContain('Switching Part also switches the samples')
+  })
+
+  test('a modified Part says so as well', async ({ page }) => {
+    await enterEditMode(page)
+    await atkInput(page).fill('42')
+    await atkInput(page).blur()
+    const tip = await page.locator('.parts-part-tab').first().getAttribute('title')
+    expect(tip).toContain('Modified')
+    expect(tip).toContain('Reload discards them')
+  })
+
+  test('every audio page tab says what the page is for', async ({ page }) => {
+    await selectTrack(page, '0')
+    await expect.poll(() => blank(page, '.parts-page-tabs .parts-tab')).toEqual([])
+  })
+
+  test('every MIDI page tab says what the page is for', async ({ page }) => {
+    await selectTrack(page, '8')
+    await expect.poll(() => blank(page, '.parts-page-tabs .parts-tab')).toEqual([])
+  })
+
+  test('every LFO sub-tab says which LFO it is', async ({ page }) => {
+    await selectTrack(page, '0')
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^LFO$/ }).click()
+    await expect.poll(() => blank(page, '.parts-lfo-sidebar .parts-tab')).toEqual([])
+    // Which LFOs can modulate which is the thing worth saying here
+    const lfo1 = page.locator('.parts-lfo-sidebar .parts-tab', { hasText: 'LFO 1' })
+    await expect(lfo1).toHaveAttribute('title', /modulated by LFO 2 and LFO 3/)
+  })
+
+  test('every track header field explains itself', async ({ page }) => {
+    await selectTrack(page, '0')
+    await expect
+      .poll(() => blank(page, '.parts-track-header .track-badge, .parts-level, .machine-type'))
+      .toEqual([])
+  })
+
+  test('the machine badge explains that machine', async ({ page }) => {
+    await selectTrack(page, '0')
+    // The mocks run Flex on every track
+    await expect(page.locator('.machine-type').first())
+      .toHaveAttribute('title', /Flex machine: plays its sample from RAM/)
+  })
+
+  test('the levels are told apart', async ({ page }) => {
+    await selectTrack(page, '0')
+    const tip = async (label: string) => page.locator('.parts-level')
+      .filter({ has: page.locator('.parts-level-label', { hasText: new RegExp(`^${label}$`) }) })
+      .first().getAttribute('title')
+    expect(await tip('TRK')).toContain('after the effects')
+    expect(await tip('CUE')).toContain('cue outputs')
+  })
+
+  test('the slot field says which pool it picks from', async ({ page }) => {
+    await selectTrack(page, '0')
+    const tip = await page.locator('.parts-sample-field').first().getAttribute('title')
+    expect(tip).toContain('Flex Sample Slot')
+    expect(tip).toContain('Turn on Edit mode to change it')
+    await enterEditMode(page)
+    expect(await page.locator('.parts-sample-field').first().getAttribute('title'))
+      .toContain('Click to pick another slot')
+  })
+})

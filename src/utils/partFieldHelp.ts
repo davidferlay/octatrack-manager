@@ -547,6 +547,67 @@ const FX: Record<number, Record<string, string>> = {
   },
 };
 
+/* --------------------------------------------- Pages, Parts, and the track header */
+
+/**
+ * The parameter pages, by the name on their tab. A page tab is the one place that says
+ * what a whole group of settings is for, which is worth a line when half the names are
+ * four letters.
+ */
+const PAGES: Record<string, string> = {
+  All: 'Every page of this track at once.',
+  SRC: 'The machine: what this track plays and how, from pitch and start point to looping and timestretch.',
+  AMP: 'The amplitude envelope and the track level, plus how the envelope behaves when trigs land on top of each other.',
+  LFO: 'The three track LFOs and the designer page where custom shapes are drawn.',
+  FX1: 'The first effect block.',
+  FX2: 'The second effect block.',
+  REC: "The track recorder: what it samples, for how long, and how recording and playback are quantised.",
+  NOTE: 'The notes this MIDI track sends - root note, velocity, length, up to three more notes for a chord - and the channel, bank and program it sends them on.',
+  ARP: 'The arpeggiator. Several of its settings reach the track note trigs even while MODE is off.',
+  'CTRL 1': 'Pitch bend, aftertouch, and the first four MIDI CCs this track sends.',
+  'CTRL 2': 'The remaining six MIDI CCs this track sends.',
+};
+
+/** The four Parts of a bank, and the LFO sub-pages. */
+const SECTIONS: Record<string, string> = {
+  Part: 'One of the bank\'s four Parts. A Part holds the machine, effect, LFO and recorder settings for every track, and each pattern in the bank points at one of them. Switching Part also switches the samples, the scenes and the MIDI arpeggiator settings - switching pattern does not.',
+  'LFO 1': 'The first LFO. It can be modulated by LFO 2 and LFO 3.',
+  'LFO 2': 'The second LFO. It can be modulated by LFO 3, and can modulate LFO 1.',
+  'LFO 3': 'The third LFO. It can modulate LFO 1 and LFO 2, but nothing modulates it.',
+  DESIGN: 'The custom LFO shape for this track, sixteen steps that any of its LFOs can use as a waveform. Each audio track has one; a MIDI track uses the one drawn here on its own LFO page.',
+};
+
+/** What each machine type does, for the badge in the track header. */
+const MACHINES: Record<string, string> = {
+  Static: 'Static machine: streams its sample from the card, so the sample can be very large. Still stretches and pitches.',
+  Flex: 'Flex machine: plays its sample from RAM, which is what makes it the one to modulate hard.',
+  Thru: 'Thru machine: passes the external inputs through the track, so the track effects apply to them. It needs a trig before it starts passing audio.',
+  Neighbor: 'Neighbor machine: takes its audio from the track before it, which is how effects are chained. It cannot sit on track 1 or 5.',
+  Pickup: 'Pickup machine: records and loops through this track\'s own recorder buffer. Its parameters cannot be locked.',
+  MIDI: 'A MIDI track. It sends notes and CCs rather than playing audio.',
+};
+
+/** Page tab help, by the name on the tab. */
+export function pageHelp(page: string): string | undefined {
+  return PAGES[page];
+}
+
+/** Part tab and LFO sub-tab help. */
+export function sectionHelp(name: string): string | undefined {
+  return SECTIONS[name];
+}
+
+/** What the track header's machine badge says. */
+export function machineHelp(machineType: string): string | undefined {
+  return MACHINES[machineType];
+}
+
+/** The two level fields in the track header, which belong to the Part, not to a page. */
+export const LEVEL_HELP = {
+  TRK: 'TRK - this track\'s level in this Part, the device\'s own LEV. It sits after the effects, so pulling it down cuts the effect tails with it. Leave a recorder track at 127 so crossfading does not change what it captures.',
+  CUE: 'CUE - this track\'s level into the cue outputs, in this Part. It is independent of TRK.',
+} as const;
+
 /* --------------------------------------------------------------------------- lookup */
 
 const SRC_BY_MACHINE: Record<string, Record<string, FieldHelp>> = {

@@ -7,7 +7,9 @@ import { WriteStatus, writeStatus } from '../types/writeStatus';
 import { RotaryKnob } from './RotaryKnob';
 import { fieldSpec, clampToSpec, formatSpecValue, parseSpecValue } from '../utils/partFieldSpecs';
 import { PositionBar, WaveGlyph } from './ParamWidgets';
-import { fieldHelp, helpTitle } from '../utils/partFieldHelp';
+import {
+  fieldHelp, helpTitle, pageHelp, sectionHelp, machineHelp, LEVEL_HELP,
+} from '../utils/partFieldHelp';
 import { formatFxType, getFxMainLabels, getFxSetupLabels } from '../utils/fxLabels';
 import { SlotPickerModal } from './SlotPickerModal';
 import './PartsPanel.css';
@@ -906,7 +908,12 @@ export default function PartsPanel({
       <button
         className="parts-level parts-sample-field"
         disabled={!isEditMode}
-        title={`${label} - ${filename}${isEditMode ? '' : ' (turn on Edit mode to change it)'}`}
+        title={[
+          `SLOT ${label} - ${filename}`,
+          `The ${isStatic ? 'Static' : 'Flex'} Sample Slot this machine plays. It belongs to`
+            + ' this Part and this track, so another Part can point the same track elsewhere.',
+          isEditMode ? 'Click to pick another slot.' : 'Turn on Edit mode to change it.',
+        ].join('\n')}
         onClick={() => setSlotPicker({
           partId: activePart.part_id,
           trackId: machine.track_id,
@@ -932,7 +939,7 @@ export default function PartsPanel({
     if (!volume) return null;
 
     const field = (key: 'main' | 'cue', label: string, value: number) => (
-      <label className="parts-level" title={`${label === 'TRK' ? 'Track' : 'Cue'} level for this track in this Part`}>
+      <label className="parts-level" title={LEVEL_HELP[label as keyof typeof LEVEL_HELP]}>
         <span className="parts-level-label">{label}</span>
         <input
           type="text"
@@ -976,7 +983,7 @@ export default function PartsPanel({
       {opts.withLevels && renderHeaderLevels(activePart, trackId)}
       <div className="parts-track-header-right">
         {opts.withSample && renderSlotField(activePart, activePart.machines[trackId])}
-        <span className="machine-type">{machineType}</span>
+        <span className="machine-type" title={machineHelp(machineType)}>{machineType}</span>
       </div>
     </div>
   );
@@ -1353,24 +1360,28 @@ export default function PartsPanel({
         <div className="parts-lfo-sidebar">
           <button
             className={`parts-tab ${activeLfoTab === 'LFO1' ? 'active' : ''}`}
+            title={sectionHelp('LFO 1')}
             onClick={() => setActiveLfoTab('LFO1')}
           >
             LFO 1
           </button>
           <button
             className={`parts-tab ${activeLfoTab === 'LFO2' ? 'active' : ''}`}
+            title={sectionHelp('LFO 2')}
             onClick={() => setActiveLfoTab('LFO2')}
           >
             LFO 2
           </button>
           <button
             className={`parts-tab ${activeLfoTab === 'LFO3' ? 'active' : ''}`}
+            title={sectionHelp('LFO 3')}
             onClick={() => setActiveLfoTab('LFO3')}
           >
             LFO 3
           </button>
           <button
             className={`parts-tab ${activeLfoTab === 'DESIGN' ? 'active' : ''}`}
+            title={sectionHelp('DESIGN')}
             onClick={() => setActiveLfoTab('DESIGN')}
           >
             DESIGN
@@ -1854,24 +1865,28 @@ export default function PartsPanel({
         <div className="parts-lfo-sidebar">
           <button
             className={`parts-tab ${activeLfoTab === 'LFO1' ? 'active' : ''}`}
+            title={sectionHelp('LFO 1')}
             onClick={() => setActiveLfoTab('LFO1')}
           >
             LFO 1
           </button>
           <button
             className={`parts-tab ${activeLfoTab === 'LFO2' ? 'active' : ''}`}
+            title={sectionHelp('LFO 2')}
             onClick={() => setActiveLfoTab('LFO2')}
           >
             LFO 2
           </button>
           <button
             className={`parts-tab ${activeLfoTab === 'LFO3' ? 'active' : ''}`}
+            title={sectionHelp('LFO 3')}
             onClick={() => setActiveLfoTab('LFO3')}
           >
             LFO 3
           </button>
           <button
             className={`parts-tab ${activeLfoTab === 'DESIGN' ? 'active' : ''}`}
+            title={sectionHelp('DESIGN')}
             onClick={() => setActiveLfoTab('DESIGN')}
           >
             DESIGN
@@ -2569,7 +2584,12 @@ export default function PartsPanel({
               key={index}
               className={`parts-part-tab ${activePartIndex === index ? 'active' : ''} ${modifiedPartIds.has(index) ? 'modified' : ''}`}
               onClick={() => setActivePartIndex(index)}
-              title={modifiedPartIds.has(index) ? 'Part has been modified. Use Save to keep changes, or Reload to discard them.' : undefined}
+              title={[
+                `${partName} (${index + 1}) - ${sectionHelp('Part')}`,
+                modifiedPartIds.has(index)
+                  ? 'Modified. Save keeps the changes; Reload discards them.'
+                  : null,
+              ].filter(Boolean).join('\n')}
             >
               {partName} ({index + 1})<span className={`unsaved-indicator ${modifiedPartIds.has(index) ? 'visible' : ''}`}>*</span>
             </button>
@@ -2584,42 +2604,49 @@ export default function PartsPanel({
             <button
               className={`parts-tab ${activePageIndex === -1 ? 'active' : ''}`}
               onClick={() => setActivePageIndex(-1)}
+              title={pageHelp('All')}
             >
               All
             </button>
             <button
               className={`parts-tab ${activePageIndex === 0 ? 'active' : ''}`}
               onClick={() => setActivePageIndex(0)}
+              title={pageHelp('SRC')}
             >
               SRC
             </button>
             <button
               className={`parts-tab ${activePageIndex === 1 ? 'active' : ''}`}
               onClick={() => setActivePageIndex(1)}
+              title={pageHelp('AMP')}
             >
               AMP
             </button>
             <button
               className={`parts-tab ${activePageIndex === 2 ? 'active' : ''}`}
               onClick={() => setActivePageIndex(2)}
+              title={pageHelp('LFO')}
             >
               LFO
             </button>
             <button
               className={`parts-tab ${activePageIndex === 3 ? 'active' : ''}`}
               onClick={() => setActivePageIndex(3)}
+              title={pageHelp('FX1')}
             >
               FX1
             </button>
             <button
               className={`parts-tab ${activePageIndex === 4 ? 'active' : ''}`}
               onClick={() => setActivePageIndex(4)}
+              title={pageHelp('FX2')}
             >
               FX2
             </button>
             <button
               className={`parts-tab ${activePageIndex === 5 ? 'active' : ''}`}
               onClick={() => setActivePageIndex(5)}
+              title={pageHelp('REC')}
             >
               REC
             </button>
@@ -2629,36 +2656,42 @@ export default function PartsPanel({
             <button
               className={`parts-tab ${activePageIndex === -1 ? 'active' : ''}`}
               onClick={() => setActivePageIndex(-1)}
+              title={pageHelp('All')}
             >
               All
             </button>
             <button
               className={`parts-tab ${activePageIndex === 0 ? 'active' : ''}`}
               onClick={() => setActivePageIndex(0)}
+              title={pageHelp('NOTE')}
             >
               NOTE
             </button>
             <button
               className={`parts-tab ${activePageIndex === 1 ? 'active' : ''}`}
               onClick={() => setActivePageIndex(1)}
+              title={pageHelp('ARP')}
             >
               ARP
             </button>
             <button
               className={`parts-tab ${activePageIndex === 2 ? 'active' : ''}`}
               onClick={() => setActivePageIndex(2)}
+              title={pageHelp('LFO')}
             >
               LFO
             </button>
             <button
               className={`parts-tab ${activePageIndex === 3 ? 'active' : ''}`}
               onClick={() => setActivePageIndex(3)}
+              title={pageHelp('CTRL 1')}
             >
               CTRL 1
             </button>
             <button
               className={`parts-tab ${activePageIndex === 4 ? 'active' : ''}`}
               onClick={() => setActivePageIndex(4)}
+              title={pageHelp('CTRL 2')}
             >
               CTRL 2
             </button>
