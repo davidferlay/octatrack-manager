@@ -135,6 +135,27 @@ async function setupMocks(page: Page) {
   })
 }
 
+/**
+ * Scrolls the homepage down and waits for it to stop moving, returning where it landed.
+ *
+ * A fixed 100ms wait stood here and it was a source of flakiness: when the scroll had
+ * not settled inside it, the position was read mid-travel, and the comparison at the
+ * end of the test was then against a position the page never actually held. Waiting for
+ * two readings to agree waits for the real thing instead of guessing how long it takes.
+ */
+async function scrollDownAndSettle(page: Page): Promise<number> {
+  await page.mouse.move(640, 360)
+  await page.mouse.wheel(0, 2000)
+  let previous = -1
+  await expect.poll(async () => {
+    const now = await page.evaluate(() => window.scrollY)
+    const settled = now === previous && now > 100
+    previous = now
+    return settled
+  }, { message: 'waiting for the homepage scroll to settle' }).toBe(true)
+  return page.evaluate(() => window.scrollY)
+}
+
 test.describe('Homepage scroll restoration', () => {
   test.beforeEach(async ({ page }) => {
     await setupMocks(page)
@@ -144,11 +165,7 @@ test.describe('Homepage scroll restoration', () => {
   })
 
   test('scroll position survives a project round trip', async ({ page }) => {
-    await page.mouse.move(640, 360)
-    await page.mouse.wheel(0, 2000)
-    await page.waitForTimeout(100)
-    const scrollBefore = await page.evaluate(() => window.scrollY)
-    expect(scrollBefore).toBeGreaterThan(100)
+    const scrollBefore = await scrollDownAndSettle(page)
 
     await page.locator('.project-card:not(.new-project-card)').last().click()
     await expect(page.locator('.back-button', { hasText: 'Back' })).toBeVisible({ timeout: 10000 })
@@ -159,11 +176,7 @@ test.describe('Homepage scroll restoration', () => {
   })
 
   test('scroll position survives an Audio Pool round trip', async ({ page }) => {
-    await page.mouse.move(640, 360)
-    await page.mouse.wheel(0, 2000)
-    await page.waitForTimeout(100)
-    const scrollBefore = await page.evaluate(() => window.scrollY)
-    expect(scrollBefore).toBeGreaterThan(100)
+    const scrollBefore = await scrollDownAndSettle(page)
 
     await page.locator('.audio-pool-card').first().click()
     await expect(page.locator('main.audio-pool-page')).toBeVisible({ timeout: 10000 })
