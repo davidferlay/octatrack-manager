@@ -2430,7 +2430,7 @@ export default function PartsPanel({
 
                 {/* CTRL1 Section */}
                 <div className="parts-all-section">
-                  <div className="params-label">CTRL1</div>
+                  <div className="params-label">CTRL 1</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
@@ -2457,7 +2457,7 @@ export default function PartsPanel({
 
                 {/* CTRL2 Section */}
                 <div className="parts-all-section">
-                  <div className="params-label">CTRL2</div>
+                  <div className="params-label">CTRL 2</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
@@ -2637,13 +2637,13 @@ export default function PartsPanel({
               className={`parts-tab ${activePageIndex === 3 ? 'active' : ''}`}
               onClick={() => setActivePageIndex(3)}
             >
-              CTRL1
+              CTRL 1
             </button>
             <button
               className={`parts-tab ${activePageIndex === 4 ? 'active' : ''}`}
               onClick={() => setActivePageIndex(4)}
             >
-              CTRL2
+              CTRL 2
             </button>
           </>
         )}

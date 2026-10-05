@@ -200,12 +200,48 @@ describe('MIDI tracks', () => {
     const midi = fieldSpec('midi_lfos.lfo1_pmtr')!
     const audio = fieldSpec('lfo1_pmtr')!
     expect(midi.options).toHaveLength(30)
-    expect(midi.options![0].label).toBe('Note Note')
-    expect(midi.options![6]).toEqual({ value: 12, label: 'Arp Transpose' })
+    expect(midi.options![0].label).toBe('NOTE NOTE')
+    expect(midi.options![6]).toEqual({ value: 12, label: 'ARP TRAN' })
     expect(audio.options![0].label).toBe('SRC P01')
     expect(midi.options).not.toEqual(audio.options)
     // Same reordering as the audio list: the second group stores above the third
-    expect(midi.options![12]).toEqual({ value: 6, label: 'LFO 1 Speed' })
+    expect(midi.options![12]).toEqual({ value: 6, label: 'LFO1 SPD' })
+  })
+
+  /**
+   * A target names the page it points at and the parameter on it, in the device's own
+   * abbreviations - the same shape as the audio list, so neither reads as the odd one.
+   * Each name has to match the label the MIDI pages actually draw, or the list points
+   * at parameters by names that appear nowhere else in the editor.
+   */
+  it('names a MIDI LFO target the way the MIDI pages name that parameter', () => {
+    const labels = fieldSpec('midi_lfos.lfo1_pmtr')!.options!.map(o => o.label)
+    expect(labels.slice(0, 6)).toEqual([
+      'NOTE NOTE', 'NOTE VEL', 'NOTE LEN', 'NOTE NOT2', 'NOTE NOT3', 'NOTE NOT4',
+    ])
+    expect(labels.slice(6, 12)).toEqual([
+      'ARP TRAN', 'ARP LEG', 'ARP MODE', 'ARP SPD', 'ARP RNGE', 'ARP NLEN',
+    ])
+    expect(labels.slice(18, 24)).toEqual([
+      'CTRL1 PB', 'CTRL1 AT', 'CTRL1 CC1', 'CTRL1 CC2', 'CTRL1 CC3', 'CTRL1 CC4',
+    ])
+    expect(labels.slice(24)).toEqual([
+      'CTRL2 CC5', 'CTRL2 CC6', 'CTRL2 CC7', 'CTRL2 CC8', 'CTRL2 CC9', 'CTRL2 CC10',
+    ])
+    // Nothing is left in the long prose form the audio list never used
+    expect(labels.some(l => /[a-z]/.test(l))).toBe(false)
+  })
+
+  it('keeps the MIDI targets on the values the device stores', () => {
+    const byLabel = Object.fromEntries(
+      fieldSpec('midi_lfos.lfo1_pmtr')!.options!.map(o => [o.label, o.value]),
+    )
+    // Renaming must not disturb the values: the ARP group is listed before the LFO
+    // group but stored after it
+    expect(byLabel['ARP TRAN']).toBe(12)
+    expect(byLabel['LFO1 SPD']).toBe(6)
+    expect(byLabel['CTRL1 PB']).toBe(18)
+    expect(byLabel['CTRL2 CC10']).toBe(29)
   })
 
   it('names an LFO target after the machine the track actually runs', () => {

@@ -272,10 +272,10 @@ test.describe('Parts Editor - Layout', () => {
     await expect(pageTabs).toHaveText(['All', 'SRC', 'AMP', 'LFO', 'FX1', 'FX2', 'REC'])
   })
 
-  test('MIDI track shows All/NOTE/ARP/LFO/CTRL1/CTRL2 page tabs', async ({ page }) => {
+  test('MIDI track shows All/NOTE/ARP/LFO/CTRL 1/CTRL 2 page tabs', async ({ page }) => {
     await selectTrack(page, '8') // M1
     const pageTabs = page.locator('.parts-page-tabs .parts-tab')
-    await expect(pageTabs).toHaveText(['All', 'NOTE', 'ARP', 'LFO', 'CTRL1', 'CTRL2'])
+    await expect(pageTabs).toHaveText(['All', 'NOTE', 'ARP', 'LFO', 'CTRL 1', 'CTRL 2'])
   })
 
   test('FX1 page shows FILTER labels for fx1_type=4', async ({ page }) => {

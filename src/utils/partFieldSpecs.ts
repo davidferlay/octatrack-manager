@@ -203,30 +203,27 @@ const TARGET: FieldSpec = {
 };
 
 /** What a MIDI track's LFO can modulate - a different list from an audio track's. */
+/**
+ * What a MIDI track's LFO can modulate, in the order the device lists them.
+ *
+ * Named page-then-parameter in the device's own abbreviations, the same way the audio
+ * targets are - "NOTE VEL", not "Note Velocity" - so the two lists read alike and each
+ * entry matches the label on the page it points at.
+ *
+ * The order is the device's and the values are not consecutive within it: the ARP
+ * targets are listed before the LFO ones but stored after them.
+ */
 const MIDI_TARGETS: { value: number; label: string }[] = [
-  { value: 0, label: 'Note Note' },
-  { value: 1, label: 'Note Velocity' },
-  { value: 2, label: 'Note Length' },
-  { value: 3, label: 'Note Note 2' },
-  { value: 4, label: 'Note Note 3' },
-  { value: 5, label: 'Note Note 4' },
-  { value: 12, label: 'Arp Transpose' },
-  { value: 13, label: 'Arp Legato' },
-  { value: 14, label: 'Arp Mode' },
-  { value: 15, label: 'Arp Speed' },
-  { value: 16, label: 'Arp Range' },
-  { value: 17, label: 'Arp Note Length' },
-  { value: 6, label: 'LFO 1 Speed' },
-  { value: 7, label: 'LFO 2 Speed' },
-  { value: 8, label: 'LFO 3 Speed' },
-  { value: 9, label: 'LFO 1 Depth' },
-  { value: 10, label: 'LFO 2 Depth' },
-  { value: 11, label: 'LFO 3 Depth' },
-  { value: 18, label: 'Control 1 Pitchbend' },
-  { value: 19, label: 'Control 1 Aftertouch' },
-  ...[1, 2, 3, 4].map((n, i) => ({ value: 20 + i, label: `Control 1 CC 0${n}` })),
-  ...[5, 6, 7, 8, 9, 10].map((n, i) => ({
-    value: 24 + i, label: `Control 2 CC ${String(n).padStart(2, '0')}` })),
+  ...['NOTE', 'VEL', 'LEN', 'NOT2', 'NOT3', 'NOT4']
+    .map((name, i) => ({ value: i, label: `NOTE ${name}` })),
+  ...['TRAN', 'LEG', 'MODE', 'SPD', 'RNGE', 'NLEN']
+    .map((name, i) => ({ value: 12 + i, label: `ARP ${name}` })),
+  ...[1, 2, 3].map((n, i) => ({ value: 6 + i, label: `LFO${n} SPD` })),
+  ...[1, 2, 3].map((n, i) => ({ value: 9 + i, label: `LFO${n} DEP` })),
+  { value: 18, label: 'CTRL1 PB' },
+  { value: 19, label: 'CTRL1 AT' },
+  ...[1, 2, 3, 4].map((n, i) => ({ value: 20 + i, label: `CTRL1 CC${n}` })),
+  ...[5, 6, 7, 8, 9, 10].map((n, i) => ({ value: 24 + i, label: `CTRL2 CC${n}` })),
 ];
 
 const MIDI_TARGET: FieldSpec = {
