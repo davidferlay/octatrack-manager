@@ -6,6 +6,7 @@ import { ProjectDetail } from "./pages/ProjectDetail";
 import { AudioPoolPage } from "./pages/AudioPoolPage";
 import { ProjectsProvider } from "./context/ProjectsContext";
 import { TablePreferencesProvider } from "./context/TablePreferencesContext";
+import { installSelectWheelStepping } from "./utils/wheelStep";
 import '@fortawesome/fontawesome-free/css/all.min.css';
 
 // The browser's own history-based scroll restoration fights HomePage's manual
@@ -34,6 +35,12 @@ document.addEventListener('keydown', (e) => {
   // navigating away. The keypress has been spent on the modal: stop it here.
   e.stopImmediatePropagation();
 });
+
+// The wheel runs through a drop-down's values while the pointer is over it, so a list
+// can be gone through without opening it. Installed once for the whole app: a select
+// already carries its options and which one is chosen, so there is nothing a component
+// could usefully add here.
+installSelectWheelStepping();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

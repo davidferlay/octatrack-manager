@@ -52,8 +52,14 @@ export const RETRIG_COUNT: readonly string[] = [
 /**
  * RTIM, the time between retrigs - a mix of decimals and note divisions.
  *
- * Sparse on purpose: the device steps over nine of the byte's values, so a raw value
- * absent here is one the hardware does not produce.
+ * The device offers 120 settings over the byte's 128 values, so eight raw values are
+ * ones it steps over and never produces: 1, 2, 4, 5, 8, 11, 14 and 16.
+ *
+ * Two entries are corrected here. The source table gives raw 93 twice - once as 1.122
+ * and again as 1.259 - and gives nothing for 95. It cannot be right: the settings are a
+ * geometric series, each about 1.059 times the one before (1.0, 1.059, 1.122, 1.189,
+ * ..., 1.334), so the raw values have to climb with them, and 95 is the only one free
+ * between 94 and 96. The second 93 is a mistyped 95.
  */
 export const RETRIG_TIME: Readonly<Record<number, string>> = {
   0: '0.005', 3: '0.006', 6: '0.007', 7: '1/128', 9: '0.008', 10: '0.009',
@@ -70,7 +76,8 @@ export const RETRIG_TIME: Readonly<Record<number, string>> = {
   74: '0.374', 75: '0.396', 76: '0.420', 77: '0.445', 78: '0.471', 79: '1/2',
   80: '0.529', 81: '0.561', 82: '0.594', 83: '0.629', 84: '0.667', 85: '0.707',
   86: '0.749', 87: '0.793', 88: '0.840', 89: '0.890', 90: '0.943', 91: '1.0',
-  92: '1.059', 93: '1.259', 94: '1.189', 96: '1.334', 97: '1.414', 98: '1.498',
+  92: '1.059', 93: '1.122', 94: '1.189', 95: '1.259', 96: '1.334', 97: '1.414',
+  98: '1.498',
   99: '1.587', 100: '1.681', 101: '1.781', 102: '1.887', 103: '2.000', 104: '2.118',
   105: '2.244', 106: '2.378', 107: '2.519', 108: '2.669', 109: '2.828', 110: '2.996',
   111: '3.174', 112: '3.363', 113: '3.563', 114: '3.775', 115: '4.000', 116: '4.237',

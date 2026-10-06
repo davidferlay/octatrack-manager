@@ -1816,3 +1816,135 @@ test.describe('Parts Editor - Slot picker opens on the assignment', () => {
     expect(after).toBe(before)
   })
 })
+
+/**
+ * Running through a field's values with the wheel, rather than opening a list or
+ * dragging a knob. Up is more, down is less, everywhere.
+ */
+test.describe('Parts Editor - Scroll wheel', () => {
+  const cell = (page: Page, label: string) =>
+    page.locator('.param-item')
+      .filter({ has: page.locator('.param-label', { hasText: new RegExp(`^${label}$`) }) })
+      .first()
+
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await openPartsTab(page)
+    await selectTrack(page, '0')
+  })
+
+  test('steps a knob value up and down', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^AMP$/ }).click()
+    const atk = cell(page, 'ATK')
+    const value = atk.locator('input.param-value')
+    await expect(value).toHaveValue('20')
+
+    await atk.hover()
+    await page.mouse.wheel(0, -120)
+    await expect(value).toHaveValue('21')
+    await page.mouse.wheel(0, 120)
+    await page.mouse.wheel(0, 120)
+    await expect(value).toHaveValue('19')
+  })
+
+  /**
+   * Only the controls answer. A page made mostly of parameters has to stay scrollable,
+   * and a cell-wide target would mean scrolling it quietly edited everything the
+   * pointer passed over.
+   */
+  test('answers over the knob and over the readout', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^AMP$/ }).click()
+    const atk = cell(page, 'ATK')
+    const value = atk.locator('input.param-value')
+
+    await atk.locator('.param-control').hover()
+    await page.mouse.wheel(0, -120)
+    await expect(value).toHaveValue('21')
+
+    await value.hover()
+    await page.mouse.wheel(0, -120)
+    await expect(value).toHaveValue('22')
+  })
+
+  test('leaves the name alone, so the page can still be scrolled past it', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^AMP$/ }).click()
+    const atk = cell(page, 'ATK')
+    await atk.locator('.param-label').hover()
+    await page.mouse.wheel(0, -120)
+    await page.waitForTimeout(200)
+    await expect(atk.locator('input.param-value')).toHaveValue('20')
+  })
+
+  test('walks a drop-down through its own entries', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^SRC$/ }).click()
+    const loop = cell(page, 'LOOP').locator('select.param-select')
+    await expect(loop).toHaveValue('0')
+    await loop.hover()
+    await page.mouse.wheel(0, -120)
+    await expect(loop).toHaveValue('1')
+  })
+
+  test('flips a two-value setting', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^SRC$/ }).click()
+    const slic = cell(page, 'SLIC')
+    await expect(slic.locator('button.param-toggle')).toHaveText('OFF')
+    await slic.hover()
+    await page.mouse.wheel(0, -120)
+    await expect(slic.locator('button.param-toggle')).toHaveText('ON')
+  })
+
+  test('stops at the end of the range instead of wrapping', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^AMP$/ }).click()
+    const atk = cell(page, 'ATK')
+    await atk.hover()
+    // ATK starts at 20 and its floor is 0
+    for (let i = 0; i < 25; i++) await page.mouse.wheel(0, 120)
+    await expect(atk.locator('input.param-value')).toHaveValue('0')
+  })
+
+  test('does nothing in View mode', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^AMP$/ }).click()
+    const atk = cell(page, 'ATK')
+    await atk.hover()
+    await page.mouse.wheel(0, -120)
+    await page.waitForTimeout(200)
+    await expect(atk.locator('input.param-value')).toHaveValue('20')
+  })
+
+  /** A field that changed under the pointer is not one the page should scroll past. */
+  test('does not scroll the page while a value is being stepped', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^All$/ }).click()
+    await page.setViewportSize({ width: 1200, height: 500 })
+    const atk = cell(page, 'ATK')
+    await atk.locator('.param-control').hover()
+    const before = await page.evaluate(() => window.scrollY)
+    await page.mouse.wheel(0, 120)
+    await page.waitForTimeout(200)
+    expect(await page.evaluate(() => window.scrollY)).toBe(before)
+  })
+
+  test('scrolls the page over everything that is not a control', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^All$/ }).click()
+    await page.setViewportSize({ width: 1200, height: 500 })
+    await cell(page, 'ATK').locator('.param-label').hover()
+    const before = await page.evaluate(() => window.scrollY)
+    await page.mouse.wheel(0, 400)
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before)
+  })
+
+  test('steps the track selector, which is an ordinary drop-down', async ({ page }) => {
+    const badge = page.locator('.parts-track-header .track-badge').first()
+    await expect(badge).toHaveText('T1')
+    await page.locator('#parts-track-select').hover()
+    await page.mouse.wheel(0, -120)
+    // The whole page follows, so the wheel really went through React
+    await expect(badge).toHaveText('T2')
+  })
+})

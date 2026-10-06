@@ -506,9 +506,45 @@ export function fieldSpec(
 const UNMEASURED: FieldSpec = { min: 0, max: 127, default: 0, widget: 'unipolar', maxUnverified: true };
 
 /** Keeps a value inside what the device accepts. Out-of-range input lands on the edge. */
+/**
+ * Whether the device can actually hold this raw value.
+ *
+ * Most fields run straight through their range. A few are sparse: RTIM offers 120 times
+ * over the byte's 128 values, and the eight it leaves out are ones the device's own
+ * encoder steps over rather than settings it can be left on.
+ */
+function isLegal(raw: number, spec: FieldSpec): boolean {
+  if (raw < spec.min || raw > spec.max) return false;
+  if (!spec.table) return true;
+  return (spec.table as Record<number, string>)[raw] !== undefined;
+}
+
 export function clampToSpec(value: number, spec: FieldSpec): number {
   if (!Number.isFinite(value)) return spec.default;
-  return Math.min(spec.max, Math.max(spec.min, Math.round(value)));
+  const bounded = Math.min(spec.max, Math.max(spec.min, Math.round(value)));
+  if (isLegal(bounded, spec)) return bounded;
+  // Landed in a gap, so take the nearest value the device does use. Looking both ways
+  // rather than only downwards: a value nudged into a gap belongs at whichever edge of
+  // it that is closer, which is what dragging a knob across one should feel like.
+  for (let away = 1; away <= spec.max - spec.min; away++) {
+    if (isLegal(bounded - away, spec)) return bounded - away;
+    if (isLegal(bounded + away, spec)) return bounded + away;
+  }
+  return spec.default;
+}
+
+/**
+ * The value one step away, which is not always the next number.
+ *
+ * Stepping over a sparse field's gaps rather than stopping in one: a wheel notch moves
+ * to the next setting the device has, the same as turning its encoder. Returns the
+ * value unchanged at either end of the range.
+ */
+export function stepInSpec(value: number, by: 1 | -1, spec: FieldSpec): number {
+  for (let next = value + by; next >= spec.min && next <= spec.max; next += by) {
+    if (isLegal(next, spec)) return next;
+  }
+  return value;
 }
 
 /**

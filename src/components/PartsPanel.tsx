@@ -6,10 +6,10 @@ import { ALL_MIDI_TRACKS } from './TrackSelector';
 import { WriteStatus, writeStatus } from '../types/writeStatus';
 import { RotaryKnob } from './RotaryKnob';
 import {
-  fieldSpec, clampToSpec, formatSpecValue, parseSpecValue,
+  fieldSpec, clampToSpec, formatSpecValue, parseSpecValue, stepInSpec,
   machineTypesForTrack, MachineType,
 } from '../utils/partFieldSpecs';
-import { PositionBar, WaveGlyph } from './ParamWidgets';
+import { PositionBar, WaveGlyph, WheelStepper } from './ParamWidgets';
 import {
   fieldHelp, helpTitle, pageHelp, sectionHelp, machineHelp, LEVEL_HELP,
 } from '../utils/partFieldHelp';
@@ -701,6 +701,21 @@ export default function PartsPanel({
     );
 
     const editableText = isEditMode && !formatter && !isList;
+
+    // The wheel runs through the parameter's values while the pointer is over its cell,
+    // so a page can be set without reaching for a list or dragging a knob. A list walks
+    // its own entries; everything else moves a step at a time inside its range.
+    const stepValue = !isEditMode ? null : (by: 1 | -1) => {
+      if (isList) {
+        const at = choices.findIndex(o => o.value === displayValue);
+        const next = choices[(at === -1 ? 0 : at) + by];
+        if (next) commit(next.value);
+      } else {
+        // Not displayValue + by: a sparse field's gaps are values the device steps
+        // over, so a notch has to land past them
+        commit(stepInSpec(displayValue, by, spec));
+      }
+    };
     // A setting with exactly two values switches on click rather than opening a list.
     // Counted from the choices rather than the widget kind: SETUP LEN is a two-state
     // setting until SLIC turns it into a longer one.
@@ -708,9 +723,10 @@ export default function PartsPanel({
     const otherIndex = choices.findIndex(o => o.value === displayValue) === 0 ? 1 : 0;
 
     return (
-      <div
+      <WheelStepper
         className="param-item"
         key={key}
+        step={stepValue}
         title={helpTitle(
           label,
           help,
@@ -764,7 +780,7 @@ export default function PartsPanel({
             tabIndex={editableText ? 0 : -1}
           />
         )}
-      </div>
+      </WheelStepper>
     );
   };
 

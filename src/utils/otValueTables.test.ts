@@ -45,11 +45,36 @@ describe('RETRIG_COUNT', () => {
 describe('RETRIG_TIME', () => {
   it('is sparse, because the device steps over some values', () => {
     const present = Object.keys(RETRIG_TIME).map(Number)
-    expect(present).toHaveLength(119)
-    // The nine the encoder skips
-    for (const skipped of [1, 2, 4, 5, 8, 11, 14, 16, 95]) {
+    // 120 settings over the byte's 128 values
+    expect(present).toHaveLength(120)
+    // The eight the encoder skips
+    for (const skipped of [1, 2, 4, 5, 8, 11, 14, 16]) {
       expect(RETRIG_TIME[skipped], `raw ${skipped}`).toBeUndefined()
     }
+  })
+
+  /**
+   * The settings are a geometric series - each about 1.059 times the one before - so
+   * they have to climb with the raw value throughout. This is what catches a mistyped
+   * entry: the source table gave raw 93 twice and nothing for 95, which showed up here
+   * as 1.259 sitting before 1.189.
+   */
+  it('climbs all the way up, with no value out of order', () => {
+    const asNumber = (label: string) => {
+      const [top, bottom] = label.split('/')
+      return bottom ? Number(top) / Number(bottom) : Number(top)
+    }
+    const raws = Object.keys(RETRIG_TIME).map(Number).sort((a, b) => a - b)
+    for (let i = 1; i < raws.length; i++) {
+      const [before, after] = [RETRIG_TIME[raws[i - 1]], RETRIG_TIME[raws[i]]]
+      expect(asNumber(after), `raw ${raws[i]} (${after}) after ${before}`)
+        .toBeGreaterThan(asNumber(before))
+    }
+  })
+
+  it('keeps the two entries the source table got wrong', () => {
+    expect(RETRIG_TIME[93]).toBe('1.122')
+    expect(RETRIG_TIME[95]).toBe('1.259')
   })
 
   it('mixes decimals with note divisions, as the device does', () => {

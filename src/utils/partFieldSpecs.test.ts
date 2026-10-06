@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { machineTypesForTrack, MACHINE_TYPES, fieldSpec, clampToSpec, formatSpecValue, parseSpecValue, isDeviceField, noteName, machineParamLabels } from './partFieldSpecs'
+import { machineTypesForTrack, MACHINE_TYPES, fieldSpec, stepInSpec, clampToSpec, formatSpecValue, parseSpecValue, isDeviceField, noteName, machineParamLabels } from './partFieldSpecs'
 
 /**
  * The numbers asserted here are what the device itself wrote: each preset project was
@@ -585,5 +585,76 @@ describe('which machines a track can run', () => {
       if (machine === 'Thru' || machine === 'Neighbor') expect(ptch, machine).toBeNull()
       else expect(ptch, machine).not.toBeNull()
     }
+  })
+})
+
+/**
+ * RTIM offers 120 retrig times over the byte's 128 values. The eight it leaves out are
+ * ones the device's own encoder steps over, not settings it can be left on, so neither
+ * stepping nor clamping may come to rest in one.
+ */
+describe('values the device steps over', () => {
+  const rtim = () => fieldSpec('machine_params.rtim', 'Flex')!
+  const SKIPPED = [1, 2, 4, 5, 8, 11, 14, 16]
+
+  it('steps past a gap rather than into it', () => {
+    // 0 is a real value, 1 and 2 are not, 3 is
+    expect(stepInSpec(0, 1, rtim())).toBe(3)
+    expect(stepInSpec(3, -1, rtim())).toBe(0)
+  })
+
+  it('steps past a run of gaps', () => {
+    // 3 is real, 4 and 5 are not, 6 is
+    expect(stepInSpec(3, 1, rtim())).toBe(6)
+    // 14 and 16 are both skipped either side of 15
+    expect(stepInSpec(13, 1, rtim())).toBe(15)
+    expect(stepInSpec(15, 1, rtim())).toBe(17)
+  })
+
+  it('never lands on one, stepping either way across the whole range', () => {
+    const spec = rtim()
+    for (const by of [1, -1] as const) {
+      let at = by === 1 ? spec.min : spec.max
+      for (let i = 0; i < 200; i++) {
+        at = stepInSpec(at, by, spec)
+        expect(SKIPPED, `landed on ${at}`).not.toContain(at)
+      }
+    }
+  })
+
+  it('stops at each end rather than running off', () => {
+    const spec = rtim()
+    expect(stepInSpec(spec.min, -1, spec)).toBe(spec.min)
+    expect(stepInSpec(spec.max, 1, spec)).toBe(spec.max)
+  })
+
+  it('moves one at a time where there are no gaps', () => {
+    const atk = fieldSpec('atk')!
+    expect(stepInSpec(20, 1, atk)).toBe(21)
+    expect(stepInSpec(20, -1, atk)).toBe(19)
+  })
+
+  it('pulls a value typed into a gap onto the nearer side of it', () => {
+    const spec = rtim()
+    // 1 and 2 are skipped, between 0 and 3
+    expect(clampToSpec(1, spec)).toBe(0)
+    expect(clampToSpec(2, spec)).toBe(3)
+  })
+
+  it('leaves a value that is already a real one alone', () => {
+    const spec = rtim()
+    for (const raw of [0, 3, 6, 7, 127]) expect(clampToSpec(raw, spec)).toBe(raw)
+  })
+
+  it('still holds a sparse field inside its range', () => {
+    const spec = rtim()
+    expect(clampToSpec(-5, spec)).toBe(spec.min)
+    expect(clampToSpec(999, spec)).toBe(spec.max)
+  })
+
+  it('leaves a field with no table to its plain range', () => {
+    const atk = fieldSpec('atk')!
+    expect(clampToSpec(1, atk)).toBe(1)
+    expect(clampToSpec(2, atk)).toBe(2)
   })
 })

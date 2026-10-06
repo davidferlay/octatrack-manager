@@ -1,3 +1,6 @@
+import type { ReactNode } from 'react';
+import { useWheelStep } from '../utils/wheelStep';
+
 /**
  * The two widgets the Octatrack draws for a parameter that is not a knob.
  *
@@ -81,5 +84,33 @@ export function WaveGlyph({ wave }: { wave: string }) {
     >
       <path d={path} fill="none" stroke="currentColor" strokeWidth="1.5" />
     </svg>
+  );
+}
+
+/**
+ * A parameter cell whose value the scroll wheel steps while the pointer is over it.
+ *
+ * The whole cell responds, not just the control in it: the label, the knob and the
+ * readout are all the same parameter, and having to find the one live pixel would be
+ * worse than not offering it at all. A drop-down inside is left to the app-wide
+ * stepping, which knows how to walk its options.
+ *
+ * A component rather than a hook call inside the renderer, because the renderer runs
+ * once per parameter and hooks cannot be called in a loop. It also keeps the listener
+ * attached across renders instead of being torn down and rebuilt on every knob drag.
+ */
+export function WheelStepper(
+  { step, className, title, children }: {
+    /** Moves the value one step, or null where the field cannot be changed. */
+    step: ((by: 1 | -1) => void) | null;
+    className: string;
+    title?: string;
+    children: ReactNode;
+  },
+) {
+  return (
+    <div className={className} title={title} ref={useWheelStep(step)}>
+      {children}
+    </div>
   );
 }
