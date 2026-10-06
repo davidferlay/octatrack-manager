@@ -230,6 +230,8 @@ export function HomePage() {
   const [createModalTarget, setCreateModalTarget] = useState<{ setPath: string; setName: string } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ project: OctatrackProject; setName: string } | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  /** A project to scroll to and flash, set by "Show original project" on a bookmark. */
+  const [revealPath, setRevealPath] = useState<string | null>(null);
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
   const [renamingProject, setRenamingProject] = useState<{ project: OctatrackProject; setPath: string } | null>(null);
   const [activeItem, setActiveItem] = useState<{ type: string; name: string } | null>(null);
@@ -447,6 +449,58 @@ export function HomePage() {
     }
   }
 
+  /**
+   * Opens whatever the project is nested inside, then scrolls to its card and flashes
+   * it. Bookmarks are shortcuts to projects listed further down the page, and a
+   * bookmark on its own does not say where that is.
+   */
+  const showOriginalProject = useCallback((projectPath: string, setName?: string | null) => {
+    const sep = projectPath.includes('\\') ? '\\' : '/';
+    const locIdx = locations.findIndex(l => projectPath.startsWith(l.path + sep));
+    if (locIdx !== -1) {
+      setIsLocationsOpen(true);
+      setOpenLocations(prev => new Set(prev).add(locIdx));
+      if (setName) setOpenSets(prev => new Set(prev).add(`${locIdx}-${setName}`));
+    } else {
+      // Not under a scanned location, so it is listed among the individual projects
+      setIsIndividualProjectsOpen(true);
+      setClosedStandaloneGroups(new Set());
+    }
+    setRevealPath(projectPath);
+  }, [
+    locations, setIsLocationsOpen, setOpenLocations, setOpenSets,
+    setIsIndividualProjectsOpen, setClosedStandaloneGroups,
+  ]);
+
+  /**
+   * Waits for the card to actually be on screen before scrolling to it.
+   *
+   * The sections above it animate open, so the card can be in the DOM while its Set is
+   * still clipped to nothing - scrolling then lands somewhere else entirely.
+   */
+  useEffect(() => {
+    if (!revealPath) return;
+    let cancelled = false;
+    let tries = 0;
+    const attempt = () => {
+      if (cancelled) return;
+      const card = document.querySelector<HTMLElement>(
+        `[data-project-path="${CSS.escape(revealPath)}"]`,
+      );
+      if (card && card.getBoundingClientRect().height > 0) {
+        card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        card.classList.add('revealed');
+        window.setTimeout(() => card.classList.remove('revealed'), 2000);
+        setRevealPath(null);
+        return;
+      }
+      if (tries++ < 40) window.setTimeout(attempt, 50);
+      else setRevealPath(null);
+    };
+    attempt();
+    return () => { cancelled = true; };
+  }, [revealPath]);
+
   function toggleLocation(index: number) {
     setOpenLocations(prev => {
       const newSet = new Set(prev);
@@ -642,6 +696,7 @@ export function HomePage() {
                   setContextMenu({
                     x: e.clientX,
                     y: e.clientY,
+                    fromBookmark: true,
                     target: {
                       kind: 'project',
                       project: { name: bookmark.name, path: bookmark.path, has_project_file: true, has_banks: true },
@@ -699,6 +754,7 @@ export function HomePage() {
               <div
                 key={key}
                 className="project-card clickable-project"
+                data-project-path={project.path}
                 tabIndex={0}
                 onClick={() => {
                   goTo(`/project?path=${encodeURIComponent(project.path)}&name=${encodeURIComponent(project.name)}`);
@@ -1089,6 +1145,12 @@ export function HomePage() {
           target={contextMenu.target}
           clipboard={clipboard}
           isBookmarked={contextMenu.target.kind === 'project' && isBookmarked(contextMenu.target.project.path)}
+          onShowOriginal={contextMenu.fromBookmark
+            ? () => showOriginalProject(
+              (contextMenu.target as { project: { path: string } }).project.path,
+              contextMenu.target.kind === 'project' ? contextMenu.target.setName : null,
+            )
+            : undefined}
           onToggleBookmark={() => {
             if (contextMenu.target.kind === 'project') {
               toggleBookmark(

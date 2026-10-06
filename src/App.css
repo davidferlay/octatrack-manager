@@ -613,6 +613,32 @@ h1 {
   box-shadow: 0 4px 8px rgba(255, 102, 0, 0.2);
 }
 
+/* "Show original project" on a bookmark scrolls here and flashes the card, so there is
+   something to follow once the page has moved under you. Three pulses is long enough to
+   catch and short enough not to sit there as a selection. */
+.project-card.revealed {
+  animation: project-reveal 0.6s ease-in-out 3;
+}
+
+@keyframes project-reveal {
+  0%, 100% {
+    border-color: var(--elektron-border-gray);
+    box-shadow: none;
+  }
+  50% {
+    border-color: var(--elektron-orange);
+    box-shadow: 0 0 0 3px rgba(255, 102, 0, 0.35);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-card.revealed {
+    animation: none;
+    border-color: var(--elektron-orange);
+    box-shadow: 0 0 0 3px rgba(255, 102, 0, 0.35);
+  }
+}
+
 .project-card.clickable-project:active {
   transform: translateY(0);
   box-shadow: none;

@@ -8,6 +8,11 @@ export interface ProjectContextMenuProps {
   clipboard: ClipboardState | null
   /** Whether the right-clicked project is already bookmarked (project targets only). */
   isBookmarked?: boolean
+  /**
+   * Given only when the menu was opened on a bookmark, which is a shortcut to a project
+   * listed elsewhere on the page. Takes you to where that project actually lives.
+   */
+  onShowOriginal?: () => void
   onToggleBookmark: () => void
   onCopy: () => void
   onCopySet: () => void
@@ -63,6 +68,14 @@ export function ProjectContextMenu(props: ProjectContextMenuProps) {
     >
       {target.kind === 'project' && (
         <>
+          {props.onShowOriginal && (
+            <>
+              <button className="context-menu-item" onClick={fire(props.onShowOriginal)}>
+                <i className="fas fa-location-crosshairs"></i> Show original project
+              </button>
+              <div className="context-menu-separator"></div>
+            </>
+          )}
           <button className="context-menu-item" onClick={fire(props.onToggleBookmark)}>
             <i className={props.isBookmarked ? 'fas fa-bookmark' : 'far fa-bookmark'}></i>
             {props.isBookmarked ? ' Unbookmark' : ' Bookmark'}

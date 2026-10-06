@@ -191,16 +191,32 @@ export function SlotPickerModal({
 
   // Open on the assigned slot, so the list starts where the track already points.
   // The search box is deliberately not focused: the keys below belong to the list.
+  //
+  // Found in the displayed order, not in the unsorted one: the two differ whenever the
+  // assigned slot holds nothing, because that row is pushed to the front of the list
+  // before being sorted back into its numbered place.
   useEffect(() => {
-    const at = rows.findIndex(r => r.isAssigned);
+    const at = visible.findIndex(r => r.isAssigned);
     setCursor(at === -1 ? 0 : at);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * Keeps the cursor row on screen.
+   *
+   * The row the list opens on is centred, the rest scroll the least they can. Opening a
+   * long list with `nearest` leaves the assigned sample pinned to the bottom edge with
+   * nothing under it, which does not read as having been scrolled to; centring on the
+   * way in does. Doing the same on every arrow press would make the list jump under the
+   * cursor instead of following it.
+   */
+  const centredOnOpen = useRef(false);
   useEffect(() => {
-    listRef.current
-      ?.querySelector('.slot-picker-row.cursor')
-      ?.scrollIntoView({ block: 'nearest' });
+    const row = listRef.current?.querySelector('.slot-picker-row.cursor');
+    if (!row) return;
+    const centre = !centredOnOpen.current && row.classList.contains('assigned');
+    row.scrollIntoView({ block: centre ? 'center' : 'nearest' });
+    if (centre) centredOnOpen.current = true;
   }, [cursor, visible.length]);
 
   const commit = (row: Row | undefined) => {

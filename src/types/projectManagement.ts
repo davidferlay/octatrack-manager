@@ -47,4 +47,10 @@ export interface ContextMenuState {
   x: number
   y: number
   target: ContextTarget
+  /**
+   * The menu was opened on a bookmark rather than on the project itself. A bookmark is
+   * a shortcut to a project listed elsewhere on the page, so its menu offers a way to
+   * go and find it.
+   */
+  fromBookmark?: boolean
 }

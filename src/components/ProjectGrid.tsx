@@ -38,6 +38,7 @@ function DraggableProjectCard({
     <div
       ref={setNodeRef}
       className="project-card clickable-project"
+      data-project-path={project.path}
       title="Click to view project details"
       style={{ opacity: isDragging ? 0.4 : 1 }}
       {...attributes}

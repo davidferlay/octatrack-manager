@@ -156,6 +156,10 @@
 | PM120 | Bookmarks | Bookmarks survive a relaunch, before any scan | Bookmark a project, quit and reopen the app | The Bookmarked Projects section is on screen at startup, without pressing Scan |
 | PM121 | Bookmarks | Opening from a bookmark | Click a bookmarked card | The project opens, exactly as clicking its card inside its Set would |
 | PM122 | Bookmarks | Search filters bookmarks too | Bookmark two projects with different names, then type one of the names in the search box | Only the matching bookmark stays in the section, alongside the filtered scan results |
+| PM123 | Bookmarks | Show original project | Right-click a bookmarked card and choose "Show original project" | The page scrolls to that project's own card where it sits in its Set, and the card flashes for a moment so it can be followed |
+| PM124 | Bookmarks | It opens whatever the project is closed inside | Collapse the Set the project lives in, then use "Show original project" on its bookmark | The Location and the Set are expanded first, then the card is scrolled to and flashed |
+| PM125 | Bookmarks | Only bookmarks offer it | Right-click the project's own card in its Set | There is no "Show original project" entry - the card is already where the project lives |
+| PM126 | Bookmarks | A standalone project too | Bookmark a project outside any scanned Location, then use "Show original project" | The Individual Projects section is expanded and the card is scrolled to and flashed |
 | PM123 | Bookmarks | Renamed project keeps its bookmark | Bookmark a project, rename it, rescan | The bookmark stays and shows the new name - no need to re-bookmark |
 | PM124 | Bookmarks | Bookmark whose project is gone is discarded | Bookmark a project, then move or delete its directory outside the app, and relaunch | The bookmark is dropped automatically - no card that opens nothing. A bookmark whose project is still on disk is untouched |
 | PM125 | Bookmarks | Sets and locations cannot be bookmarked | Right-click a Set header, a location header, and the Individual Projects group | None of them offers Bookmark or Unbookmark - it is a project-level action |

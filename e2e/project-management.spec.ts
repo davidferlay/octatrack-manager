@@ -245,6 +245,63 @@ test('a bookmarked project offers Unbookmark, which removes the section', async 
   await expect(page.locator('.bookmarked-projects')).toHaveCount(0)
 })
 
+/**
+ * A bookmark is a shortcut to a project listed further down the page, and the card on
+ * its own does not say where that is - its Set may not even be expanded.
+ */
+test('a bookmark can show where the original project lives', async ({ page }) => {
+  await page.getByText('PROJ_A').click({ button: 'right' })
+  await page.getByText('Bookmark', { exact: true }).click()
+
+  const section = page.locator('.bookmarked-projects')
+  await section.getByText('PROJ_A').click({ button: 'right' })
+  await page.getByText('Show original project').click()
+
+  // The card in the tree, not the bookmark card, and it flashes so it can be followed
+  const original = page.locator('[data-project-path]')
+    .filter({ has: page.getByText('PROJ_A', { exact: true }) })
+    .filter({ hasNot: page.locator('.bookmarked-set') })
+  await expect(original).toHaveClass(/revealed/)
+  await expect(original).toBeInViewport()
+})
+
+test('showing the original opens the Set it is closed inside', async ({ page }) => {
+  await page.getByText('PROJ_A').click({ button: 'right' })
+  await page.getByText('Bookmark', { exact: true }).click()
+
+  /**
+   * Whether the Set holding PROJ_A is expanded. Read from the app's own state rather
+   * than from the card's visibility: a closed section clips its contents from an
+   * ancestor, so the card keeps a box of its own and still counts as visible.
+   */
+  const setIsOpen = () => page.evaluate(() => {
+    const card = document.querySelector('[data-project-path*="PROJ_A"]')
+    return card?.closest('.sets-section')?.classList.contains('open') ?? false
+  })
+
+  // Clicked on the arrow rather than the middle of the header, which has its own controls
+  await page.locator('.set-header.clickable').filter({ hasText: 'SetA' })
+    .click({ position: { x: 8, y: 8 } })
+  await expect.poll(setIsOpen).toBe(false)
+
+  await page.locator('.bookmarked-projects').getByText('PROJ_A').click({ button: 'right' })
+  await page.getByText('Show original project').click()
+
+  await expect.poll(setIsOpen).toBe(true)
+  await expect(page.locator('[data-project-path*="PROJ_A"]')).toHaveClass(/revealed/)
+})
+
+test('the original-project entry is only on bookmarks', async ({ page }) => {
+  await page.getByText('PROJ_A').click({ button: 'right' })
+  await page.getByText('Bookmark', { exact: true }).click()
+  await page.keyboard.press('Escape')
+
+  // Right-clicking the project itself - it is already where it lives
+  await page.locator('[data-project-path]').filter({ hasText: 'PROJ_A' }).first()
+    .click({ button: 'right' })
+  await expect(page.getByText('Show original project')).toHaveCount(0)
+})
+
 test('renaming a bookmarked project carries the bookmark with it', async ({ page }) => {
   await page.getByText('PROJ_A').click({ button: 'right' })
   await page.getByText('Bookmark', { exact: true }).click()

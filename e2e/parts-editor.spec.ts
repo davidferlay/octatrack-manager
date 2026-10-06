@@ -19,6 +19,11 @@ interface MockOptions {
   partsSavedState?: number[]
   /** Effect assigned to the FX1 slot of every track, for checking an effect's layout. */
   fx1Type?: number
+  /** How many Flex slots hold a sample. The default of 3 leaves the picker too short
+   *  to scroll, which is no use for anything about where the list opens. */
+  loadedFlexSlots?: number
+  /** The Flex slot T1 plays, zero-based. Default is its track number. */
+  t1FlexSlot?: number
 }
 
 async function setupTauriMocks(page: Page, options?: MockOptions) {
@@ -26,14 +31,16 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
     partsEditedBitmask: options?.partsEditedBitmask ?? 0,
     partsSavedState: options?.partsSavedState ?? [1, 0, 0, 0],
     fx1Type: options?.fx1Type ?? 4,
+    loadedFlexSlots: options?.loadedFlexSlots ?? 3,
+    t1FlexSlot: options?.t1FlexSlot ?? null,
   }
-  await page.addInitScript((opts: { partsEditedBitmask: number; partsSavedState: number[]; fx1Type: number }) => {
+  await page.addInitScript((opts: { partsEditedBitmask: number; partsSavedState: number[]; fx1Type: number; loadedFlexSlots: number; t1FlexSlot: number | null }) => {
     const makeMachine = (trackId: number) => ({
       track_id: trackId,
       machine_type: 'Flex',
       // Stored 0-based: track 1 plays Sample Slot 1
       static_slot_id: trackId,
-      flex_slot_id: trackId,
+      flex_slot_id: trackId === 0 && opts.t1FlexSlot !== null ? opts.t1FlexSlot : trackId,
       machine_params: { ptch: 64, strt: 0, len: 0, rate: 0, rtrg: 0, rtim: 0, in_ab: null, vol_ab: null, in_cd: null, vol_cd: null, dir: null, gain: null, op: null },
       machine_setup: { xloop: 0, slic: 0, len: 0, rate: 0, tstr: 0, tsns: 0 },
     })
@@ -135,7 +142,7 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
               sample_slots: {
                 // Slot ids are 1-based, as the file and the device number them.
                 // Flex slots 1..3 hold a sample; everything else is empty.
-                flex_slots: Array(128).fill(null).map((_, i) => ({ slot_id: i + 1, slot_type: 'Flex', path: i < 3 ? `../AUDIO/kick${i + 1}.wav` : null, gain: null, loop_mode: null, timestretch_mode: null, source_location: null, file_exists: i < 3, compatibility: null, file_format: null, bit_depth: null, sample_rate: null })),
+                flex_slots: Array(128).fill(null).map((_, i) => ({ slot_id: i + 1, slot_type: 'Flex', path: i < opts.loadedFlexSlots ? `../AUDIO/kick${i + 1}.wav` : null, gain: null, loop_mode: null, timestretch_mode: null, source_location: null, file_exists: i < opts.loadedFlexSlots, compatibility: null, file_format: null, bit_depth: null, sample_rate: null })),
                 static_slots: Array(128).fill(null).map((_, i) => ({ slot_id: i + 1, slot_type: 'Static', path: i === 0 ? '../AUDIO/loop.wav' : null, gain: null, loop_mode: null, timestretch_mode: null, source_location: null, file_exists: i === 0, compatibility: null, file_format: null, bit_depth: null, sample_rate: null })),
               },
             }
@@ -1732,5 +1739,80 @@ test.describe('Parts Editor - Effect type', () => {
     await expect(heading.locator('select.fx-type-select')).toHaveValue('4')
     await heading.locator('select.fx-type-select').selectOption('22')
     await expect(heading.locator('.param-label', { hasText: /^SHVG$/ })).toHaveCount(1)
+  })
+})
+
+/**
+ * Where the picker opens. The default mock pool holds three samples, which is too short
+ * a list to scroll at all, so these load it up.
+ */
+test.describe('Parts Editor - Slot picker opens on the assignment', () => {
+  const openPicker = async (page: Page) => {
+    await openPartsTab(page)
+    await selectTrack(page, '0')
+    await enterEditMode(page)
+    await page.locator('.parts-sample-field').first().click()
+    await expect(page.locator('.slot-picker-modal')).toBeVisible()
+  }
+
+  /** Where the assigned row sits relative to the list it scrolls inside. */
+  const placement = (page: Page) => page.evaluate(() => {
+    const row = document.querySelector('.slot-picker-row.assigned') as HTMLElement
+    const list = row.closest('.slot-picker-list') as HTMLElement
+    const r = row.getBoundingClientRect()
+    const l = list.getBoundingClientRect()
+    return {
+      isCursor: row.classList.contains('cursor'),
+      inView: r.top >= l.top && r.bottom <= l.bottom,
+      // 0 at the top of the list, 1 at the bottom
+      position: (r.top + r.height / 2 - l.top) / l.height,
+    }
+  })
+
+  test('scrolls to the assigned sample, not to the top of the list', async ({ page }) => {
+    await setupTauriMocks(page, { loadedFlexSlots: 128, t1FlexSlot: 99 })
+    await openPicker(page)
+
+    const at = await placement(page)
+    expect(at.isCursor).toBe(true)
+    expect(at.inView).toBe(true)
+    // Centred rather than scraping an edge: a row pinned to the bottom with nothing
+    // under it does not read as having been scrolled to
+    expect(at.position).toBeGreaterThan(0.25)
+    expect(at.position).toBeLessThan(0.75)
+  })
+
+  test('scrolls to it even when its slot holds nothing', async ({ page }) => {
+    // The assigned row is synthesised for an empty slot and pushed to the front of the
+    // list before being sorted back into its numbered place - so the index the list
+    // opens on has to be read from the displayed order, not the unsorted one
+    await setupTauriMocks(page, { loadedFlexSlots: 100, t1FlexSlot: 120 })
+    await openPicker(page)
+
+    const at = await placement(page)
+    expect(at.isCursor).toBe(true)
+    expect(at.inView).toBe(true)
+  })
+
+  test('leaves a list too short to scroll alone', async ({ page }) => {
+    await setupTauriMocks(page, { loadedFlexSlots: 3, t1FlexSlot: 0 })
+    await openPicker(page)
+
+    const at = await placement(page)
+    expect(at.isCursor).toBe(true)
+    expect(at.inView).toBe(true)
+    const scrolled = await page.locator('.slot-picker-list').evaluate(el => el.scrollTop)
+    expect(scrolled).toBe(0)
+  })
+
+  test('arrow keys move the cursor without jumping the list around', async ({ page }) => {
+    await setupTauriMocks(page, { loadedFlexSlots: 128, t1FlexSlot: 99 })
+    await openPicker(page)
+    const before = await page.locator('.slot-picker-list').evaluate(el => el.scrollTop)
+
+    await page.keyboard.press('ArrowDown')
+    const after = await page.locator('.slot-picker-list').evaluate(el => el.scrollTop)
+    // One row down is still on screen, so nothing needs to scroll
+    expect(after).toBe(before)
   })
 })
