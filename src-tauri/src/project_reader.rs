@@ -8,7 +8,7 @@ use ot_tools_io::{
     BankFile, HasChecksumField, MarkersFile, OctatrackFileIO, ProjectFile, SampleSettingsFile,
 };
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2541,6 +2541,161 @@ fn read_project_banks_internal(
 }
 
 /// Read Parts machine and AMP parameters from a specific bank
+/// One audio track's locks in a scene.
+///
+/// Every page is six positions, in the order the device lays that page out, and `None`
+/// is a position the scene leaves alone. What each position means depends on what the
+/// track runs - position two is a sample machine's STRT and a Pickup machine's DIR -
+/// which is why the machine and effect types come back alongside.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SceneTrackLocks {
+    pub track_id: u8,
+    /// SRC MAIN, the six parameters of whatever machine the track runs.
+    pub machine: Vec<Option<u8>>,
+    /// LFO MAIN: SPD1, SPD2, SPD3, DEP1, DEP2, DEP3.
+    pub lfo: Vec<Option<u8>>,
+    /// AMP MAIN: ATK, HOLD, REL, VOL, BAL, XVOL. The sixth is the one the device only
+    /// shows while a scene key is held, so this is the only place it can be set.
+    pub amp: Vec<Option<u8>>,
+    pub fx1: Vec<Option<u8>>,
+    pub fx2: Vec<Option<u8>>,
+    /// The track's level under the crossfader, which is a scene setting of its own
+    /// rather than one of the parameter pages.
+    pub xlv: Option<u8>,
+}
+
+/// One of a Part's sixteen scenes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SceneData {
+    pub scene_id: u8,
+    pub tracks: Vec<SceneTrackLocks>,
+    /// How many positions this scene locks, across every track and page. A scene that
+    /// locks nothing is one the device shows as empty.
+    pub locked_count: usize,
+}
+
+/// A Part's scenes, with what is needed to name their positions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ScenesResponse {
+    pub scenes: Vec<SceneData>,
+    /// The scenes the crossfader morphs between, at its two ends.
+    pub scene_a: u8,
+    pub scene_b: u8,
+    /// What each track runs, so an SRC position can be named.
+    pub machine_types: Vec<String>,
+    /// What each track's effect blocks hold, so an FX position can be named.
+    pub fx1_types: Vec<u8>,
+    pub fx2_types: Vec<u8>,
+}
+
+/// 255 is how the device records "this scene does not touch that parameter".
+const SCENE_UNASSIGNED: u8 = 255;
+
+fn scene_lock(value: u8) -> Option<u8> {
+    if value == SCENE_UNASSIGNED {
+        None
+    } else {
+        Some(value)
+    }
+}
+
+/// Reads one Part's sixteen scenes.
+///
+/// From `parts.unsaved`, the working copy, which is the same copy the Parts editor
+/// reads and writes - `parts.saved` is the device's own "Reload Part" backup and is
+/// left alone.
+pub fn read_scenes(
+    project_path: &str,
+    bank_id: &str,
+    part_id: u8,
+) -> Result<ScenesResponse, String> {
+    if part_id >= 4 {
+        return Err(format!("Invalid part: {}", part_id));
+    }
+    let bank_file_path = bank_file_path(project_path, bank_id)?;
+    let bank = BankFile::from_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
+
+    let part = &bank.parts.unsaved.0[part_id as usize];
+    let six = |values: [u8; 6]| values.iter().map(|v| scene_lock(*v)).collect::<Vec<_>>();
+
+    let scenes = part
+        .scenes
+        .iter()
+        .enumerate()
+        .map(|(scene_id, scene)| {
+            let xlvs = &part.scene_xlvs[scene_id];
+            let tracks: Vec<SceneTrackLocks> = scene
+                .0
+                .iter()
+                .enumerate()
+                .map(|(track_id, t)| SceneTrackLocks {
+                    track_id: track_id as u8,
+                    machine: six([
+                        t.machine.param1,
+                        t.machine.param2,
+                        t.machine.param3,
+                        t.machine.param4,
+                        t.machine.param5,
+                        t.machine.param6,
+                    ]),
+                    lfo: six([
+                        t.lfo.spd1, t.lfo.spd2, t.lfo.spd3, t.lfo.dep1, t.lfo.dep2, t.lfo.dep3,
+                    ]),
+                    amp: six([
+                        t.amp.atk, t.amp.hold, t.amp.rel, t.amp.vol, t.amp.bal, t.amp.f,
+                    ]),
+                    fx1: six([
+                        t.fx1.param_1,
+                        t.fx1.param_2,
+                        t.fx1.param_3,
+                        t.fx1.param_4,
+                        t.fx1.param_5,
+                        t.fx1.param_6,
+                    ]),
+                    fx2: six([
+                        t.fx2.param_1,
+                        t.fx2.param_2,
+                        t.fx2.param_3,
+                        t.fx2.param_4,
+                        t.fx2.param_5,
+                        t.fx2.param_6,
+                    ]),
+                    xlv: scene_lock(xlvs.track_xlvs[track_id]),
+                })
+                .collect();
+
+            let locked_count = tracks
+                .iter()
+                .map(|t| {
+                    [&t.machine, &t.lfo, &t.amp, &t.fx1, &t.fx2]
+                        .iter()
+                        .map(|page| page.iter().filter(|v| v.is_some()).count())
+                        .sum::<usize>()
+                        + usize::from(t.xlv.is_some())
+                })
+                .sum();
+
+            SceneData {
+                scene_id: scene_id as u8,
+                tracks,
+                locked_count,
+            }
+        })
+        .collect();
+
+    Ok(ScenesResponse {
+        scenes,
+        scene_a: part.active_scenes.scene_a,
+        scene_b: part.active_scenes.scene_b,
+        machine_types: (0..8)
+            .map(|t| machine_type_name(part.audio_track_machine_types[t]).to_string())
+            .collect(),
+        fx1_types: part.audio_track_fx1.to_vec(),
+        fx2_types: part.audio_track_fx2.to_vec(),
+    })
+}
+
 pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataResponse, String> {
     let path = Path::new(project_path);
 
@@ -2589,15 +2744,7 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
         for track_id in 0..8 {
             // Get machine type (0=Static, 1=Flex, 2=Thru, 3=Neighbor, 4=Pickup)
             let machine_type_id = part.audio_track_machine_types[track_id as usize];
-            let machine_type = match machine_type_id {
-                0 => "Static",
-                1 => "Flex",
-                2 => "Thru",
-                3 => "Neighbor",
-                4 => "Pickup",
-                _ => "Unknown",
-            }
-            .to_string();
+            let machine_type = machine_type_name(machine_type_id).to_string();
 
             // Get machine parameters (SRC page)
             let machine_params_values = &part.audio_track_machine_params[track_id as usize];
@@ -3023,6 +3170,39 @@ fn clamp_opt(value: &mut Option<u8>, min: u8, max: u8) {
 /// made on the device with each field driven to its minimum and its maximum; fields
 /// whose range has not been measured (the effect pages) are left alone rather than
 /// guessed at.
+/// The name the device shows for a machine's stored byte.
+fn machine_type_name(byte: u8) -> &'static str {
+    match byte {
+        0 => "Static",
+        1 => "Flex",
+        2 => "Thru",
+        3 => "Neighbor",
+        4 => "Pickup",
+        _ => "Unknown",
+    }
+}
+
+/// The bank file for a bank letter, preferring the working copy over the saved one.
+fn bank_file_path(project_path: &str, bank_id: &str) -> Result<PathBuf, String> {
+    let bank_letters = [
+        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
+    ];
+    let bank_num = bank_letters
+        .iter()
+        .position(|&letter| letter == bank_id)
+        .map(|idx| idx + 1)
+        .ok_or_else(|| format!("Invalid bank ID: {}", bank_id))?;
+
+    let path = Path::new(project_path);
+    for ext in ["work", "strd"] {
+        let candidate = path.join(format!("bank{:02}.{}", bank_num, ext));
+        if candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+    Err(format!("Bank file not found: {}", bank_id))
+}
+
 /// The byte the device stores for a machine name, or None for a name it does not know.
 ///
 /// The inverse of what `read_parts_data` does. Unknown names return None rather than a
@@ -18423,6 +18603,133 @@ mod tests {
                 Some(1),
                 "timestretch cannot be turned off on a Pickup machine"
             );
+        }
+
+        /// A scene records a value for a parameter, or nothing at all. The device writes
+        /// 255 for "this scene does not touch that one", which is outside every
+        /// parameter's own range and so cannot be confused with a real setting.
+        #[test]
+        fn test_read_scenes_reports_an_untouched_parameter_as_nothing() {
+            let project = TestProject::new();
+            let scenes = read_scenes(&project.path, "A", 0).unwrap();
+
+            assert_eq!(scenes.scenes.len(), 16, "a Part has sixteen scenes");
+            for scene in &scenes.scenes {
+                assert_eq!(scene.tracks.len(), 8, "one entry per audio track");
+                for track in &scene.tracks {
+                    for page in [
+                        &track.machine,
+                        &track.lfo,
+                        &track.amp,
+                        &track.fx1,
+                        &track.fx2,
+                    ] {
+                        assert_eq!(page.len(), 6, "every page is six positions");
+                    }
+                }
+            }
+        }
+
+        #[test]
+        fn test_read_scenes_counts_what_each_scene_locks() {
+            let project = TestProject::new();
+            let before = read_scenes(&project.path, "A", 0).unwrap();
+            let empty = before.scenes[2].locked_count;
+
+            // Lock two parameters on track 1 of scene 3, as the device would
+            let bank_path = bank_file_path(&project.path, "A").unwrap();
+            let mut bank = BankFile::from_data_file(&bank_path).unwrap();
+            bank.parts.unsaved.0[0].scenes[2].0[0].amp.vol = 100;
+            bank.parts.unsaved.0[0].scene_xlvs[2].track_xlvs[0] = 64;
+            bank.to_data_file(&bank_path).unwrap();
+
+            let after = read_scenes(&project.path, "A", 0).unwrap();
+            assert_eq!(after.scenes[2].locked_count, empty + 2);
+            assert_eq!(
+                after.scenes[2].tracks[0].amp[3],
+                Some(100),
+                "AMP VOL is the fourth"
+            );
+            assert_eq!(after.scenes[2].tracks[0].xlv, Some(64));
+            // ...and nothing else moved
+            assert_eq!(after.scenes[2].tracks[0].amp[0], None);
+            assert_eq!(after.scenes[1].locked_count, before.scenes[1].locked_count);
+        }
+
+        /// The sixth AMP position is XVOL, which the device only shows while a scene key
+        /// is held - so a scene is the only place it can be set, and the Parts editor
+        /// deliberately offers no knob for it.
+        #[test]
+        fn test_read_scenes_carries_the_amp_parameter_only_a_scene_can_set() {
+            let project = TestProject::new();
+            let bank_path = bank_file_path(&project.path, "A").unwrap();
+            let mut bank = BankFile::from_data_file(&bank_path).unwrap();
+            bank.parts.unsaved.0[0].scenes[0].0[3].amp.f = 12;
+            bank.to_data_file(&bank_path).unwrap();
+
+            let scenes = read_scenes(&project.path, "A", 0).unwrap();
+            assert_eq!(scenes.scenes[0].tracks[3].amp[5], Some(12));
+        }
+
+        /// The crossfader morphs between two of the sixteen, and which two is a Part
+        /// setting rather than anything stored in the scenes themselves.
+        #[test]
+        fn test_read_scenes_reports_the_crossfader_ends() {
+            let project = TestProject::new();
+            let bank_path = bank_file_path(&project.path, "A").unwrap();
+            let mut bank = BankFile::from_data_file(&bank_path).unwrap();
+            bank.parts.unsaved.0[0].active_scenes.scene_a = 2;
+            bank.parts.unsaved.0[0].active_scenes.scene_b = 11;
+            bank.to_data_file(&bank_path).unwrap();
+
+            let scenes = read_scenes(&project.path, "A", 0).unwrap();
+            assert_eq!((scenes.scene_a, scenes.scene_b), (2, 11));
+        }
+
+        /// A scene position means whatever the track runs, so naming it needs the
+        /// machine and the effects - position two is STRT on a sample machine and DIR
+        /// on a Pickup one.
+        #[test]
+        fn test_read_scenes_says_what_each_track_runs() {
+            let project = TestProject::new();
+            let scenes = read_scenes(&project.path, "A", 0).unwrap();
+            let parts = read_parts_data(&project.path, "A").unwrap();
+
+            assert_eq!(scenes.machine_types.len(), 8);
+            assert_eq!(scenes.fx1_types.len(), 8);
+            assert_eq!(scenes.fx2_types.len(), 8);
+            for track in 0..8 {
+                assert_eq!(
+                    scenes.machine_types[track],
+                    parts.parts[0].machines[track].machine_type
+                );
+                assert_eq!(scenes.fx1_types[track], parts.parts[0].fxs[track].fx1_type);
+            }
+        }
+
+        #[test]
+        fn test_read_scenes_is_per_part() {
+            let project = TestProject::new();
+            let bank_path = bank_file_path(&project.path, "A").unwrap();
+            let mut bank = BankFile::from_data_file(&bank_path).unwrap();
+            bank.parts.unsaved.0[1].scenes[0].0[0].amp.vol = 77;
+            bank.to_data_file(&bank_path).unwrap();
+
+            assert_eq!(
+                read_scenes(&project.path, "A", 0).unwrap().scenes[0].tracks[0].amp[3],
+                None
+            );
+            assert_eq!(
+                read_scenes(&project.path, "A", 1).unwrap().scenes[0].tracks[0].amp[3],
+                Some(77)
+            );
+        }
+
+        #[test]
+        fn test_read_scenes_refuses_a_part_that_does_not_exist() {
+            let project = TestProject::new();
+            assert!(read_scenes(&project.path, "A", 4).is_err());
+            assert!(read_scenes(&project.path, "Z", 0).is_err());
         }
 
         /// A track's machine can be changed from the editor, so the payload decides it.

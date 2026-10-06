@@ -37,6 +37,7 @@ use project_reader::{
     read_parts_data,
     read_project_banks,
     read_project_metadata,
+    read_scenes,
     read_single_bank,
     reload_part_data,
     save_memory_settings_data,
@@ -51,6 +52,7 @@ use project_reader::{
     PartsDataResponse,
     PoolUsageEntry,
     ProjectMetadata,
+    ScenesResponse,
     SetProjectInfo,
     SlotAssignment,
 };
@@ -169,6 +171,13 @@ async fn get_existing_banks(path: String) -> Vec<u8> {
 async fn load_parts_data(path: String, bank_id: String) -> Result<PartsDataResponse, String> {
     // Run on a blocking thread pool to avoid blocking the main event loop
     tauri::async_runtime::spawn_blocking(move || read_parts_data(&path, &bank_id))
+        .await
+        .unwrap()
+}
+
+#[tauri::command]
+async fn load_scenes(path: String, bank_id: String, part_id: u8) -> Result<ScenesResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || read_scenes(&path, &bank_id, part_id))
         .await
         .unwrap()
 }
@@ -1483,6 +1492,7 @@ pub fn run() {
             list_set_projects,
             get_existing_banks,
             load_parts_data,
+            load_scenes,
             save_parts,
             save_memory_settings,
             commit_part,

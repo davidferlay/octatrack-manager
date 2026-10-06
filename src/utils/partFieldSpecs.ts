@@ -425,6 +425,36 @@ export function machineParamLabels(machineType?: string, short = false): (string
 }
 
 /**
+ * The spec key behind each SRC position, matching `machineParamLabels` position for
+ * position - including its gaps, so the two can never drift apart.
+ *
+ * Needed wherever a value is shown by position rather than through the Parts editor's
+ * own layout: a scene records six SRC bytes and says nothing about what they are.
+ */
+export function machineParamFields(machineType?: string): (string | null)[] {
+  const key = (name: string | null) => (name === null ? null : `machine_params.${name}`);
+  switch (machineType) {
+    case 'Static':
+    case 'Flex':
+      return ['ptch', 'strt', 'len', 'rate', 'rtrg', 'rtim'].map(key);
+    case 'Thru':
+      return ['in_ab', 'vol_ab', null, 'in_cd', 'vol_cd', null].map(key);
+    case 'Neighbor':
+      return [null, null, null, null, null, null];
+    case 'Pickup':
+      return ['ptch', 'dir', 'len', null, 'gain', 'op'].map(key);
+    default:
+      return [null, null, null, null, null, null];
+  }
+}
+
+/** The AMP page by position. The sixth is the one only a scene can set. */
+export const AMP_PARAM_FIELDS = ['atk', 'hold', 'rel', 'vol', 'bal', 'xvol'] as const;
+
+/** The LFO MAIN page by position, which is the three speeds then the three depths. */
+export const LFO_PARAM_FIELDS = ['spd1', 'spd2', 'spd3', 'dep1', 'dep2', 'dep3'] as const;
+
+/**
  * What an LFO can modulate, named the way the device names it: the parameter page it
  * belongs to, then the parameter itself.
  *

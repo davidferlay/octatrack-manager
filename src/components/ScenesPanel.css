@@ -1,0 +1,236 @@
+/* A Part's sixteen scenes: the grid of them, then what the chosen one holds. */
+
+.scenes-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.scenes-panel-loading,
+.scenes-panel-error {
+  padding: 40px;
+  text-align: center;
+  color: var(--elektron-text-secondary);
+}
+
+.scenes-panel-error {
+  color: #f44336;
+}
+
+.scenes-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.scenes-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--elektron-text-primary);
+}
+
+/* Eight by two, the way the sixteen trig keys the scenes sit under are laid out. */
+.scenes-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 6px;
+}
+
+.scene-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  background: #252525;
+  border: 1px solid #333;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--elektron-text-primary);
+  font-family: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.scene-card:hover {
+  border-color: var(--elektron-orange);
+}
+
+.scene-card.active {
+  border-color: var(--elektron-orange);
+  background: #2e2a24;
+}
+
+/* A scene holding nothing is one the crossfader has nowhere to go towards */
+.scene-card.empty .scene-count,
+.scene-card.empty .scene-number {
+  color: var(--elektron-text-secondary);
+  opacity: 0.6;
+}
+
+.scene-number {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.scene-count {
+  font-size: 11px;
+  color: #5dade2;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+}
+
+/* Which scenes the crossfader sits between - the one thing about a scene that is not
+   stored in the scene itself. */
+.scene-end {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--elektron-orange);
+}
+
+.scene-card.crossfader-end {
+  border-color: #5a4a2a;
+}
+
+.scene-detail {
+  background: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 12px;
+}
+
+.scene-detail-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #333;
+}
+
+.scene-detail-title {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.scene-detail-sub,
+.scene-empty-message {
+  font-size: 12px;
+  color: var(--elektron-text-secondary);
+}
+
+.scene-empty-message {
+  padding: 16px 0;
+  max-width: 60ch;
+  line-height: 1.5;
+}
+
+/* One column per track that the scene touches, so an empty scene shows no headings */
+.scene-tracks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+}
+
+.scene-track {
+  background: #252525;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 8px;
+}
+
+.scene-track-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #333;
+}
+
+.scene-track-machine {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--elektron-text-secondary);
+}
+
+.scene-track-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: #5dade2;
+}
+
+.scene-locks {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.scene-locks td {
+  padding: 2px 0;
+}
+
+.scene-lock-page {
+  color: var(--elektron-text-secondary);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  padding-right: 8px;
+}
+
+.scene-lock-label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.scene-lock-value {
+  text-align: right;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+  color: #5dade2;
+  white-space: nowrap;
+}
+
+.scenes-crossfader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--elektron-text-secondary);
+  padding: 8px 10px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 4px;
+}
+
+.scenes-crossfader-fx {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.scenes-fx-chip {
+  font-size: 10px;
+  padding: 2px 6px;
+  background: #252525;
+  border: 1px solid #333;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .scenes-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}

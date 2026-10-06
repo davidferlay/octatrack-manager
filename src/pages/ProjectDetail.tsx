@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { ProjectMetadata, Bank, PartsDataResponse, SampleSlotUsage } from "../context/ProjectsContext";
 import { BankSelector, ALL_BANKS, formatBankName } from "../components/BankSelector";
 import { TrackSelector, ALL_AUDIO_TRACKS, ALL_MIDI_TRACKS } from "../components/TrackSelector";
+import { ScenesPanel } from "../components/ScenesPanel";
 import { PatternSelector, ALL_PATTERNS } from "../components/PatternSelector";
 import { SampleSlotsTable } from "../components/SampleSlotsTable";
 import PartsPanel from "../components/PartsPanel";
@@ -97,7 +98,7 @@ interface TrigStep {
 
 // TrackInfo, Pattern, Part, and Bank interfaces are imported from ProjectsContext via Bank type
 
-type TabType = "overview" | "parts" | "patterns" | "tracks" | "static-slots" | "flex-slots" | "tools";
+type TabType = "overview" | "parts" | "scenes" | "patterns" | "tracks" | "static-slots" | "flex-slots" | "tools";
 
 // Helper function to calculate the display denominator for length fraction
 function getLengthDenominator(length: number): number {
@@ -239,7 +240,7 @@ export function ProjectDetail() {
   const [activeTab, setActiveTab] = useState<TabType>(() => {
     // Honor a ?tab= param so the Audio Pool page can return to the originating tab.
     const t = searchParams.get("tab");
-    const valid: TabType[] = ["overview", "parts", "patterns", "tracks", "static-slots", "flex-slots", "tools"];
+    const valid: TabType[] = ["overview", "parts", "scenes", "patterns", "tracks", "static-slots", "flex-slots", "tools"];
     return (valid as string[]).includes(t ?? "") ? (t as TabType) : "overview";
   });
   // Set once by a Sample Slots tab's health glyph, so ToolsPanel opens with
@@ -247,7 +248,7 @@ export function ProjectDetail() {
   const [toolsInitialOperation, setToolsInitialOperation] = useState<"fix_project_samples" | undefined>(undefined);
   // Shift+1..6: switch between the page tabs (same order as the header)
   useEffect(() => {
-    const tabOrder: TabType[] = ["overview", "parts", "patterns", "flex-slots", "static-slots", "tools"];
+    const tabOrder: TabType[] = ["overview", "parts", "scenes", "patterns", "flex-slots", "static-slots", "tools"];
     function onKey(e: KeyboardEvent) {
       if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
       const t = e.target as HTMLElement | null;
@@ -1016,6 +1017,13 @@ export function ProjectDetail() {
                 Parts
               </button>
               <button
+                className={`header-tab ${activeTab === "scenes" ? "active" : ""}`}
+                onClick={() => setActiveTab("scenes")}
+                title="The sixteen scenes of each Part, and what each one holds"
+              >
+                Scenes
+              </button>
+              <button
                 className={`header-tab ${activeTab === "patterns" ? "active" : ""}`}
                 onClick={() => setActiveTab("patterns")}
               >
@@ -1567,6 +1575,41 @@ export function ProjectDetail() {
                   })()}
                 </div>
                 )}
+              </div>
+            )}
+
+            {activeTab === "scenes" && (
+              <div className="banks-tab">
+                <div className="bank-selector-section">
+                  <BankSelector
+                    id="scenes-bank-select"
+                    banks={banks}
+                    value={selectedBankIndex}
+                    onChange={setSelectedBankIndex}
+                    currentBank={metadata?.current_state.bank}
+                  />
+                </div>
+                {(() => {
+                  const bank = banks[selectedBankIndex];
+                  if (!bank || !loadedBankIndices.has(selectedBankIndex)) {
+                    return <div className="scenes-panel-loading">Reading bank...</div>;
+                  }
+                  // The Part follows the Parts tab's own selection, so switching between
+                  // the two tabs keeps showing the same Part rather than resetting
+                  const activePart = sharedPartsActivePartIndex
+                    ?? metadata?.current_state.part ?? 0;
+                  return (
+                    <ScenesPanel
+                      key={`bank-scenes-${selectedBankIndex}`}
+                      projectPath={projectPath || ''}
+                      bankId={bank.id}
+                      bankName={formatBankName(bank.name, selectedBankIndex)}
+                      partId={activePart}
+                      partNames={bank.parts.map(part => part.name)}
+                      onPartChange={setSharedPartsActivePartIndex}
+                    />
+                  );
+                })()}
               </div>
             )}
 

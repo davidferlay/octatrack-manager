@@ -165,6 +165,35 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
             }
           }
 
+          case 'load_scenes': {
+            // Three scenes hold something; the rest are empty, as a real Part mostly is
+            const held: Record<number, Record<string, unknown>> = {
+              0: { amp: [null, null, null, 100, null, null], xlv: 64 },
+              2: { machine: [70, null, null, null, null, null], fx1: [null, 30, null, null, null, null] },
+              5: { lfo: [null, null, null, 12, null, null], amp: [null, null, null, null, null, 9] },
+            }
+            const six = () => [null, null, null, null, null, null]
+            return {
+              scenes: Array.from({ length: 16 }, (_, sceneId) => {
+                const tracks = Array.from({ length: 8 }, (_, trackId) => ({
+                  track_id: trackId,
+                  machine: six(), lfo: six(), amp: six(), fx1: six(), fx2: six(), xlv: null,
+                  // Only track 1 carries anything, which keeps the fixture readable
+                  ...(trackId === 0 ? (held[sceneId] ?? {}) : {}),
+                }))
+                const locked_count = tracks.reduce((n, t) => n
+                  + [t.machine, t.lfo, t.amp, t.fx1, t.fx2]
+                    .reduce((m, page) => m + (page as (number | null)[]).filter(v => v !== null).length, 0)
+                  + (t.xlv === null ? 0 : 1), 0)
+                return { scene_id: sceneId, tracks, locked_count }
+              }),
+              scene_a: 0,
+              scene_b: 8,
+              machine_types: Array(8).fill('Flex'),
+              fx1_types: Array(8).fill(opts.fx1Type),
+              fx2_types: Array(8).fill(8),
+            }
+          }
           case 'load_parts_data':
             return {
               parts: [0, 1, 2, 3].map((partId) => makePart(partId)),
@@ -1946,5 +1975,124 @@ test.describe('Parts Editor - Scroll wheel', () => {
     await page.mouse.wheel(0, -120)
     // The whole page follows, so the wheel really went through React
     await expect(badge).toHaveText('T2')
+  })
+})
+
+/**
+ * A scene is a snapshot the crossfader morphs towards. It holds only the parameters put
+ * into it - everything else carries on from the Part - so it reads as a list of what it
+ * holds rather than as a second set of parameter pages.
+ */
+test.describe('Scenes', () => {
+  const openScenes = async (page: Page) => {
+    await page.goto('/#/project?path=%2Fmock%2FTESTPROJECT&name=TESTPROJECT')
+    await page.getByRole('button', { name: 'Scenes', exact: true }).click()
+    await expect(page.locator('.scenes-grid')).toBeVisible()
+  }
+
+  const card = (page: Page, number: number) =>
+    page.locator('.scene-card').nth(number - 1)
+
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await openScenes(page)
+  })
+
+  test('shows the sixteen scenes a Part has', async ({ page }) => {
+    await expect(page.locator('.scene-card')).toHaveCount(16)
+    await expect(card(page, 1).locator('.scene-number')).toHaveText('1')
+    await expect(card(page, 16).locator('.scene-number')).toHaveText('16')
+  })
+
+  test('says how many parameters each one holds', async ({ page }) => {
+    await expect(card(page, 1).locator('.scene-count')).toHaveText('2')
+    await expect(card(page, 3).locator('.scene-count')).toHaveText('2')
+    // A scene holding nothing shows a dash rather than a zero
+    await expect(card(page, 4).locator('.scene-count')).toHaveText('-')
+    await expect(card(page, 4)).toHaveClass(/empty/)
+  })
+
+  /** Which two the crossfader sits between is a Part setting, not part of a scene. */
+  test('marks the two ends of the crossfader', async ({ page }) => {
+    await expect(card(page, 1).locator('.scene-end')).toHaveText('A')
+    await expect(card(page, 9).locator('.scene-end')).toHaveText('B')
+    await expect(card(page, 2).locator('.scene-end')).toHaveCount(0)
+    await expect(page.locator('.scenes-crossfader'))
+      .toContainText('morphs between scene 1 and scene 9')
+  })
+
+  test('lists what the selected scene holds, by track', async ({ page }) => {
+    await expect(page.locator('.scene-detail-title')).toHaveText('Scene 1')
+    const rows = page.locator('.scene-track').first().locator('.scene-locks tr')
+    await expect(rows).toHaveCount(2)
+    await expect(rows.nth(0)).toContainText('AMP')
+    await expect(rows.nth(0)).toContainText('VOL')
+    await expect(rows.nth(1)).toContainText('XLV')
+  })
+
+  /** The same formatting the Parts pages use, so a value reads as the device shows it. */
+  test('reads a value the way the device does, not as a raw byte', async ({ page }) => {
+    // AMP VOL is centred, so the stored 100 reads as +36 from the middle
+    const value = page.locator('.scene-track').first().locator('.scene-lock-value').first()
+    await expect(value).toHaveText('36')
+    await expect(value).toHaveAttribute('title', 'Stored as 100')
+  })
+
+  test('shows only the tracks a scene touches', async ({ page }) => {
+    // The fixture puts everything on track 1
+    await expect(page.locator('.scene-track')).toHaveCount(1)
+    await expect(page.locator('.scene-track').first()).toContainText('T1')
+  })
+
+  test('names an SRC position after the machine the track runs', async ({ page }) => {
+    await card(page, 3).click()
+    const rows = page.locator('.scene-track').first().locator('.scene-locks tr')
+    // Position one of a Flex machine is PTCH, and it reads in semitones
+    await expect(rows.nth(0)).toContainText('SRC')
+    await expect(rows.nth(0)).toContainText('PTCH')
+    await expect(rows.nth(0).locator('.scene-lock-value')).toHaveText('1.2')
+  })
+
+  test('names an FX position after the effect that is loaded', async ({ page }) => {
+    await card(page, 3).click()
+    const rows = page.locator('.scene-track').first().locator('.scene-locks tr')
+    // The mock loads a filter, whose second position is WDTH
+    await expect(rows.nth(1)).toContainText('FLTR')
+    await expect(rows.nth(1)).toContainText('WDTH')
+  })
+
+  /**
+   * XVOL is the AMP page's sixth position. The device only shows it while a scene key
+   * is held, so a scene is the only place it can be set - and the Parts editor offers
+   * no knob for it at all.
+   */
+  test('shows the AMP parameter only a scene can set', async ({ page }) => {
+    await card(page, 6).click()
+    const rows = page.locator('.scene-track').first().locator('.scene-locks tr')
+    await expect(rows.filter({ hasText: 'XVOL' })).toHaveCount(1)
+  })
+
+  test('says so plainly when a scene holds nothing', async ({ page }) => {
+    await card(page, 4).click()
+    await expect(page.locator('.scene-detail-sub')).toHaveText('Nothing held')
+    await expect(page.locator('.scene-empty-message')).toBeVisible()
+    await expect(page.locator('.scene-track')).toHaveCount(0)
+  })
+
+  test('scenes belong to a Part, so switching Part reloads them', async ({ page }) => {
+    const before = (await getInvokeCalls(page, 'load_scenes')).length
+    await page.locator('.parts-part-tab', { hasText: 'GROOVE' }).click()
+    await expect
+      .poll(async () => (await getInvokeCalls(page, 'load_scenes')).length)
+      .toBeGreaterThan(before)
+    const calls = await getInvokeCalls(page, 'load_scenes')
+    expect(calls[calls.length - 1].args.partId).toBe(1)
+  })
+
+  test('selecting a scene does not reload anything', async ({ page }) => {
+    const before = (await getInvokeCalls(page, 'load_scenes')).length
+    await card(page, 6).click()
+    await expect(page.locator('.scene-detail-title')).toHaveText('Scene 6')
+    expect(await getInvokeCalls(page, 'load_scenes')).toHaveLength(before)
   })
 })
