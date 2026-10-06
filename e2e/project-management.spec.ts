@@ -291,6 +291,30 @@ test('showing the original opens the Set it is closed inside', async ({ page }) 
   await expect(page.locator('[data-project-path*="PROJ_A"]')).toHaveClass(/revealed/)
 })
 
+/**
+ * A bookmark outlives the scan it came from - it is remembered across launches, while
+ * the list below is whatever was scanned this time. Pointing at a project that is not
+ * on the page has to say so rather than appear to do nothing.
+ */
+test('showing the original says so when the project is not in the list', async ({ page }) => {
+  await page.getByText('PROJ_A').click({ button: 'right' })
+  await page.getByText('Bookmark', { exact: true }).click()
+
+  // Back to a fresh launch. Bookmarks are kept for good; the scan results only live
+  // for the session, so dropping them leaves the bookmark pointing at nothing listed.
+  await page.evaluate(() => sessionStorage.clear())
+  await page.reload()
+  await expect(page.locator('[data-project-path]')).toHaveCount(0)
+  await expect(page.locator('.bookmarked-projects')).toBeVisible()
+
+  await page.locator('.bookmarked-projects').getByText('PROJ_A').click({ button: 'right' })
+  await page.getByText('Show original project').click()
+
+  const tip = page.locator('.toast-notification.tip')
+  await expect(tip).toBeVisible()
+  await expect(tip).toContainText('Scan for projects first')
+})
+
 test('the original-project entry is only on bookmarks', async ({ page }) => {
   await page.getByText('PROJ_A').click({ button: 'right' })
   await page.getByText('Bookmark', { exact: true }).click()

@@ -235,7 +235,9 @@ export function HomePage() {
   const [clipboard, setClipboard] = useState<ClipboardState | null>(null);
   const [renamingProject, setRenamingProject] = useState<{ project: OctatrackProject; setPath: string } | null>(null);
   const [activeItem, setActiveItem] = useState<{ type: string; name: string } | null>(null);
-  const [toast, setToast] = useState<{ message: string; icon: string; type?: 'warning' } | null>(null);
+  const [toast, setToast] = useState<
+    { message: string; icon: string; type?: 'warning' | 'tip' } | null
+  >(null);
   const [copyProgress, setCopyProgress] = useState<{ transferId: string; label: string; command: string; commandArgs: Record<string, unknown>; setPath?: string; locationPath?: string; sourceSetPath?: string; isMove?: boolean } | null>(null);
   const [renamingSet, setRenamingSet] = useState<{ setPath: string; setName: string; locationPath: string } | null>(null);
   const [deleteSetTarget, setDeleteSetTarget] = useState<{ setPath: string; setName: string; locationPath: string } | null>(null);
@@ -455,6 +457,23 @@ export function HomePage() {
    * bookmark on its own does not say where that is.
    */
   const showOriginalProject = useCallback((projectPath: string, setName?: string | null) => {
+    // A bookmark outlives the scan it came from: it is remembered across launches,
+    // while the list below is whatever was scanned this time. So the project it points
+    // at may not be on the page at all, and there would be nothing to scroll to.
+    const listed = locations.some(l => l.sets.some(st => st.projects.some(p => p.path === projectPath)))
+      || standaloneProjects.some(p => p.path === projectPath);
+    if (!listed) {
+      setToast({
+        message: hasScanned
+          ? 'That project is not in the list - it sits outside the locations scanned'
+          : 'Scan for projects first - the list it lives in has not been built yet',
+        icon: 'fa-lightbulb',
+        type: 'tip',
+      });
+      setTimeout(() => setToast(null), 3000);
+      return;
+    }
+
     const sep = projectPath.includes('\\') ? '\\' : '/';
     const locIdx = locations.findIndex(l => projectPath.startsWith(l.path + sep));
     if (locIdx !== -1) {
@@ -468,7 +487,8 @@ export function HomePage() {
     }
     setRevealPath(projectPath);
   }, [
-    locations, setIsLocationsOpen, setOpenLocations, setOpenSets,
+    locations, standaloneProjects, hasScanned,
+    setIsLocationsOpen, setOpenLocations, setOpenSets,
     setIsIndividualProjectsOpen, setClosedStandaloneGroups,
   ]);
 
