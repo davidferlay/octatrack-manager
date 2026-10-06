@@ -7,26 +7,36 @@
  * the one the manual's Appendix B shows.
  */
 
+const FX_NAMES: { [key: number]: string } = {
+  0: 'OFF',
+  4: 'FILTER',
+  5: 'SPATIALIZER',
+  8: 'DELAY',
+  12: 'EQ',
+  13: 'DJ EQ',
+  16: 'PHASER',
+  17: 'FLANGER',
+  18: 'CHORUS',
+  19: 'COMB FILTER',
+  20: 'PLATE REVERB',
+  21: 'SPRING REVERB',
+  22: 'DARK REVERB',
+  24: 'COMPRESSOR',
+  28: 'LO-FI', // B.11 LO-FI COLLECTION
+};
+
+/**
+ * Every effect a slot can hold, for the picker, in the order the device's own list
+ * draws them. That order is not the order of the values it stores - the spatializer is
+ * eighth in the list and fifth by value - and it is the order the user guide's effects
+ * appendix documents them in, B.1 to B.15.
+ */
+export const FX_TYPES: { value: number; label: string }[] = [
+  0, 4, 12, 13, 16, 17, 18, 5, 19, 24, 28, 8, 20, 21, 22,
+].map(value => ({ value, label: FX_NAMES[value] }));
+
 export function formatFxType(value: number): string {
-  // FX effect types for Octatrack (from ot-tools-io documentation)
-  const fxTypes: { [key: number]: string } = {
-    0: 'OFF',
-    4: 'FILTER',
-    5: 'SPATIALIZER',
-    8: 'DELAY',
-    12: 'EQ',
-    13: 'DJ EQ',
-    16: 'PHASER',
-    17: 'FLANGER',
-    18: 'CHORUS',
-    19: 'COMB FILTER',
-    20: 'PLATE REVERB',
-    21: 'SPRING REVERB',
-    22: 'DARK REVERB',
-    24: 'COMPRESSOR',
-    28: 'LO-FI', // B.11 LO-FI COLLECTION
-  }
-  return fxTypes[value] || `FX ${value}`;
+  return FX_NAMES[value] || `FX ${value}`;
 }
 
 /**

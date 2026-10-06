@@ -50,7 +50,7 @@ The Parts Editor is organized into several pages, mirroring exactly the Octatrac
 
 ![Parts Editor - AMP page](/img/screenshots/parts-editor-amp.png)
 
-- **FX1 & FX2 Pages:** Edit the two effect slots for each track.
+- **FX1 & FX2 Pages:** Edit the two effect slots for each track. The effect loaded in a slot can be changed from its heading - see [Changing a track's effects](#changing-a-tracks-effects) below.
 
 ![Parts Editor - FX page](/img/screenshots/parts-editor-fx.png)
 
@@ -79,6 +79,18 @@ That is not the same as the change being reversible. Switching back to Flex rese
 The picker offers four machines on T1 and T5, and five everywhere else. Neighbor is missing from those two.
 
 A Neighbor machine does not play a sample at all - it takes its audio from the track before it, which is how effect chains are built across tracks. T1 and T5 are the first of their group of four, so there is no preceding track for them to listen to, and the Octatrack will not let them run one. The Octatrack manual states it outright in its machine reference, section A.4. The editor withholds it for the same reason.
+
+#### Changing a track's effects
+
+Wherever an FX heading names the effect - `MAIN - FILTER` on the FX1 and FX2 pages, `FX1 - FILTER` on ALL - that name becomes a selector in Edit mode. It lists OFF and the fourteen effects in the order the device lists them, which is neither alphabetical nor the order of the values it stores. Changing it rewrites the knobs below to that effect's parameters, including the gaps where the device leaves a knob position empty.
+
+Two other places follow along. The parameter help on hover becomes that effect's, and the LFO target list renames its FX entries - point an LFO at a filter's BASE and the target reads `FLTR BASE`; load a plate reverb in that slot and the same entry becomes `PLTE TIME`.
+
+##### Effect parameters reset
+
+Loading an effect resets all parameters of that block's to default values (just like the Octatrack does, and similarly to changing Machine type).
+
+This is the same reasoning as [SRC parameters reset](#src-parameters-reset) above, and it lands the same way.
 
 #### Changing the Sample a track plays
 

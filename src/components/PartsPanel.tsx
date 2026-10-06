@@ -13,7 +13,8 @@ import { PositionBar, WaveGlyph } from './ParamWidgets';
 import {
   fieldHelp, helpTitle, pageHelp, sectionHelp, machineHelp, LEVEL_HELP,
 } from '../utils/partFieldHelp';
-import { formatFxType, getFxMainLabels, getFxSetupLabels } from '../utils/fxLabels';
+import { formatFxType, getFxMainLabels, getFxSetupLabels, FX_TYPES } from '../utils/fxLabels';
+import { fxDefaults } from '../utils/fxDefaults';
 import { SlotPickerModal } from './SlotPickerModal';
 import './PartsPanel.css';
 
@@ -425,6 +426,49 @@ export default function PartsPanel({
     queuePartSave(partId, `machine type -> ${nextType}`);
     onMachineTypeChanged?.(trackId, nextType);
   }, [queuePartSave, onMachineTypeChanged]);
+
+  /**
+   * Loads a different effect into one of the track's two effect blocks, and sets its
+   * twelve parameters to what the device writes when it loads that effect.
+   *
+   * The device resets them - a block holds one set of twelve bytes, not one per effect,
+   * so without the reset a reverb's decay time would arrive as a phaser's centre
+   * frequency. The values come from the hardware, one effect at a time; see
+   * `fxDefaults`. A knob position the effect does not use is left alone, and a block
+   * set to OFF is left alone entirely, because the device shows nothing for it.
+   */
+  const changeFxType = useCallback((
+    partId: number,
+    trackId: number,
+    slot: 'fx1' | 'fx2',
+    nextType: number,
+  ) => {
+    setPartsData(prev => {
+      const partIndex = prev.findIndex(p => p.part_id === partId);
+      if (partIndex === -1) return prev;
+
+      const updatedPart = JSON.parse(JSON.stringify(prev[partIndex])) as PartData;
+      const fx = updatedPart.fxs[trackId] as unknown as Record<string, number>;
+      if (!fx) return prev;
+      fx[`${slot}_type`] = nextType;
+
+      const defaults = fxDefaults(nextType);
+      if (defaults) {
+        defaults.main.forEach((value, i) => {
+          if (value !== null) fx[`${slot}_param${i + 1}`] = value;
+        });
+        defaults.setup.forEach((value, i) => {
+          if (value !== null) fx[`${slot}_setup${i + 1}`] = value;
+        });
+      }
+
+      const newData = [...prev];
+      newData[partIndex] = updatedPart;
+      return newData;
+    });
+
+    queuePartSave(partId, `${slot} type -> ${formatFxType(nextType)}`);
+  }, [queuePartSave]);
 
   // Update a single point in the LFO design array (local state only, no save)
   const updateLfoDesignLocal = useCallback((
@@ -1022,6 +1066,42 @@ export default function PartsPanel({
   };
 
   /**
+   * The effect loaded in one of the track's two blocks: its name in View mode, a picker
+   * in Edit mode. Shown wherever the effect is named, so every FX heading can change it.
+   */
+  const renderFxTypeField = (
+    activePart: PartData,
+    trackId: number,
+    slot: 'fx1' | 'fx2',
+    fxType: number,
+  ) => {
+    const known = FX_TYPES.some(fx => fx.value === fxType);
+    if (!isEditMode || !known) {
+      // Same box as the picker, minus the border colour, so switching mode does not
+      // move the heading it sits in
+      return <span className="fx-type-value">{formatFxType(fxType)}</span>;
+    }
+    // The wrapper carries the current name so the picker can be sized to it. A select
+    // is otherwise as wide as its widest option - SPRING REVERB - which in a centred
+    // heading shoves everything before it sideways the moment Edit mode goes on.
+    return (
+      <span className="fx-type-field" data-value={formatFxType(fxType)}>
+        <select
+          className="fx-type-select editable"
+          value={fxType}
+          onChange={e => changeFxType(
+            activePart.part_id, trackId, slot, parseInt(e.target.value, 10),
+          )}
+        >
+          {FX_TYPES.map(fx => (
+            <option key={fx.value} value={fx.value}>{fx.label}</option>
+          ))}
+        </select>
+      </span>
+    );
+  };
+
+  /**
    * The track's Track and Cue levels, compact enough to live in the header.
    *
    * They belong to the track rather than to any one parameter page, and a MIXER block
@@ -1508,7 +1588,7 @@ export default function PartsPanel({
     return (
       <div className="params-vertical-layout">
         <div className="params-subsection">
-          <div className="params-column-label">MAIN - {formatFxType(fx.fx1_type)}</div>
+          <div className="params-column-label">MAIN - {renderFxTypeField(activePart, fx.track_id, 'fx1', fx.fx1_type)}</div>
           <div className="params-grid">
             {mainLabels.some(label => label) ? (
               mainLabels.map((label, index) => {
@@ -1549,7 +1629,7 @@ export default function PartsPanel({
     return (
       <div className="params-vertical-layout">
         <div className="params-subsection">
-          <div className="params-column-label">MAIN - {formatFxType(fx.fx2_type)}</div>
+          <div className="params-column-label">MAIN - {renderFxTypeField(activePart, fx.track_id, 'fx2', fx.fx2_type)}</div>
           <div className="params-grid">
             {mainLabels.some(label => label) ? (
               mainLabels.map((label, index) => {
@@ -1623,7 +1703,7 @@ export default function PartsPanel({
               {renderTrackHeader(activePart, fx.track_id, machineType)}
 
               <div className="parts-params-section">
-                <div className="params-column-label">MAIN - {formatFxType(fx.fx1_type)}</div>
+                <div className="params-column-label">MAIN - {renderFxTypeField(activePart, fx.track_id, 'fx1', fx.fx1_type)}</div>
                 <div className="params-grid">
                   {mainLabels.some(label => label) ? (
                     mainLabels.map((label, index) => {
@@ -1701,7 +1781,7 @@ export default function PartsPanel({
               {renderTrackHeader(activePart, fx.track_id, machineType)}
 
               <div className="parts-params-section">
-                <div className="params-column-label">MAIN - {formatFxType(fx.fx2_type)}</div>
+                <div className="params-column-label">MAIN - {renderFxTypeField(activePart, fx.track_id, 'fx2', fx.fx2_type)}</div>
                 <div className="params-grid">
                   {mainLabels.some(label => label) ? (
                     mainLabels.map((label, index) => {
@@ -2344,7 +2424,7 @@ export default function PartsPanel({
               <div className="parts-all-row">
                 {/* FX1 Section */}
                 <div className="parts-all-section">
-                  <div className="params-label">FX1 - {formatFxType(fx.fx1_type)}</div>
+                  <div className="params-label">FX1 - {renderFxTypeField(activePart, trackIdx, 'fx1', fx.fx1_type)}</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>
@@ -2379,7 +2459,7 @@ export default function PartsPanel({
 
                 {/* FX2 Section */}
                 <div className="parts-all-section">
-                  <div className="params-label">FX2 - {formatFxType(fx.fx2_type)}</div>
+                  <div className="params-label">FX2 - {renderFxTypeField(activePart, trackIdx, 'fx2', fx.fx2_type)}</div>
                   <div className="params-vertical-layout">
                     <div className="params-subsection">
                       <div className="params-column-label">MAIN</div>

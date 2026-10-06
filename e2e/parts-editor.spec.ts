@@ -1489,3 +1489,230 @@ test.describe('Parts Editor - Machine type', () => {
     await expect(machinePicker(page)).toHaveCount(0)
   })
 })
+
+/**
+ * Loading a different effect into one of a track's two blocks. The picker replaces the
+ * effect's name wherever a heading shows it, so every FX heading can change it.
+ */
+test.describe('Parts Editor - Effect type', () => {
+  const fxPicker = (page: Page) => page.locator('select.fx-type-select').first()
+
+  /**
+   * The parts Part sent by the save that `act` triggers.
+   *
+   * Counting the calls first matters: these tests change a parameter before changing
+   * the effect, and the parameter's own debounced save lands first. Without the count,
+   * the assertions read that earlier save and pass or fail for the wrong reason.
+   */
+  const savedAfter = async (page: Page, act: () => Promise<void>) => {
+    const before = (await getInvokeCalls(page, 'save_parts')).length
+    await act()
+    await expect
+      .poll(async () => (await getInvokeCalls(page, 'save_parts')).length)
+      .toBeGreaterThan(before)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    return calls[calls.length - 1].args.partsData[0]
+  }
+
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await openPartsTab(page)
+    await selectTrack(page, '0')
+  })
+
+  test('is a name in View mode and a picker in Edit mode', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
+    await expect(page.locator('.params-column-label').first()).toHaveText('MAIN - FILTER')
+    await expect(fxPicker(page)).toHaveCount(0)
+
+    await enterEditMode(page)
+    await expect(fxPicker(page)).toHaveValue('4')
+  })
+
+  test('offers every effect in the order the device lists them', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
+    await expect(fxPicker(page).locator('option')).toHaveText([
+      'OFF', 'FILTER', 'EQ', 'DJ EQ', 'PHASER', 'FLANGER', 'CHORUS', 'SPATIALIZER',
+      'COMB FILTER', 'COMPRESSOR', 'LO-FI', 'DELAY', 'PLATE REVERB', 'SPRING REVERB',
+      'DARK REVERB',
+    ])
+  })
+
+  test('saves the effect against that Part, track and block', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
+    await fxPicker(page).selectOption('20') // PLATE REVERB
+
+    await expect
+      .poll(async () => (await getInvokeCalls(page, 'save_parts')).length)
+      .toBeGreaterThan(0)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    const saved = calls[calls.length - 1].args.partsData[0]
+    expect(saved.fxs[0].fx1_type).toBe(20)
+    // The other block and the other tracks are left where they were
+    expect(saved.fxs[0].fx2_type).toBe(8)
+    expect(saved.fxs[1].fx1_type).toBe(4)
+  })
+
+  test('the parameter names follow the new effect', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
+    // A filter's MAIN page
+    await expect(page.locator('.param-label', { hasText: /^BASE$/ })).toHaveCount(1)
+
+    await fxPicker(page).selectOption('21') // SPRING REVERB
+    await expect(page.locator('.param-label', { hasText: /^TIME$/ })).toHaveCount(1)
+    await expect(page.locator('.param-label', { hasText: /^BASE$/ })).toHaveCount(0)
+    // The spring reverb leaves its first row to TIME alone, so the gap comes with it
+    await expect(page.locator('.params-grid').first().locator('.param-item')).toHaveCount(4)
+  })
+
+  test('the parameter help follows the new effect', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
+    await fxPicker(page).selectOption('20') // PLATE REVERB
+    const tip = await page.locator('.param-item')
+      .filter({ has: page.locator('.param-label', { hasText: /^TIME$/ }) })
+      .first().getAttribute('title')
+    expect(tip).toContain('Decay time')
+  })
+
+  /**
+   * An LFO target names the effect and the parameter it points at, so loading another
+   * effect has to rename those too, or the LFO page keeps naming an effect that is no
+   * longer there.
+   */
+  test('the LFO target names follow the new effect', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^LFO$/ }).click()
+    const pmtr = page.locator('.param-item')
+      .filter({ has: page.locator('.param-label', { hasText: /^PMTR$/ }) })
+      .first().locator('select.param-select')
+    await expect(pmtr.locator('option').nth(18)).toHaveText('FLTR BASE')
+
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
+    await fxPicker(page).selectOption('20') // PLATE REVERB
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^LFO$/ }).click()
+    await expect(pmtr.locator('option').nth(18)).toHaveText('PLTE TIME')
+  })
+
+  /**
+   * A block holds one set of twelve parameters, not one per effect, so the device
+   * resets them when an effect is loaded - otherwise a reverb's decay time would arrive
+   * as a phaser's centre frequency. The values are the ones read off the hardware.
+   */
+  test('resets the twelve parameters to what the device writes', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
+    const base = page.locator('.param-item')
+      .filter({ has: page.locator('.param-label', { hasText: /^BASE$/ }) })
+      .first().locator('input.param-value')
+    await base.fill('77')
+    await base.blur()
+
+    const fx = (await savedAfter(page, () => fxPicker(page).selectOption('21'))).fxs[0]
+    expect(fx.fx1_param1).toBe(23) // TIME, not the 77 left by the filter
+    expect(fx.fx1_param4).toBe(20) // HP
+    expect(fx.fx1_param5).toBe(127) // LP
+    expect(fx.fx1_setup1).toBe(1) // TYPE, which the device shows as 2
+  })
+
+  /**
+   * A knob position the effect leaves blank is one the device never writes, so the
+   * reset has to step over it rather than zeroing it.
+   */
+  test('steps over the positions the new effect leaves blank', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
+    const wdth = page.locator('.param-item')
+      .filter({ has: page.locator('.param-label', { hasText: /^WDTH$/ }) })
+      .first().locator('input.param-value')
+    await wdth.fill('99')
+    await wdth.blur()
+
+    // The spring reverb leaves its second and third MAIN positions blank
+    const saved = await savedAfter(page, () => fxPicker(page).selectOption('21'))
+    expect(saved.fxs[0].fx1_param2).toBe(99)
+  })
+
+  test('leaves a block set to OFF as it was', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
+    const base = page.locator('.param-item')
+      .filter({ has: page.locator('.param-label', { hasText: /^BASE$/ }) })
+      .first().locator('input.param-value')
+    await base.fill('77')
+    await base.blur()
+
+    const fx = (await savedAfter(page, () => fxPicker(page).selectOption('0'))).fxs[0]
+    expect(fx.fx1_type).toBe(0)
+    expect(fx.fx1_param1).toBe(77)
+  })
+
+  test('resets the other block when that one changes', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX2$/ }).click()
+    await fxPicker(page).selectOption('24') // COMPRESSOR
+
+    await expect
+      .poll(async () => (await getInvokeCalls(page, 'save_parts')).length)
+      .toBeGreaterThan(0)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    const fx = calls[calls.length - 1].args.partsData[0].fxs[0]
+    expect(fx.fx2_param1).toBe(64) // ATK
+    expect(fx.fx2_param6).toBe(127) // MIX
+    // FX1 is untouched - the mocks leave its filter parameters at zero
+    expect(fx.fx1_param1).toBe(0)
+  })
+
+  test('both blocks can be changed independently', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX2$/ }).click()
+    await fxPicker(page).selectOption('28') // LO-FI
+
+    await expect
+      .poll(async () => (await getInvokeCalls(page, 'save_parts')).length)
+      .toBeGreaterThan(0)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    const saved = calls[calls.length - 1].args.partsData[0]
+    expect(saved.fxs[0].fx2_type).toBe(28)
+    expect(saved.fxs[0].fx1_type).toBe(4)
+  })
+
+  test('marks the Part modified', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
+    await fxPicker(page).selectOption('24')
+    await expect(page.locator('.parts-part-tab').first()).toHaveClass(/modified/)
+  })
+
+  /**
+   * The heading is centred, so anything that changes the width of the effect name moves
+   * the whole line. A select is as wide as its widest option whatever is selected, so
+   * without sizing it to the name it is showing, every mode toggle shunted FX1 - OFF
+   * sideways by the difference between OFF and SPRING REVERB.
+   */
+  test('the heading does not move when Edit mode goes on', async ({ page }) => {
+    const label = page.locator('.parts-all-section')
+      .filter({ has: page.locator('.params-label', { hasText: /^FX1 - / }) })
+      .locator('.params-label')
+    const geometry = async () => {
+      const field = await label.locator('.fx-type-value, .fx-type-field').boundingBox()
+      return { x: Math.round(field!.x), width: Math.round(field!.width) }
+    }
+
+    const view = await geometry()
+    await enterEditMode(page)
+    expect(await geometry()).toEqual(view)
+  })
+
+  test('the ALL page heading changes it too', async ({ page }) => {
+    await enterEditMode(page)
+    const heading = page.locator('.parts-all-section')
+      .filter({ has: page.locator('.params-label', { hasText: /^FX1 - / }) })
+    await expect(heading.locator('select.fx-type-select')).toHaveValue('4')
+    await heading.locator('select.fx-type-select').selectOption('22')
+    await expect(heading.locator('.param-label', { hasText: /^SHVG$/ })).toHaveCount(1)
+  })
+})

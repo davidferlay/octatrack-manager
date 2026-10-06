@@ -334,6 +334,73 @@
   text-transform: none;
 }
 
+/* The effect name in an FX heading becomes a picker in Edit mode. It sits inline in
+   the heading, so it takes the heading's own type rather than bringing its own, and
+   is marked editable the way every other changeable field on these pages is.
+
+   Both modes carry the same box, and View mode's border is transparent rather than
+   absent: the heading is centred, so a picker even a few pixels wider than the name it
+   replaces would shunt the whole heading sideways on every mode toggle. */
+.fx-type-value,
+.fx-type-field::after,
+.fx-type-select {
+  box-sizing: border-box;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 0 4px;
+  text-align: center;
+}
+
+.fx-type-value {
+  display: inline-block;
+  vertical-align: baseline;
+}
+
+/* The picker is laid over a hidden copy of the name it is showing, and taken out of
+   flow so only that copy sets the width. Sizing it with a grid cell was not enough:
+   the cell still grows to the widest option, because that is the select's max-content
+   width whatever is selected. */
+.fx-type-field {
+  position: relative;
+  display: inline-block;
+  vertical-align: baseline;
+}
+
+.fx-type-field::after {
+  content: attr(data-value);
+  display: inline-block;
+  visibility: hidden;
+  white-space: pre;
+}
+
+.fx-type-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background: #2a2a2a;
+  border-color: #f59e0b;
+  cursor: pointer;
+  outline: none;
+}
+
+.fx-type-select:hover {
+  border-color: #fbbf24;
+}
+
+.fx-type-select option {
+  background: #2a2a2a;
+  color: #ffffff;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
 .parts-params-section {
   margin-bottom: 10px;
   overflow: hidden;

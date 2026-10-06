@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { formatFxType, getFxMainLabels, getFxSetupLabels, fxShortName } from './fxLabels'
+import {
+  formatFxType, getFxMainLabels, getFxSetupLabels, fxShortName, FX_TYPES,
+} from './fxLabels'
 
 /** Every effect the device offers, by the value its slot stores. */
 const EFFECTS = [0, 4, 5, 8, 12, 13, 16, 17, 18, 19, 20, 21, 22, 24, 28]
@@ -114,5 +116,28 @@ describe('effect abbreviations', () => {
   it('falls back to the slot when no effect is loaded or it is unknown', () => {
     expect(fxShortName(undefined, 'FX2')).toBe('FX2')
     expect(fxShortName(99, 'FX2')).toBe('FX2')
+  })
+})
+
+describe('the effect picker list', () => {
+  it('offers every effect the device has, and nothing else', () => {
+    // EFFECTS already counts OFF, which is a slot holding no effect. Compared as a set
+    // because the picker is in the device's own order, not in stored-value order -
+    // fxDefaults.test.ts pins that order.
+    expect(new Set(FX_TYPES.map(fx => fx.value))).toEqual(new Set(EFFECTS))
+    expect(FX_TYPES).toHaveLength(EFFECTS.length)
+  })
+
+  it('names each one the way the headings do', () => {
+    for (const fx of FX_TYPES) {
+      expect(fx.label, String(fx.value)).toBe(formatFxType(fx.value))
+    }
+  })
+
+  it('gives every entry a page to draw, except OFF', () => {
+    for (const fx of FX_TYPES) {
+      const hasPage = getFxMainLabels(fx.value).some(l => l !== '')
+      expect(hasPage, fx.label).toBe(fx.value !== 0)
+    }
   })
 })
