@@ -562,6 +562,24 @@ test.describe('Parts Editor - Sample slot per track and Part', () => {
     await expect(modal.locator('.sample-player-bar')).toBeVisible()
   })
 
+  /**
+   * Opening the picker and settling on the slot the track already plays is not an edit.
+   * Writing anyway marked the Part modified for a look, which then had to be saved or
+   * reloaded to clear.
+   */
+  test('picking the slot it already plays writes nothing', async ({ page }) => {
+    await enterEditMode(page)
+    await page.locator('.parts-sample-field').first().click()
+    const modal = page.locator('.slot-picker-modal')
+    // T1 opens on the slot it plays, so Assign straight away re-picks the same one
+    await modal.getByRole('button', { name: 'Assign' }).click()
+    await expect(modal).toHaveCount(0)
+
+    await page.waitForTimeout(900) // past the save debounce
+    expect(await getInvokeCalls(page, 'save_parts')).toHaveLength(0)
+    await expect(page.locator('.parts-part-tab').first()).not.toHaveClass(/modified/)
+  })
+
   test('picking another slot saves it against that Part and track', async ({ page }) => {
     await enterEditMode(page)
     await page.locator('.parts-sample-field').first().click()

@@ -16,6 +16,12 @@ interface Props {
   slots: SlotChoice[];
   /** Currently assigned slot, 0-based as the machine stores it. */
   currentSlotId: number;
+  /**
+   * Empty the slot the track is on, for when the pool has no free slot to move it to.
+   * The track keeps pointing at the slot, which now holds nothing - the state the
+   * device itself leaves behind.
+   */
+  onClearCurrentSlot: () => void;
   /** Absolute project directory, used to resolve a slot's relative path for playback. */
   projectPath: string;
   trackLabel: string;
@@ -46,7 +52,8 @@ function basename(path: string): string {
  * is unusable. Resizable like the Tools modals, since slot lists get long.
  */
 export function SlotPickerModal({
-  pool, slots, currentSlotId, projectPath, trackLabel, partLabel, onPick, onClose,
+  pool, slots, currentSlotId, projectPath, trackLabel, partLabel, onPick, onClearCurrentSlot,
+  onClose,
 }: Props) {
   const [searchText, setSearchText] = useState('');
   const [cursor, setCursor] = useState(0);
@@ -135,6 +142,26 @@ export function SlotPickerModal({
    */
   const firstEmptySlot = useMemo(() => slots.find(s => !s.path)?.slot_id ?? null, [slots]);
 
+  /**
+   * What Un-assign will do, which depends on whether the pool has room.
+   *
+   * With an empty slot to point at, the track moves there and the pool is untouched.
+   * With every slot holding a sample there is nowhere to move to, so the only way to
+   * leave the track playing nothing is to empty the slot it is on - which is what the
+   * device does, and it costs any other track on that slot its sample too.
+   */
+  const unassign = firstEmptySlot !== null
+    ? {
+      title: `Points the track at ${prefix}${String(firstEmptySlot).padStart(3, '0')}, an empty slot`,
+      run: () => onPick(firstEmptySlot - 1),
+    }
+    : {
+      title: `Every slot in this pool holds a sample, so this empties ${prefix}`
+        + `${String(currentSlotId + 1).padStart(3, '0')} instead. Any other track playing`
+        + ' that slot loses its sample too.',
+      run: onClearCurrentSlot,
+    };
+
   const resolve = (path: string | null) => {
     if (!path) return null;
     const isAbsolute = path.startsWith('/') || /^[A-Za-z]:/.test(path);
@@ -178,7 +205,9 @@ export function SlotPickerModal({
 
   const commit = (row: Row | undefined) => {
     if (!row) return;
-    onPick(row.slotId - 1);
+    // Picking the slot the track already plays is not a change, so it does not mark
+    // the Part modified or write anything - the picker just closes
+    if (row.slotId - 1 !== currentSlotId) onPick(row.slotId - 1);
     onClose();
   };
 
@@ -318,14 +347,10 @@ export function SlotPickerModal({
                     <div className="context-menu-separator" />
                     <button
                       className="context-menu-item"
-                      disabled={firstEmptySlot === null}
-                      title={firstEmptySlot === null
-                        ? 'Every slot in this pool holds a sample'
-                        : `Points the track at ${prefix}${String(firstEmptySlot).padStart(3, '0')}, an empty slot`}
+                      title={unassign.title}
                       onClick={() => {
-                        if (firstEmptySlot === null) return;
                         setRowMenu(null);
-                        onPick(firstEmptySlot - 1);
+                        unassign.run();
                         onClose();
                       }}
                     >

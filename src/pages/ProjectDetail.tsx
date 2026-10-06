@@ -1555,6 +1555,7 @@ export function ProjectDetail() {
                           onMachineTypeChanged={(trackId, machineType) =>
                             setAudioTrackMachineTypes(prev => ({ ...prev, [trackId]: machineType }))
                           }
+                          onPoolChanged={refreshProjectData}
                           sampleSlots={metadata ? {
                             static_slots: metadata.sample_slots.static_slots,
                             flex_slots: metadata.sample_slots.flex_slots,

@@ -22,6 +22,7 @@ const slots = pool({ 1: '../AUDIO/kick.wav', 2: '../AUDIO/snare.wav', 5: '../AUD
 async function renderPicker(props: Partial<Parameters<typeof SlotPickerModal>[0]> = {}) {
   const onPick = vi.fn()
   const onClose = vi.fn()
+  const onClearCurrentSlot = vi.fn()
   render(
     <SlotPickerModal
       pool="Flex"
@@ -31,12 +32,13 @@ async function renderPicker(props: Partial<Parameters<typeof SlotPickerModal>[0]
       trackLabel="T1"
       partLabel="Part 1"
       onPick={onPick}
+      onClearCurrentSlot={onClearCurrentSlot}
       onClose={onClose}
       {...props}
     />,
   )
   await act(async () => {})
-  return { onPick, onClose }
+  return { onClearCurrentSlot, onPick, onClose }
 }
 
 /**
@@ -218,16 +220,54 @@ describe('Un-assign', () => {
     expect(within(await menuOn('(empty)')).queryByText('Un-assign')).not.toBeInTheDocument()
   })
 
-  it('is greyed out, and writes nothing, when every slot in the pool is taken', async () => {
-    const full = Object.fromEntries(
+  /**
+   * With no empty slot to move to, the only way to leave the track playing nothing is
+   * to empty the slot it is on - which is what the device does. The track is not moved,
+   * so the bank is untouched and only the pool is written.
+   */
+  describe('when every slot in the pool is taken', () => {
+    const full = () => pool(Object.fromEntries(
       Array.from({ length: 128 }, (_, i) => [i + 1, `../AUDIO/s${i + 1}.wav`]),
-    )
-    const { onPick } = await renderPicker({ slots: pool(full), currentSlotId: 0 })
-    const menu = await menuOn('s1.wav')
-    const entry = within(menu).getByText('Un-assign').closest('button')!
-    expect(entry).toBeDisabled()
-    expect(entry).toHaveAttribute('title', expect.stringContaining('holds a sample'))
-    await userEvent.click(entry)
-    expect(onPick).not.toHaveBeenCalled()
+    ))
+
+    it('is still offered', async () => {
+      await renderPicker({ slots: full(), currentSlotId: 0 })
+      const entry = within(await menuOn('s1.wav')).getByText('Un-assign').closest('button')!
+      expect(entry).toBeEnabled()
+    })
+
+    it('empties the slot the track is on, instead of moving the track', async () => {
+      const { onPick, onClearCurrentSlot, onClose } = await renderPicker({
+        slots: full(), currentSlotId: 0,
+      })
+      const menu = await menuOn('s1.wav')
+      await userEvent.click(within(menu).getByText('Un-assign'))
+      expect(onClearCurrentSlot).toHaveBeenCalled()
+      expect(onPick).not.toHaveBeenCalled()
+      expect(onClose).toHaveBeenCalled()
+    })
+
+    it('says which slot it will empty, and what that costs', async () => {
+      await renderPicker({ slots: full(), currentSlotId: 0 })
+      const entry = within(await menuOn('s1.wav')).getByText('Un-assign').closest('button')!
+      expect(entry).toHaveAttribute('title', expect.stringContaining('empties F001'))
+      expect(entry).toHaveAttribute('title', expect.stringContaining('loses its sample too'))
+    })
+
+    it("empties the track's own slot, not the first one", async () => {
+      const { onClearCurrentSlot } = await renderPicker({ slots: full(), currentSlotId: 41 })
+      const menu = await menuOn('s42.wav')
+      const entry = within(menu).getByText('Un-assign').closest('button')!
+      expect(entry).toHaveAttribute('title', expect.stringContaining('empties F042'))
+      await userEvent.click(entry)
+      expect(onClearCurrentSlot).toHaveBeenCalled()
+    })
+  })
+
+  it('moves the track rather than emptying anything while the pool has room', async () => {
+    const { onPick, onClearCurrentSlot } = await renderPicker({ currentSlotId: 0 })
+    await userEvent.click(within(await menuOn('kick.wav')).getByText('Un-assign'))
+    expect(onPick).toHaveBeenCalledWith(2)
+    expect(onClearCurrentSlot).not.toHaveBeenCalled()
   })
 })

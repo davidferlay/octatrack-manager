@@ -251,30 +251,33 @@ sits, then the value as text. The app follows that.
 | PE160 | Slot | Escape closes without assigning | Open the picker, press Escape | The picker closes and the assignment is unchanged |
 | PE161 | Slot | Row context menu | Right-click a slot row in the picker | The menu reads Play, then Un-assign on the assigned row only, then Open in file explorer and Copy path to clipboard |
 | PE162 | Slot | Un-assign | Choose Un-assign on the assigned row | The track points at an empty slot |
-| PE163 | Slot | Escape closes the menu, not the picker | With the context menu open, press Escape | The menu closes and the picker stays open |
-| PE164 | Slot | Saved per Part and track | Assign a slot, save, open on the device | Only that Part and that track changed |
-| PE165 | Slot | Usage badges follow | Assign a slot and watch the Flex/Static tab counts | The counts update and nothing else changes |
+| PE163 | Slot | Un-assign with a full pool | Fill every slot of a pool, then choose Un-assign on the assigned row | It is still offered. It empties the slot the track is on and leaves the track there, which is what the device writes - the tooltip says which slot and warns that another track on it loses its sample too |
+| PE164 | Slot | Un-assign does not move the track when the pool is full | After the above, look at the track header | It still names the same slot, which now holds nothing; the Part is not marked modified because only the pool changed |
+| PE165 | Slot | Re-picking the same slot writes nothing | Open the picker and press Assign without moving the selection | Nothing is saved and the Part is not marked modified |
+| PE166 | Slot | Escape closes the menu, not the picker | With the context menu open, press Escape | The menu closes and the picker stays open |
+| PE167 | Slot | Saved per Part and track | Assign a slot, save, open on the device | Only that Part and that track changed |
+| PE168 | Slot | Usage badges follow | Assign a slot and watch the Flex/Static tab counts | The counts update and nothing else changes |
 
 ## Track and Cue levels
 
 | # | Operation | Test | Steps | Pass Criteria |
 |---|-----------|------|-------|---------------|
-| PE166 | Levels | Shown in the header | Look at a track header | TRK and CUE are shown there, on every page including All |
-| PE167 | Levels | Read-only in View mode | In View mode, try to change TRK | Nothing changes |
-| PE168 | Levels | Saved per Part and track | Change TRK, save, open on the device | That Part and track's level changed, and nothing else |
+| PE169 | Levels | Shown in the header | Look at a track header | TRK and CUE are shown there, on every page including All |
+| PE170 | Levels | Read-only in View mode | In View mode, try to change TRK | Nothing changes |
+| PE171 | Levels | Saved per Part and track | Change TRK, save, open on the device | That Part and track's level changed, and nothing else |
 
 ## Editing, saving and reloading
 
 | # | Operation | Test | Steps | Pass Criteria |
 |---|-----------|------|-------|---------------|
-| PE169 | Save | Buttons disabled when clean | Enter Edit mode without changing anything | Reload, Save and Save All are all disabled |
-| PE170 | Save | Editing marks the Part | Change any parameter | That Part's tab is marked as modified |
-| PE171 | Save | Save commits the active Part | Change a parameter, press Save | The modified marking clears for that Part only |
-| PE172 | Save | Save All commits every Part | Modify two Parts, press Save All | Every modified marking clears |
-| PE173 | Save | Reload restores the Part | Modify a Part, press Reload | Its values return to the last saved ones and the marking clears |
-| PE174 | Save | Reload affects one Part | Modify two Parts, Reload one | Only that Part reverts; the other keeps its changes |
-| PE175 | Save | Edited on the device | Edit a Part on the device without saving it there, then open the bank in the app | The app shows that Part as modified |
-| PE176 | Save | Reload blocked without a saved state | On a Part the device has never saved, press Reload | Reload is refused rather than clearing the Part |
-| PE177 | Save | Changes survive a reopen | Change a parameter, leave the Parts tab, come back | The change is still there and the Part is still marked modified |
-| PE178 | Save | Committed values reach the device | Save, eject, open the project on the device | The device shows the edited values in that Part |
-| PE179 | Save | Other Parts untouched | Change one Part, save, compare the other three on the device | They are unchanged |
+| PE172 | Save | Buttons disabled when clean | Enter Edit mode without changing anything | Reload, Save and Save All are all disabled |
+| PE173 | Save | Editing marks the Part | Change any parameter | That Part's tab is marked as modified |
+| PE174 | Save | Save commits the active Part | Change a parameter, press Save | The modified marking clears for that Part only |
+| PE175 | Save | Save All commits every Part | Modify two Parts, press Save All | Every modified marking clears |
+| PE176 | Save | Reload restores the Part | Modify a Part, press Reload | Its values return to the last saved ones and the marking clears |
+| PE177 | Save | Reload affects one Part | Modify two Parts, Reload one | Only that Part reverts; the other keeps its changes |
+| PE178 | Save | Edited on the device | Edit a Part on the device without saving it there, then open the bank in the app | The app shows that Part as modified |
+| PE179 | Save | Reload blocked without a saved state | On a Part the device has never saved, press Reload | Reload is refused rather than clearing the Part |
+| PE180 | Save | Changes survive a reopen | Change a parameter, leave the Parts tab, come back | The change is still there and the Part is still marked modified |
+| PE181 | Save | Committed values reach the device | Save, eject, open the project on the device | The device shows the edited values in that Part |
+| PE182 | Save | Other Parts untouched | Change one Part, save, compare the other three on the device | They are unchanged |

@@ -49,6 +49,13 @@ interface PartsPanelProps {
    * or Part change.
    */
   onMachineTypeChanged?: (trackId: number, machineType: string) => void;
+  /**
+   * A sample left the pool, so the slot lists and the usage counts both need rereading.
+   *
+   * Un-assigning from a pool with no free slot is the one thing in this panel that
+   * edits the pool rather than the bank.
+   */
+  onPoolChanged?: () => void;
   /** The project's Sample Slots, so a Static/Flex track can be pointed at another one. */
   sampleSlots?: { static_slots: SlotChoice[]; flex_slots: SlotChoice[] };
 }
@@ -80,6 +87,7 @@ export default function PartsPanel({
   onWriteStatusChange,
   onSlotAssignmentSaved,
   onMachineTypeChanged,
+  onPoolChanged,
   sampleSlots,
 }: PartsPanelProps) {
   const [partsData, setPartsData] = useState<PartData[]>([]);
@@ -2910,6 +2918,24 @@ export default function PartsPanel({
             const field = slotPicker.pool === 'Static' ? 'static_slot_id' : 'flex_slot_id';
             updatePartParamLocal(slotPicker.partId, 'machines', slotPicker.trackId, field, slotIdZeroBased);
             savePart(slotPicker.partId, { slotAssignmentChanged: true });
+          }}
+          onClearCurrentSlot={() => {
+            // The track stays on its slot and the slot is emptied, which is the state
+            // the device leaves behind. The bank does not change, so the Part is not
+            // marked modified - only the pool is written.
+            invoke('clear_sample_slots', {
+              path: projectPath,
+              slotType: slotPicker.pool.toUpperCase(),
+              slotIndices: [slotPicker.current + 1],
+            }).then(() => {
+              onWriteStatusChange?.(writeStatus.success('Sample slot emptied'));
+              setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
+              onPoolChanged?.();
+            }).catch(err => {
+              console.error('Failed to clear the sample slot:', err);
+              onWriteStatusChange?.(writeStatus.error('Could not empty the slot'));
+              setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
+            });
           }}
           onClose={() => setSlotPicker(null)}
         />
