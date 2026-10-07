@@ -1618,8 +1618,13 @@ test.describe('Parts Editor - Effect type', () => {
     await fxPicker(page).selectOption('21') // SPRING REVERB
     await expect(page.locator('.param-label', { hasText: /^TIME$/ })).toHaveCount(1)
     await expect(page.locator('.param-label', { hasText: /^BASE$/ })).toHaveCount(0)
-    // The spring reverb leaves its first row to TIME alone, so the gap comes with it
-    await expect(page.locator('.params-grid').first().locator('.param-item')).toHaveCount(4)
+    // The spring reverb leaves its first row to TIME alone. The blank positions keep
+    // their cells, so HP, LP and MIX stay in the columns the device puts them in.
+    const cells = page.locator('.params-grid').first().locator('.param-item')
+    await expect(cells).toHaveCount(6)
+    await expect(cells.nth(1)).toHaveClass(/param-item-empty/)
+    await expect(cells.nth(2)).toHaveClass(/param-item-empty/)
+    await expect(cells.nth(3)).toContainText('HP')
   })
 
   test('the parameter help follows the new effect', async ({ page }) => {
@@ -2033,9 +2038,10 @@ test.describe('Scenes', () => {
   /** The same formatting the Parts pages use, so a value reads as the device shows it. */
   test('reads a value the way the device does, not as a raw byte', async ({ page }) => {
     // AMP VOL is centred, so the stored 100 reads as +36 from the middle
-    const value = page.locator('.scene-track').first().locator('.scene-lock-value').first()
-    await expect(value).toHaveText('36')
-    await expect(value).toHaveAttribute('title', 'Stored as 100')
+    const value = page.locator('.scene-track').first().locator('input.scene-value').first()
+    await expect(value).toHaveValue('36')
+    // The byte behind it is not shown anywhere - what the device reads is the value
+    await expect(value).not.toHaveAttribute('title', /Stored as/)
   })
 
   test('shows only the tracks a scene touches', async ({ page }) => {
@@ -2050,7 +2056,7 @@ test.describe('Scenes', () => {
     // Position one of a Flex machine is PTCH, and it reads in semitones
     await expect(rows.nth(0)).toContainText('SRC')
     await expect(rows.nth(0)).toContainText('PTCH')
-    await expect(rows.nth(0).locator('.scene-lock-value')).toHaveText('1.2')
+    await expect(rows.nth(0).locator('input.scene-value')).toHaveValue('1.2')
   })
 
   test('names an FX position after the effect that is loaded', async ({ page }) => {
@@ -2087,6 +2093,122 @@ test.describe('Scenes', () => {
       .toBeGreaterThan(before)
     const calls = await getInvokeCalls(page, 'load_scenes')
     expect(calls[calls.length - 1].args.partId).toBe(1)
+  })
+
+  test('is read-only until Edit mode is on', async ({ page }) => {
+    await expect(page.locator('.scene-action')).toHaveCount(0)
+    await expect(page.locator('input.scene-value').first()).not.toHaveClass(/editable/)
+    await expect(page.locator('.scene-clear-one')).toHaveCount(0)
+  })
+
+  test.describe('editing', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+    })
+
+    const saved = async (page: Page, act: () => Promise<void>) => {
+      const before = (await getInvokeCalls(page, 'save_scene')).length
+      await act()
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'save_scene')).length)
+        .toBeGreaterThan(before)
+      const calls = await getInvokeCalls(page, 'save_scene')
+      return calls[calls.length - 1].args
+    }
+
+    test('changes a value a scene holds', async ({ page }) => {
+      const value = page.locator('input.scene-value').first()
+      const args = await saved(page, async () => {
+        await value.fill('40')
+      })
+      expect(args.sceneId).toBe(0)
+      // AMP VOL is the fourth position and centred, so +40 is stored as 104
+      expect(args.tracks[0].amp[3]).toBe(104)
+    })
+
+    /**
+     * Taking a parameter out is writing nothing to it. The device records that as a
+     * value of its own, so there is nothing special about it.
+     */
+    test('takes a parameter out of a scene', async ({ page }) => {
+      const args = await saved(page, async () => {
+        await page.locator('.scene-clear-one').first().click()
+      })
+      expect(args.tracks[0].amp[3]).toBeNull()
+      await expect(page.locator('.scene-card').first().locator('.scene-count')).toHaveText('1')
+    })
+
+    test('puts a parameter into a scene', async ({ page }) => {
+      await page.locator('.scene-show-all input').check()
+      const row = page.locator('.scene-track').first().locator('tr')
+        .filter({ hasText: 'PTCH' }).first()
+      await expect(row).toHaveClass(/unheld/)
+
+      const args = await saved(page, async () => {
+        await row.locator('.scene-add').click()
+      })
+      // PTCH starts at its own default, which is the centre of its range
+      expect(args.tracks[0].machine[0]).toBe(64)
+      await expect(row).not.toHaveClass(/unheld/)
+    })
+
+    test('shows everything a scene could hold, on request', async ({ page }) => {
+      const rows = page.locator('.scene-track').first().locator('.scene-locks tr')
+      await expect(rows).toHaveCount(2)
+      await page.locator('.scene-show-all input').check()
+      // Every position of every page the track's machine and effects actually use
+      await expect(rows).not.toHaveCount(2)
+      await expect(rows.filter({ hasText: 'XVOL' })).toHaveCount(1)
+    })
+
+    test('copies one scene onto another', async ({ page }) => {
+      await page.locator('.scene-action', { hasText: 'Copy' }).click()
+      await page.locator('.scene-card').nth(3).click()
+      await expect(page.locator('.scene-detail-sub')).toHaveText('Nothing held')
+
+      const args = await saved(page, async () => {
+        await page.locator('.scene-action', { hasText: 'Paste' }).click()
+      })
+      expect(args.sceneId).toBe(3)
+      expect(args.tracks[0].amp[3]).toBe(100)
+      await expect(page.locator('.scene-card').nth(3).locator('.scene-count')).toHaveText('2')
+    })
+
+    test('will not paste before something has been copied', async ({ page }) => {
+      await expect(page.locator('.scene-action', { hasText: 'Paste' })).toBeDisabled()
+      await page.locator('.scene-action', { hasText: 'Copy' }).click()
+      await expect(page.locator('.scene-action', { hasText: 'Paste' })).toBeEnabled()
+    })
+
+    test('empties a scene', async ({ page }) => {
+      const args = await saved(page, async () => {
+        await page.locator('.scene-action', { hasText: 'Clear' }).click()
+      })
+      expect(args.tracks.every((t: { amp: (number | null)[]; xlv: number | null }) =>
+        t.amp.every(v => v === null) && t.xlv === null)).toBe(true)
+      await expect(page.locator('.scene-detail-sub')).toHaveText('Nothing held')
+    })
+
+    test('cannot empty a scene that is already empty', async ({ page }) => {
+      await page.locator('.scene-card').nth(3).click()
+      await expect(page.locator('.scene-action', { hasText: 'Clear' })).toBeDisabled()
+    })
+
+    test('steps a value with the wheel', async ({ page }) => {
+      const value = page.locator('input.scene-value').first()
+      await expect(value).toHaveValue('36')
+      await value.hover()
+      await page.mouse.wheel(0, -120)
+      await expect(value).toHaveValue('37')
+    })
+
+    test('writes against the Part being shown', async ({ page }) => {
+      await page.locator('.parts-part-tab', { hasText: 'GROOVE' }).click()
+      const args = await saved(page, async () => {
+        await page.locator('input.scene-value').first().fill('20')
+      })
+      expect(args.partId).toBe(1)
+    })
   })
 
   test('selecting a scene does not reload anything', async ({ page }) => {

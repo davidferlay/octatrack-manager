@@ -1606,7 +1606,9 @@ export function ProjectDetail() {
                       bankName={formatBankName(bank.name, selectedBankIndex)}
                       partId={activePart}
                       partNames={bank.parts.map(part => part.name)}
+                      isEditMode={isEditMode}
                       onPartChange={setSharedPartsActivePartIndex}
+                      onWriteStatusChange={handleWriteStatusChange}
                     />
                   );
                 })()}

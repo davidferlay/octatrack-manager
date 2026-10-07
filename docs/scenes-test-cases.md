@@ -45,3 +45,27 @@ bank. A bank whose scenes were built on the device gives the most to look at.
 | SC19 | Part | The Part follows the Parts tab | Pick a Part on the Parts tab, then open Scenes | The same Part is selected, and the other way round |
 | SC20 | Part | Switching bank | Change bank | The scenes are those of the new bank's Part |
 | SC21 | Part | Reading the working copy | Edit a scene on the device without saving the Part, then open the project | The edited values are shown - the tab reads the same working copy the Parts editor does, not the device's Reload Part backup |
+
+## Changing what a scene holds
+
+Editing is gated on Edit mode, as everywhere else. Writes go to the working copy of the
+bank, the same one the Parts editor uses; the device's own Reload Part backup is never
+touched.
+
+| # | Operation | Test | Steps | Pass Criteria |
+|---|-----------|------|-------|---------------|
+| SC22 | Edit | Read-only in View mode | Look at a scene in View mode | The values cannot be typed into, and there are no Copy, Paste or Clear buttons |
+| SC23 | Edit | Change a value | In Edit mode, type a new value into a parameter the scene holds | It is saved against that scene, that Part and that track, and the device plays the new value when the crossfader reaches that scene |
+| SC24 | Edit | Values are typed as they read | Change a centred parameter such as AMP VOL to -20 | It is stored as the device would store it, not as the number typed |
+| SC25 | Edit | Step with the wheel | Hover a value and turn the wheel | It steps one setting at a time, the same as on the Parts pages |
+| SC26 | Edit | Take a parameter out | Click the x beside a parameter the scene holds | It leaves the scene, the count drops by one, and the device goes back to using the Part's own value there |
+| SC27 | Edit | Put a parameter in | Turn on "Show everything", then click the dash beside a parameter the scene does not hold | It joins the scene at its default, and the count rises by one |
+| SC28 | Edit | Show everything | Turn "Show everything" on and off | On, every parameter the track's machine and effects actually use is listed; off, only the ones the scene holds |
+| SC29 | Edit | Positions the machine does not use | With "Show everything" on, look at a Thru or Neighbor track | Only the parameters that machine actually has are offered - a scene can store a byte elsewhere but the device has nothing to apply it to |
+| SC30 | Edit | Copy and paste a scene | Copy one scene, select another, press Paste | The second holds exactly what the first did, and the first is unchanged |
+| SC31 | Edit | Paste needs a copy first | Before copying anything, look at Paste | It is disabled until a scene has been copied |
+| SC32 | Edit | Paste across Parts | Copy a scene, switch Part, then paste | The scene is written to the Part now being shown |
+| SC33 | Edit | Empty a scene | Press Clear on a scene that holds something | It holds nothing afterwards, and Clear is then disabled |
+| SC34 | Edit | Nothing else is disturbed | Change one scene, then check the other fifteen and the other Parts on the device | Only the scene that was edited changed |
+| SC35 | Edit | The device agrees | Make an edit, save, then open the project on the device | The scene holds what the app showed, and the crossfader morphs to it |
+| SC36 | Edit | Reload Part still works | Edit a scene in the app, then use Reload Part on the device | The device restores its own backup - the app never wrote to it |

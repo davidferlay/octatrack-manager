@@ -186,12 +186,12 @@ describe('the tooltip text', () => {
     expect(lines.slice(1).map(l => l.split(':')[0])).toEqual(['OFF', 'AUTO', 'ON', 'PIPO'])
   })
 
-  it('keeps the raw value note when there is one', () => {
-    expect(helpTitle('VOL', fieldHelp('vol'), 'Stored as 64')).toContain('Stored as 64')
+  /** The tooltip explains the parameter. The byte behind it is not something to read. */
+  it('says nothing about the raw value', () => {
+    expect(helpTitle('VOL', fieldHelp('vol'))).not.toContain('Stored as')
   })
 
-  it('falls back to the raw value note alone when nothing was written', () => {
-    expect(helpTitle('NOPE', undefined, 'Stored as 64')).toBe('Stored as 64')
+  it('says nothing at all when nothing was written', () => {
     expect(helpTitle('NOPE', undefined)).toBeUndefined()
   })
 })

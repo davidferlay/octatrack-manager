@@ -52,6 +52,7 @@ use project_reader::{
     PartsDataResponse,
     PoolUsageEntry,
     ProjectMetadata,
+    SceneTrackLocks,
     ScenesResponse,
     SetProjectInfo,
     SlotAssignment,
@@ -180,6 +181,21 @@ async fn load_scenes(path: String, bank_id: String, part_id: u8) -> Result<Scene
     tauri::async_runtime::spawn_blocking(move || read_scenes(&path, &bank_id, part_id))
         .await
         .unwrap()
+}
+
+#[tauri::command]
+async fn save_scene(
+    path: String,
+    bank_id: String,
+    part_id: u8,
+    scene_id: u8,
+    tracks: Vec<SceneTrackLocks>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::save_scene(&path, &bank_id, part_id, scene_id, tracks)
+    })
+    .await
+    .unwrap()
 }
 
 #[tauri::command]
@@ -1493,6 +1509,7 @@ pub fn run() {
             get_existing_banks,
             load_parts_data,
             load_scenes,
+            save_scene,
             save_parts,
             save_memory_settings,
             commit_part,

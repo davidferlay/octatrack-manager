@@ -1290,6 +1290,12 @@
    knob sits, then the value as text. Reserving the knob's height for the indicator is
    what keeps a page that mixes knobs and lists on one baseline - without it a list
    sits a dozen pixels higher than the knob beside it and the value boxes stagger. */
+/* A knob position the device leaves blank still takes its cell, so the positions after
+   it stay in the columns the hardware puts them in. */
+.param-item-empty {
+  visibility: hidden;
+}
+
 .parts-track .param-control,
 .parts-individual-section .param-control {
   display: flex;

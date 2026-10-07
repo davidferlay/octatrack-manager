@@ -448,6 +448,63 @@ export function machineParamFields(machineType?: string): (string | null)[] {
   }
 }
 
+/**
+ * What a track's six SRC SETUP parameters are called, by position.
+ *
+ * A Pickup machine uses only the last two of the six - the device leaves the whole top
+ * row and the first of the bottom row blank (manual A.5) - and Thru and Neighbor
+ * machines have no setup page at all.
+ */
+export function machineSetupLabels(machineType?: string): (string | null)[] {
+  switch (machineType) {
+    case 'Static':
+    case 'Flex':
+      return ['LOOP', 'SLIC', 'LEN', 'RATE', 'TSTR', 'TSNS'];
+    case 'Pickup':
+      return [null, null, null, null, 'TSTR', 'TSNS'];
+    default:
+      return [null, null, null, null, null, null];
+  }
+}
+
+/** The spec key behind each SRC SETUP position, matching `machineSetupLabels`. */
+export function machineSetupFields(machineType?: string): (string | null)[] {
+  const key = (name: string | null) => (name === null ? null : `machine_setup.${name}`);
+  switch (machineType) {
+    case 'Static':
+    case 'Flex':
+      return ['xloop', 'slic', 'len', 'rate', 'tstr', 'tsns'].map(key);
+    case 'Pickup':
+      return [null, null, null, null, 'tstr', 'tsns'].map(key);
+    default:
+      return [null, null, null, null, null, null];
+  }
+}
+
+/**
+ * XVOL, the AMP page's sixth position.
+ *
+ * The device only shows it while a scene key is held, so a scene is the only place it
+ * can be set and the Parts editor has no knob for it - which is why it is here rather
+ * than among the AMP fields. The device names the ends of its range and leaves the rest
+ * as plain numbers.
+ */
+export const SCENE_XVOL_SPEC: FieldSpec = {
+  min: 0,
+  max: 127,
+  default: 0,
+  widget: 'unipolar',
+  options: [{ value: 0, label: 'MIN' }, { value: 127, label: 'MAX' }],
+};
+
+/** The level a scene sets for a track under the crossfader. A plain level, unnamed. */
+export const SCENE_XLV_SPEC: FieldSpec = {
+  min: 0,
+  max: 127,
+  default: 0,
+  widget: 'unipolar',
+};
+
 /** The AMP page by position. The sixth is the one only a scene can set. */
 export const AMP_PARAM_FIELDS = ['atk', 'hold', 'rel', 'vol', 'bal', 'xvol'] as const;
 

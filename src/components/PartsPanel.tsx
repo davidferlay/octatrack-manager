@@ -8,6 +8,7 @@ import { RotaryKnob } from './RotaryKnob';
 import {
   fieldSpec, clampToSpec, formatSpecValue, parseSpecValue, stepInSpec,
   machineTypesForTrack, MachineType,
+  machineParamLabels, machineParamFields, machineSetupLabels, machineSetupFields,
 } from '../utils/partFieldSpecs';
 import { PositionBar, WaveGlyph, WheelStepper } from './ParamWidgets';
 import {
@@ -727,11 +728,7 @@ export default function PartsPanel({
         className="param-item"
         key={key}
         step={stepValue}
-        title={helpTitle(
-          label,
-          help,
-          spec.center !== undefined ? `Stored as ${displayValue}` : undefined,
-        )}
+        title={helpTitle(label, help)}
       >
         <span className="param-label">{label}</span>
         <div className="param-control">{indicator}</div>
@@ -851,65 +848,54 @@ export default function PartsPanel({
   };
 
   // Helper function to render SRC section content (MAIN + SETUP)
-  const renderSrcSectionContent = (activePart: PartData, machine: typeof activePart.machines[0]) => (
-    <div className="params-vertical-layout">
-      <div className="params-subsection">
-        <div className="params-column-label">MAIN</div>
-        <div className="params-grid">
-          {machine.machine_type === 'Thru' ? (
-            <>
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.in_ab', machine.machine_params.in_ab, 'INAB', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.vol_ab', machine.machine_params.vol_ab, 'VOL', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.in_cd', machine.machine_params.in_cd, 'INCD', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.vol_cd', machine.machine_params.vol_cd, 'VOL', undefined, undefined, machine.machine_type)}
-            </>
-          ) : machine.machine_type === 'Neighbor' ? (
-            <div className="params-empty-message">-</div>
-          ) : machine.machine_type === 'Pickup' ? (
-            <>
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.ptch', machine.machine_params.ptch, 'PITCH', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.dir', machine.machine_params.dir, 'DIR', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.len', machine.machine_params.len, 'LEN', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.gain', machine.machine_params.gain, 'GAIN', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.op', machine.machine_params.op, 'OP', undefined, undefined, machine.machine_type)}
-            </>
-          ) : (
-            <>
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.ptch', machine.machine_params.ptch, 'PTCH', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.strt', machine.machine_params.strt, 'STRT', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.len', machine.machine_params.len, 'LEN', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rate', machine.machine_params.rate, 'RATE', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rtrg', machine.machine_params.rtrg, 'RTRG', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_params.rtim', machine.machine_params.rtim, 'RTIM', undefined, undefined, machine.machine_type)}
-            </>
-          )}
-        </div>
-      </div>
-      <div className="params-subsection">
-        <div className="params-column-label">SETUP</div>
-        <div className="params-grid">
-          {machine.machine_type === 'Thru' || machine.machine_type === 'Neighbor' ? (
-            <div className="params-empty-message">-</div>
-          ) : machine.machine_type === 'Pickup' ? (
-            <>
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS', undefined, undefined, machine.machine_type)}
-            </>
-          ) : (
-            <>
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.xloop', machine.machine_setup.xloop, 'LOOP', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.slic', machine.machine_setup.slic, 'SLIC', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.len', machine.machine_setup.len, 'LEN', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.rate', machine.machine_setup.rate, 'RATE', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tstr', machine.machine_setup.tstr, 'TSTR', undefined, undefined, machine.machine_type)}
-              {renderParamWithKnob(activePart.part_id, 'machines', machine.track_id, 'machine_setup.tsns', machine.machine_setup.tsns, 'TSNS', undefined, undefined, machine.machine_type)}
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  /**
+   * The SRC pages, drawn by position rather than in sequence.
+   *
+   * The device leaves knob positions blank on some machines - a Thru machine's third
+   * and sixth, a Pickup machine's fourth, and everything but the last two of a Pickup's
+   * setup page - and drawing the used ones one after another puts them in the wrong
+   * columns. The values were always right; the grid was not.
+   */
+  const renderSrcSectionContent = (activePart: PartData, machine: typeof activePart.machines[0]) => {
+    const type = machine.machine_type;
+    const page = (labels: (string | null)[], fields: (string | null)[]) =>
+      labels.map((label, i) => {
+        const field = fields[i];
+        if (!label || !field) {
+          // The device leaves the position empty, so the grid does too - without a
+          // cell here everything after it slides a column to the left
+          return <div className="param-item param-item-empty" key={`gap-${i}`} />;
+        }
+        const [group, name] = field.split('.') as ['machine_params' | 'machine_setup', string];
+        const values = machine[group] as unknown as Record<string, number | null>;
+        return renderParamWithKnob(
+          activePart.part_id, 'machines', machine.track_id, field,
+          values[name] ?? null, label, undefined, i, type,
+        );
+      });
 
+    const main = page(machineParamLabels(type, true), machineParamFields(type));
+    const setup = page(machineSetupLabels(type), machineSetupFields(type));
+    const anyOf = (cells: React.ReactNode[], labels: (string | null)[]) =>
+      labels.some(Boolean) ? cells : <div className="params-empty-message">-</div>;
+
+    return (
+      <div className="params-vertical-layout">
+        <div className="params-subsection">
+          <div className="params-column-label">MAIN</div>
+          <div className="params-grid">
+            {anyOf(main, machineParamLabels(type, true))}
+          </div>
+        </div>
+        <div className="params-subsection">
+          <div className="params-column-label">SETUP</div>
+          <div className="params-grid">
+            {anyOf(setup, machineSetupLabels(type))}
+          </div>
+        </div>
+      </div>
+    );
+  };
   const renderSrcPage = (part: PartData) => {
     // Always use activePartsData to show current state
     const activePart = activePartsData.find(p => p.part_id === part.part_id) || part;
@@ -1616,7 +1602,7 @@ export default function PartsPanel({
           <div className="params-grid">
             {mainLabels.some(label => label) ? (
               mainLabels.map((label, index) => {
-                if (!label) return null;
+                if (!label) return <div className="param-item param-item-empty" key={`gap-${index}`} />;
                 return renderParamWithKnob(activePart.part_id, 'fxs', fx.track_id, mainFieldNames[index], mainValues[index], label, undefined, index);
               })
             ) : (
@@ -1629,7 +1615,7 @@ export default function PartsPanel({
           <div className="params-grid">
             {setupLabels.some(label => label) ? (
               setupLabels.map((label, index) => {
-                if (!label) return null;
+                if (!label) return <div className="param-item param-item-empty" key={`gap-${index}`} />;
                 return renderParamWithKnob(activePart.part_id, 'fxs', fx.track_id, setupFieldNames[index], setupValues[index], label, undefined, index);
               })
             ) : (
@@ -1657,7 +1643,7 @@ export default function PartsPanel({
           <div className="params-grid">
             {mainLabels.some(label => label) ? (
               mainLabels.map((label, index) => {
-                if (!label) return null;
+                if (!label) return <div className="param-item param-item-empty" key={`gap-${index}`} />;
                 return renderParamWithKnob(activePart.part_id, 'fxs', fx.track_id, mainFieldNames[index], mainValues[index], label, undefined, index);
               })
             ) : (
@@ -1670,7 +1656,7 @@ export default function PartsPanel({
           <div className="params-grid">
             {setupLabels.some(label => label) ? (
               setupLabels.map((label, index) => {
-                if (!label) return null;
+                if (!label) return <div className="param-item param-item-empty" key={`gap-${index}`} />;
                 return renderParamWithKnob(activePart.part_id, 'fxs', fx.track_id, setupFieldNames[index], setupValues[index], label, undefined, index);
               })
             ) : (
@@ -1731,7 +1717,7 @@ export default function PartsPanel({
                 <div className="params-grid">
                   {mainLabels.some(label => label) ? (
                     mainLabels.map((label, index) => {
-                      if (!label) return null; // Skip empty labels
+                      if (!label) return <div className="param-item param-item-empty" key={`gap-${index}`} />;
                       return renderParamWithKnob(activePart.part_id, 'fxs', fx.track_id, mainFieldNames[index], mainValues[index], label);
                     })
                   ) : (
@@ -1745,7 +1731,7 @@ export default function PartsPanel({
                 <div className="params-grid">
                   {setupLabels.some(label => label) ? (
                     setupLabels.map((label, index) => {
-                      if (!label) return null; // Skip empty labels
+                      if (!label) return <div className="param-item param-item-empty" key={`gap-${index}`} />;
                       return renderParamWithKnob(activePart.part_id, 'fxs', fx.track_id, setupFieldNames[index], setupValues[index], label);
                     })
                   ) : (
@@ -1809,7 +1795,7 @@ export default function PartsPanel({
                 <div className="params-grid">
                   {mainLabels.some(label => label) ? (
                     mainLabels.map((label, index) => {
-                      if (!label) return null; // Skip empty labels
+                      if (!label) return <div className="param-item param-item-empty" key={`gap-${index}`} />;
                       return renderParamWithKnob(activePart.part_id, 'fxs', fx.track_id, mainFieldNames[index], mainValues[index], label);
                     })
                   ) : (
@@ -1823,7 +1809,7 @@ export default function PartsPanel({
                 <div className="params-grid">
                   {setupLabels.some(label => label) ? (
                     setupLabels.map((label, index) => {
-                      if (!label) return null; // Skip empty labels
+                      if (!label) return <div className="param-item param-item-empty" key={`gap-${index}`} />;
                       return renderParamWithKnob(activePart.part_id, 'fxs', fx.track_id, setupFieldNames[index], setupValues[index], label);
                     })
                   ) : (
@@ -2455,7 +2441,7 @@ export default function PartsPanel({
                       <div className="params-grid">
                         {fx1MainLabels.some(label => label) ? (
                           fx1MainLabels.map((label, index) => {
-                            if (!label) return null;
+                            if (!label) return <div className="param-item param-item-empty" key={`gap-${index}`} />;
                             const fieldName = `fx1_param${index + 1}`;
                             return renderParamWithKnob(activePart.part_id, 'fxs', trackIdx, fieldName, fx1MainValues[index], label, undefined, index);
                           })
@@ -2469,7 +2455,7 @@ export default function PartsPanel({
                       <div className="params-grid">
                         {fx1SetupLabels.some(label => label) ? (
                           fx1SetupLabels.map((label, index) => {
-                            if (!label) return null;
+                            if (!label) return <div className="param-item param-item-empty" key={`gap-${index}`} />;
                             const fieldName = `fx1_setup${index + 1}`;
                             return renderParamWithKnob(activePart.part_id, 'fxs', trackIdx, fieldName, fx1SetupValues[index], label, undefined, index);
                           })
@@ -2490,7 +2476,7 @@ export default function PartsPanel({
                       <div className="params-grid">
                         {fx2MainLabels.some(label => label) ? (
                           fx2MainLabels.map((label, index) => {
-                            if (!label) return null;
+                            if (!label) return <div className="param-item param-item-empty" key={`gap-${index}`} />;
                             const fieldName = `fx2_param${index + 1}`;
                             return renderParamWithKnob(activePart.part_id, 'fxs', trackIdx, fieldName, fx2MainValues[index], label, undefined, index);
                           })
@@ -2504,7 +2490,7 @@ export default function PartsPanel({
                       <div className="params-grid">
                         {fx2SetupLabels.some(label => label) ? (
                           fx2SetupLabels.map((label, index) => {
-                            if (!label) return null;
+                            if (!label) return <div className="param-item param-item-empty" key={`gap-${index}`} />;
                             const fieldName = `fx2_setup${index + 1}`;
                             return renderParamWithKnob(activePart.part_id, 'fxs', trackIdx, fieldName, fx2SetupValues[index], label, undefined, index);
                           })

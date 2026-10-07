@@ -32,11 +32,11 @@
   color: var(--elektron-text-primary);
 }
 
-/* Eight by two, the way the sixteen trig keys the scenes sit under are laid out. */
+/* All sixteen in one row, as they sit under the sixteen trig keys. */
 .scenes-grid {
   display: grid;
-  grid-template-columns: repeat(8, 1fr);
-  gap: 6px;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 4px;
 }
 
 .scene-card {
@@ -229,8 +229,125 @@
   white-space: nowrap;
 }
 
-@media (max-width: 900px) {
+/* Sixteen across stops being readable on a narrow window, so it folds to two rows
+   and then four, keeping the trig-key grouping rather than reflowing arbitrarily. */
+@media (max-width: 1100px) {
+  .scenes-grid {
+    grid-template-columns: repeat(8, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
   .scenes-grid {
     grid-template-columns: repeat(4, 1fr);
   }
+}
+
+/* Editing: the actions beside the scene's name, and the per-parameter controls. */
+
+.scene-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scene-show-all {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--elektron-text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.scene-action {
+  font-size: 11px;
+  padding: 3px 10px;
+  background: #252525;
+  color: var(--elektron-text-primary);
+  border: 1px solid #555;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.scene-action:hover:not(:disabled) {
+  border-color: var(--elektron-orange);
+}
+
+.scene-action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.scene-action.danger:hover:not(:disabled) {
+  border-color: #f44336;
+  color: #f44336;
+}
+
+/* A parameter the scene does not hold, shown only while everything is on display */
+.scene-locks tr.unheld .scene-lock-page,
+.scene-locks tr.unheld .scene-lock-label {
+  opacity: 0.45;
+}
+
+.scene-value-wrap {
+  display: inline-block;
+}
+
+.scene-value {
+  width: 54px;
+  height: 22px;
+  line-height: 22px;
+  font-size: 12px;
+}
+
+/* Putting a parameter into the scene: the dash is the button */
+.scene-add {
+  width: 54px;
+  height: 22px;
+  font-size: 12px;
+  background: transparent;
+  color: var(--elektron-text-secondary);
+  border: 1px dashed #555;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.scene-add:hover:not(:disabled) {
+  border-color: var(--elektron-orange);
+  color: var(--elektron-text-primary);
+}
+
+.scene-add:disabled {
+  cursor: default;
+  border-style: solid;
+  border-color: #333;
+}
+
+.scene-lock-clear {
+  width: 18px;
+  padding-left: 4px;
+}
+
+.scene-clear-one {
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  line-height: 1;
+  font-size: 10px;
+  background: transparent;
+  color: var(--elektron-text-secondary);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.scene-clear-one:hover {
+  color: #f44336;
+  border-color: #f44336;
 }

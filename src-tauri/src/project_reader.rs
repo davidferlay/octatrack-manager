@@ -2696,6 +2696,107 @@ pub fn read_scenes(
     })
 }
 
+/// Writes one scene's locks back to the bank.
+///
+/// Only `parts.unsaved` is touched, as the Parts editor does - `parts.saved` is the
+/// device's own "Reload Part" backup and stays as the device left it.
+///
+/// A position given as None is written as 255, which is how the device records "this
+/// scene does not touch that parameter". That makes one call enough for everything a
+/// scene needs: changing a value, clearing a single lock, adding one, and clearing the
+/// whole scene are all just a different set of values.
+pub fn save_scene(
+    project_path: &str,
+    bank_id: &str,
+    part_id: u8,
+    scene_id: u8,
+    tracks: Vec<SceneTrackLocks>,
+) -> Result<(), String> {
+    if part_id >= 4 {
+        return Err(format!("Invalid part: {}", part_id));
+    }
+    if scene_id >= 16 {
+        return Err(format!("Invalid scene: {}", scene_id));
+    }
+
+    let bank_file_path = bank_file_path(project_path, bank_id)?;
+    let mut bank = BankFile::from_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
+
+    let part = &mut bank.parts.unsaved.0[part_id as usize];
+    let scene = &mut part.scenes[scene_id as usize];
+    let xlvs = &mut part.scene_xlvs[scene_id as usize];
+
+    for incoming in &tracks {
+        let track_id = incoming.track_id as usize;
+        if track_id >= 8 {
+            return Err(format!("Invalid track: {}", incoming.track_id));
+        }
+        // Six positions a page, every time. A short page would otherwise leave whatever
+        // was in the remaining ones, which is not what the caller asked for.
+        for (name, page) in [
+            ("machine", &incoming.machine),
+            ("lfo", &incoming.lfo),
+            ("amp", &incoming.amp),
+            ("fx1", &incoming.fx1),
+            ("fx2", &incoming.fx2),
+        ] {
+            if page.len() != 6 {
+                return Err(format!(
+                    "Track {} {} has {} positions, expected 6",
+                    incoming.track_id,
+                    name,
+                    page.len()
+                ));
+            }
+        }
+
+        let at = |page: &[Option<u8>], i: usize| page[i].unwrap_or(SCENE_UNASSIGNED);
+        let target = &mut scene.0[track_id];
+
+        target.machine.param1 = at(&incoming.machine, 0);
+        target.machine.param2 = at(&incoming.machine, 1);
+        target.machine.param3 = at(&incoming.machine, 2);
+        target.machine.param4 = at(&incoming.machine, 3);
+        target.machine.param5 = at(&incoming.machine, 4);
+        target.machine.param6 = at(&incoming.machine, 5);
+
+        target.lfo.spd1 = at(&incoming.lfo, 0);
+        target.lfo.spd2 = at(&incoming.lfo, 1);
+        target.lfo.spd3 = at(&incoming.lfo, 2);
+        target.lfo.dep1 = at(&incoming.lfo, 3);
+        target.lfo.dep2 = at(&incoming.lfo, 4);
+        target.lfo.dep3 = at(&incoming.lfo, 5);
+
+        target.amp.atk = at(&incoming.amp, 0);
+        target.amp.hold = at(&incoming.amp, 1);
+        target.amp.rel = at(&incoming.amp, 2);
+        target.amp.vol = at(&incoming.amp, 3);
+        target.amp.bal = at(&incoming.amp, 4);
+        target.amp.f = at(&incoming.amp, 5);
+
+        target.fx1.param_1 = at(&incoming.fx1, 0);
+        target.fx1.param_2 = at(&incoming.fx1, 1);
+        target.fx1.param_3 = at(&incoming.fx1, 2);
+        target.fx1.param_4 = at(&incoming.fx1, 3);
+        target.fx1.param_5 = at(&incoming.fx1, 4);
+        target.fx1.param_6 = at(&incoming.fx1, 5);
+
+        target.fx2.param_1 = at(&incoming.fx2, 0);
+        target.fx2.param_2 = at(&incoming.fx2, 1);
+        target.fx2.param_3 = at(&incoming.fx2, 2);
+        target.fx2.param_4 = at(&incoming.fx2, 3);
+        target.fx2.param_5 = at(&incoming.fx2, 4);
+        target.fx2.param_6 = at(&incoming.fx2, 5);
+
+        xlvs.track_xlvs[track_id] = incoming.xlv.unwrap_or(SCENE_UNASSIGNED);
+    }
+
+    bank.to_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to write bank file: {:?}", e))?;
+    Ok(())
+}
+
 pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataResponse, String> {
     let path = Path::new(project_path);
 
@@ -18730,6 +18831,137 @@ mod tests {
             let project = TestProject::new();
             assert!(read_scenes(&project.path, "A", 4).is_err());
             assert!(read_scenes(&project.path, "Z", 0).is_err());
+        }
+
+        /// Helper: the tracks of one scene, as read back.
+        fn scene_tracks(path: &str, scene: usize) -> Vec<SceneTrackLocks> {
+            read_scenes(path, "A", 0).unwrap().scenes[scene]
+                .tracks
+                .clone()
+        }
+
+        #[test]
+        fn test_save_scene_writes_a_value_and_leaves_the_rest() {
+            let project = TestProject::new();
+            let mut tracks = scene_tracks(&project.path, 3);
+            tracks[1].amp[3] = Some(90);
+            tracks[1].xlv = Some(20);
+
+            save_scene(&project.path, "A", 0, 3, tracks).unwrap();
+
+            let after = read_scenes(&project.path, "A", 0).unwrap();
+            assert_eq!(after.scenes[3].tracks[1].amp[3], Some(90));
+            assert_eq!(after.scenes[3].tracks[1].xlv, Some(20));
+            assert_eq!(after.scenes[3].locked_count, 2);
+            // Other tracks and other scenes are untouched
+            assert!(after.scenes[3].tracks[0].amp.iter().all(|v| v.is_none()));
+            assert_eq!(after.scenes[4].locked_count, 0);
+        }
+
+        /// Clearing a lock is writing nothing to it, which the device records as 255.
+        #[test]
+        fn test_save_scene_clears_a_lock() {
+            let project = TestProject::new();
+            let mut tracks = scene_tracks(&project.path, 0);
+            tracks[0].machine[0] = Some(70);
+            save_scene(&project.path, "A", 0, 0, tracks).unwrap();
+            assert_eq!(
+                read_scenes(&project.path, "A", 0).unwrap().scenes[0].locked_count,
+                1
+            );
+
+            let mut tracks = scene_tracks(&project.path, 0);
+            tracks[0].machine[0] = None;
+            save_scene(&project.path, "A", 0, 0, tracks).unwrap();
+
+            let after = read_scenes(&project.path, "A", 0).unwrap();
+            assert_eq!(after.scenes[0].tracks[0].machine[0], None);
+            assert_eq!(after.scenes[0].locked_count, 0);
+        }
+
+        /// Copying a scene is writing the source's own locks to another slot, so it
+        /// needs no command of its own.
+        #[test]
+        fn test_save_scene_copies_one_scene_onto_another() {
+            let project = TestProject::new();
+            let mut tracks = scene_tracks(&project.path, 0);
+            tracks[2].lfo[4] = Some(33);
+            tracks[2].fx1[5] = Some(44);
+            save_scene(&project.path, "A", 0, 0, tracks).unwrap();
+
+            let source = scene_tracks(&project.path, 0);
+            save_scene(&project.path, "A", 0, 9, source).unwrap();
+
+            let after = read_scenes(&project.path, "A", 0).unwrap();
+            assert_eq!(after.scenes[9].tracks[2].lfo[4], Some(33));
+            assert_eq!(after.scenes[9].tracks[2].fx1[5], Some(44));
+            assert_eq!(after.scenes[9].locked_count, after.scenes[0].locked_count);
+        }
+
+        #[test]
+        fn test_save_scene_clears_a_whole_scene() {
+            let project = TestProject::new();
+            let mut tracks = scene_tracks(&project.path, 5);
+            tracks[0].amp[0] = Some(10);
+            tracks[4].fx2[2] = Some(20);
+            tracks[7].xlv = Some(30);
+            save_scene(&project.path, "A", 0, 5, tracks).unwrap();
+            assert_eq!(
+                read_scenes(&project.path, "A", 0).unwrap().scenes[5].locked_count,
+                3
+            );
+
+            let empty = scene_tracks(&project.path, 11); // an untouched scene
+            save_scene(&project.path, "A", 0, 5, empty).unwrap();
+
+            assert_eq!(
+                read_scenes(&project.path, "A", 0).unwrap().scenes[5].locked_count,
+                0
+            );
+        }
+
+        /// A scene belongs to one Part, and writing it must not reach the others or the
+        /// device's own Reload Part backup.
+        #[test]
+        fn test_save_scene_touches_one_part_and_leaves_the_backup_alone() {
+            let project = TestProject::new();
+            let bank_path = bank_file_path(&project.path, "A").unwrap();
+            let saved_before = BankFile::from_data_file(&bank_path)
+                .unwrap()
+                .parts
+                .saved
+                .clone();
+
+            let mut tracks = scene_tracks(&project.path, 1);
+            tracks[0].amp[1] = Some(55);
+            save_scene(&project.path, "A", 1, 1, tracks).unwrap();
+
+            let after = BankFile::from_data_file(&bank_path).unwrap();
+            assert_eq!(after.parts.unsaved.0[1].scenes[1].0[0].amp.hold, 55);
+            assert_eq!(
+                after.parts.unsaved.0[0].scenes[1].0[0].amp.hold, 255,
+                "Part 1 untouched"
+            );
+            assert_eq!(
+                after.parts.saved, saved_before,
+                "the Reload Part backup is untouched"
+            );
+        }
+
+        #[test]
+        fn test_save_scene_refuses_what_the_device_has_no_room_for() {
+            let project = TestProject::new();
+            let tracks = scene_tracks(&project.path, 0);
+            assert!(save_scene(&project.path, "A", 4, 0, tracks.clone()).is_err());
+            assert!(save_scene(&project.path, "A", 0, 16, tracks.clone()).is_err());
+            assert!(save_scene(&project.path, "Z", 0, 0, tracks.clone()).is_err());
+
+            let mut short = tracks.clone();
+            short[0].amp.pop();
+            assert!(
+                save_scene(&project.path, "A", 0, 0, short).is_err(),
+                "a page has to arrive with all six of its positions"
+            );
         }
 
         /// A track's machine can be changed from the editor, so the payload decides it.

@@ -648,16 +648,11 @@ export function fieldHelp(
  * The settings are listed in full rather than only the current one, because the reason
  * to hover is usually to find out which one to pick.
  */
-export function helpTitle(
-  label: string,
-  help: FieldHelp | undefined,
-  extra?: string,
-): string | undefined {
-  if (!help) return extra;
+export function helpTitle(label: string, help: FieldHelp | undefined): string | undefined {
+  if (!help) return undefined;
   const lines = [`${label} - ${help.text}`];
   for (const [name, meaning] of Object.entries(help.values ?? {})) {
     lines.push(`${name}: ${meaning}`);
   }
-  if (extra) lines.push(extra);
   return lines.join('\n');
 }
