@@ -519,6 +519,20 @@ export const SCENE_XLV_SPEC: FieldSpec = {
   table: { 0: 'MIN', 127: 'MAX' },
 };
 
+/**
+ * A track's Track and Cue levels, which the device keeps per Part rather than per page.
+ *
+ * Both are plain levels, and the stored byte is the number shown - measured from the
+ * device's own min and max preset projects, where Bank A / Part 1 / Track 4 reads 0 at
+ * one end and 127 at the other for both. A factory bank comes up at 108.
+ */
+export const TRACK_LEVEL_SPEC: FieldSpec = {
+  min: 0,
+  max: 127,
+  default: 108,
+  widget: 'unipolar',
+};
+
 /** The AMP page by position. The sixth is the one only a scene can set. */
 export const AMP_PARAM_FIELDS = ['atk', 'hold', 'rel', 'vol', 'bal', 'xvol'] as const;
 

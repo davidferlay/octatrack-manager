@@ -781,6 +781,80 @@ test.describe('Parts Editor - Track and Cue volume', () => {
     expect(saved.volumes[0].main).toBe(64)
     expect(saved.volumes[0].cue).toBe(40)
   })
+
+  /**
+   * Both levels are plain 0-127 - measured from the device's own min and max preset
+   * projects - so they are held to the same contract as every parameter on the pages
+   * below rather than taking whatever is typed.
+   */
+  const level = (page: Page, which: 'TRK' | 'CUE') =>
+    page.locator('.parts-track-levels').first()
+      .locator('.parts-level', { hasText: which })
+
+  for (const which of ['TRK', 'CUE'] as const) {
+    test(`the ${which} level will not go past the device range`, async ({ page }) => {
+      await enterEditMode(page)
+      const input = level(page, which).locator('input')
+
+      await input.fill('999')
+      await expect(input).toHaveValue('127')
+      await input.fill('-5')
+      await expect(input).toHaveValue('0')
+    })
+
+    test(`the ${which} level ignores something that is not a number`, async ({ page }) => {
+      await enterEditMode(page)
+      const input = level(page, which).locator('input')
+      const before = await input.inputValue()
+      await input.fill('abc')
+      await expect(input).toHaveValue(before)
+    })
+
+    test(`the ${which} level steps with the wheel, like any other field`, async ({ page }) => {
+      await enterEditMode(page)
+      const input = level(page, which).locator('input')
+      const before = Number(await input.inputValue())
+
+      await input.hover()
+      await page.mouse.wheel(0, -120)
+      await expect(input).toHaveValue(String(before + 1))
+      await page.mouse.wheel(0, 120)
+      await page.mouse.wheel(0, 120)
+      await expect(input).toHaveValue(String(before - 1))
+    })
+
+    test(`the ${which} level wheel stops at the ends of the range`, async ({ page }) => {
+      await enterEditMode(page)
+      const input = level(page, which).locator('input')
+      await input.fill('127')
+      await input.hover()
+      await page.mouse.wheel(0, -120)
+      await expect(input).toHaveValue('127')
+      await input.fill('0')
+      await page.mouse.wheel(0, 120)
+      await expect(input).toHaveValue('0')
+    })
+
+    test(`the ${which} level does not step outside Edit mode`, async ({ page }) => {
+      const input = level(page, which).locator('input')
+      const before = await input.inputValue()
+      await input.hover()
+      await page.mouse.wheel(0, -120)
+      await expect(input).toHaveValue(before)
+    })
+  }
+
+  test('a level clamped by typing is the value that reaches the file', async ({ page }) => {
+    await enterEditMode(page)
+    const input = level(page, 'CUE').locator('input')
+    await input.fill('200')
+    await input.blur()
+
+    await expect.poll(async () => (await getInvokeCalls(page, 'save_parts')).length)
+      .toBeGreaterThan(0)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    expect(calls[calls.length - 1].args.partsData[0].volumes[0].cue).toBe(127)
+  })
 })
 
 test.describe('Parts Editor - Field ranges and widgets', () => {

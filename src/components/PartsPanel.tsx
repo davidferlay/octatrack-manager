@@ -9,6 +9,7 @@ import {
   fieldSpec, clampToSpec, formatSpecValue, parseSpecValue, stepInSpec,
   machineTypesForTrack, MachineType,
   machineParamLabels, machineParamFields, machineSetupLabels, machineSetupFields,
+  TRACK_LEVEL_SPEC,
 } from '../utils/partFieldSpecs';
 import { PositionBar, WaveGlyph, WheelStepper } from './ParamWidgets';
 import {
@@ -1122,26 +1123,38 @@ export default function PartsPanel({
     const volume = activePart.volumes?.find(v => v.track_id === trackId);
     if (!volume) return null;
 
-    const field = (key: 'main' | 'cue', label: string, value: number) => (
-      <label className="parts-level" title={LEVEL_HELP[label as keyof typeof LEVEL_HELP]}>
-        <span className="parts-level-label">{label}</span>
-        <input
-          type="text"
-          className={`param-value ${isEditMode ? 'editable' : ''}`}
-          value={value}
-          onChange={(e) => {
-            if (!isEditMode) return;
-            const next = parseInt(e.target.value, 10);
-            if (!isNaN(next)) {
-              updatePartParam(activePart.part_id, 'volumes', trackId, key, next);
-            }
-          }}
-          onBlur={() => { if (isEditMode) savePart(activePart.part_id); }}
-          readOnly={!isEditMode}
-          tabIndex={isEditMode ? 0 : -1}
-        />
-      </label>
-    );
+    // Held to the same contract as every parameter on the pages below: typing out of
+    // range lands on the edge rather than writing a byte the device cannot hold, and
+    // the wheel steps it while the pointer is over the cell.
+    const field = (key: 'main' | 'cue', label: string, value: number) => {
+      const commit = (raw: number) => updatePartParam(
+        activePart.part_id, 'volumes', trackId, key, clampToSpec(raw, TRACK_LEVEL_SPEC),
+      );
+      return (
+        <WheelStepper
+          className="parts-level"
+          key={key}
+          step={isEditMode ? (by: 1 | -1) => commit(stepInSpec(value, by, TRACK_LEVEL_SPEC)) : null}
+          title={LEVEL_HELP[label as keyof typeof LEVEL_HELP]}
+        >
+          <span className="parts-level-label">{label}</span>
+          <input
+            type="text"
+            className={`param-value ${isEditMode ? 'editable' : ''}`}
+            value={formatSpecValue(value, TRACK_LEVEL_SPEC)}
+            onChange={(e) => {
+              if (!isEditMode) return;
+              const raw = parseSpecValue(e.target.value, TRACK_LEVEL_SPEC);
+              if (raw === null) return;
+              commit(raw);
+            }}
+            onBlur={() => { if (isEditMode) savePart(activePart.part_id); }}
+            readOnly={!isEditMode}
+            tabIndex={isEditMode ? 0 : -1}
+          />
+        </WheelStepper>
+      );
+    };
 
     return (
       <div className="parts-track-levels">
