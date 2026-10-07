@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { machineTypesForTrack, MACHINE_TYPES, fieldSpec, stepInSpec, clampToSpec, formatSpecValue, parseSpecValue, isDeviceField, noteName, machineParamLabels } from './partFieldSpecs'
+import { machineTypesForTrack, MACHINE_TYPES, fieldSpec, stepInSpec, clampToSpec, formatSpecValue, parseSpecValue, isDeviceField, noteName, machineParamLabels, SCENE_XVOL_SPEC, SCENE_XLV_SPEC } from './partFieldSpecs'
 
 /**
  * The numbers asserted here are what the device itself wrote: each preset project was
@@ -656,5 +656,64 @@ describe('values the device steps over', () => {
     const atk = fieldSpec('atk')!
     expect(clampToSpec(1, atk)).toBe(1)
     expect(clampToSpec(2, atk)).toBe(2)
+  })
+})
+
+/**
+ * XLV and XVOL are the two parameters only a scene can set, and neither is a level
+ * despite looking like one. The manual gives each exactly two settings, and the bytes
+ * in real projects agree: across every bank of the projects to hand, these two hold
+ * only 0, 127, or the 255 that means the scene does not touch them.
+ */
+describe('the two volume parameters only a scene can set', () => {
+  const both = [
+    ['XVOL', SCENE_XVOL_SPEC],
+    ['XLV', SCENE_XLV_SPEC],
+  ] as const
+
+  it('offers MIN and MAX, and nothing else', () => {
+    for (const [name, spec] of both) {
+      expect(formatSpecValue(0, spec), name).toBe('MIN')
+      expect(formatSpecValue(127, spec), name).toBe('MAX')
+    }
+  })
+
+  it('treats anything between as a value the device would not produce', () => {
+    for (const [name, spec] of both) {
+      // Everything in between lands on one end or the other
+      for (const raw of [1, 32, 63, 64, 65, 96, 126]) {
+        expect([0, 127], `${name} ${raw}`).toContain(clampToSpec(raw, spec))
+      }
+    }
+  })
+
+  it('steps between the two settings rather than through the numbers', () => {
+    for (const [name, spec] of both) {
+      expect(stepInSpec(0, 1, spec), name).toBe(127)
+      expect(stepInSpec(127, -1, spec), name).toBe(0)
+      // Each end holds, rather than wrapping round
+      expect(stepInSpec(127, 1, spec), name).toBe(127)
+      expect(stepInSpec(0, -1, spec), name).toBe(0)
+    }
+  })
+
+  it('reads back the name it shows', () => {
+    for (const [name, spec] of both) {
+      expect(parseSpecValue('MIN', spec), name).toBe(0)
+      expect(parseSpecValue('max', spec), name).toBe(127)
+      expect(parseSpecValue(' Min ', spec), name).toBe(0)
+    }
+  })
+
+  it('still takes a plain number, which lands on the nearer setting', () => {
+    expect(clampToSpec(parseSpecValue('127', SCENE_XLV_SPEC)!, SCENE_XLV_SPEC)).toBe(127)
+    expect(clampToSpec(parseSpecValue('0', SCENE_XLV_SPEC)!, SCENE_XLV_SPEC)).toBe(0)
+  })
+
+  it('leaves a parameter that really is a level alone', () => {
+    // AMP VOL next door runs the whole way, so the two must not be confused
+    const vol = fieldSpec('vol', 'Flex')!
+    expect(clampToSpec(64, vol)).toBe(64)
+    expect(parseSpecValue('MIN', vol)).toBeNull()
   })
 })

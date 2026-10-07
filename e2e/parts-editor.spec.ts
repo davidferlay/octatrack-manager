@@ -2418,11 +2418,10 @@ test.describe('Scenes', () => {
           .poll(async () => (await getInvokeCalls(page, 'save_scene')).length)
           .toBe(i + 1)
         const track = (await getInvokeCalls(page, 'save_scene'))[i].args.tracks[0]
-        // Both AMP VOL and XLV are plain 0-127 levels
+        // AMP VOL is a 0-127 level; XLV is one of two settings and nothing between
         expect(track.amp[3]).toBeGreaterThanOrEqual(0)
         expect(track.amp[3]).toBeLessThanOrEqual(127)
-        expect(track.xlv).toBeGreaterThanOrEqual(0)
-        expect(track.xlv).toBeLessThanOrEqual(127)
+        expect([0, 127]).toContain(track.xlv)
         seen.add(track.amp[3])
       }
       // Eight rolls of a 128-value parameter landing on one number is not randomness

@@ -486,8 +486,12 @@ export function machineSetupFields(machineType?: string): (string | null)[] {
  *
  * The device only shows it while a scene key is held, so a scene is the only place it
  * can be set and the Parts editor has no knob for it - which is why it is here rather
- * than among the AMP fields. The device names the ends of its range and leaves the rest
- * as plain numbers.
+ * than among the AMP fields.
+ *
+ * It holds one of two settings, not a level: MIN mutes the signal before the track
+ * effects, MAX lets it through at the LEVEL already set. The byte is 0 or 127 and
+ * nothing between, which is why those two are the only legal values rather than just
+ * the two with names on them.
  */
 export const SCENE_XVOL_SPEC: FieldSpec = {
   min: 0,
@@ -495,14 +499,24 @@ export const SCENE_XVOL_SPEC: FieldSpec = {
   default: 0,
   widget: 'unipolar',
   options: [{ value: 0, label: 'MIN' }, { value: 127, label: 'MAX' }],
+  table: { 0: 'MIN', 127: 'MAX' },
 };
 
-/** The level a scene sets for a track under the crossfader. A plain level, unnamed. */
+/**
+ * The level a scene sets for a track under the crossfader, as an overlay on LEVEL.
+ *
+ * The same two settings as XVOL, and the same two bytes - the difference is where they
+ * act: XLV mutes after the track effects, XVOL before them. Checked against the device:
+ * across every bank of the real projects to hand, this byte is only ever 0, 127, or the
+ * 255 that means the scene does not touch it.
+ */
 export const SCENE_XLV_SPEC: FieldSpec = {
   min: 0,
   max: 127,
   default: 0,
   widget: 'unipolar',
+  options: [{ value: 0, label: 'MIN' }, { value: 127, label: 'MAX' }],
+  table: { 0: 'MIN', 127: 'MAX' },
 };
 
 /** The AMP page by position. The sixth is the one only a scene can set. */
@@ -667,6 +681,18 @@ export function noteName(value: number): string {
 
 /** Turns what a human typed back into the raw byte, for a field that reads differently. */
 export function parseSpecValue(text: string, spec: FieldSpec): number | null {
+  // A value the device shows by name reads back by that name, so what is on screen can
+  // be typed straight back in - otherwise MIN and MAX would be unsettable by hand
+  const named = text.trim().toUpperCase();
+  if (named) {
+    const option = spec.options?.find(o => o.label.toUpperCase() === named);
+    if (option) return option.value;
+    const entries = Array.isArray(spec.table)
+      ? spec.table.map((label, value) => [value, label] as const)
+      : Object.entries(spec.table ?? {}).map(([v, label]) => [Number(v), label] as const);
+    const hit = entries.find(([, label]) => label.toUpperCase() === named);
+    if (hit) return hit[0];
+  }
   // A multiplier reads back the way it is shown, with or without its leading x
   const n = parseFloat(spec.display === 'times' ? text.replace(/^\s*x/i, '') : text);
   if (!Number.isFinite(n)) return null;
