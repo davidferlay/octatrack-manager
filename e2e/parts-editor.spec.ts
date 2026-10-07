@@ -24,6 +24,8 @@ interface MockOptions {
   loadedFlexSlots?: number
   /** The Flex slot T1 plays, zero-based. Default is its track number. */
   t1FlexSlot?: number
+  /** Whether each crossfader end is muted on the device. Neither, by default. */
+  sceneMutes?: [boolean, boolean]
 }
 
 async function setupTauriMocks(page: Page, options?: MockOptions) {
@@ -33,8 +35,9 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
     fx1Type: options?.fx1Type ?? 4,
     loadedFlexSlots: options?.loadedFlexSlots ?? 3,
     t1FlexSlot: options?.t1FlexSlot ?? null,
+    sceneMutes: options?.sceneMutes ?? ([false, false] as [boolean, boolean]),
   }
-  await page.addInitScript((opts: { partsEditedBitmask: number; partsSavedState: number[]; fx1Type: number; loadedFlexSlots: number; t1FlexSlot: number | null }) => {
+  await page.addInitScript((opts: { partsEditedBitmask: number; partsSavedState: number[]; fx1Type: number; loadedFlexSlots: number; t1FlexSlot: number | null; sceneMutes: [boolean, boolean] }) => {
     const makeMachine = (trackId: number) => ({
       track_id: trackId,
       machine_type: 'Flex',
@@ -192,6 +195,8 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
               machine_types: Array(8).fill('Flex'),
               fx1_types: Array(8).fill(opts.fx1Type),
               fx2_types: Array(8).fill(8),
+              scene_a_muted: opts.sceneMutes[0],
+              scene_b_muted: opts.sceneMutes[1],
             }
           }
           case 'load_parts_data':
@@ -2021,7 +2026,8 @@ test.describe('Scenes', () => {
   test('marks the two ends of the crossfader', async ({ page }) => {
     await expect(card(page, 1).locator('.scene-end')).toHaveText('A')
     await expect(card(page, 9).locator('.scene-end')).toHaveText('B')
-    await expect(card(page, 2).locator('.scene-end')).toHaveCount(0)
+    // Present but empty on a scene that is neither end, so every card is one height
+    await expect(card(page, 2).locator('.scene-end')).toHaveText('')
     // ...and the fader itself says the same, with a pair of ends rather than a sentence
     await expect(page.locator('.crossfader-scene').first()).toHaveValue('0')
     await expect(page.locator('.crossfader-scene').last()).toHaveValue('8')
@@ -2097,7 +2103,9 @@ test.describe('Scenes', () => {
   })
 
   test('is read-only until Edit mode is on', async ({ page }) => {
-    await expect(page.locator('.scene-action')).toHaveCount(0)
+    // "Show all params" is always there - it changes what is shown, not what is stored
+    await expect(page.locator('.scene-action:not(.scene-show-all)')).toHaveCount(0)
+    await expect(page.locator('.scene-show-all')).toBeVisible()
     await expect(page.locator('input.scene-value').first()).not.toHaveClass(/editable/)
     await expect(page.locator('.scene-clear-one')).toHaveCount(0)
   })
@@ -2140,7 +2148,7 @@ test.describe('Scenes', () => {
     })
 
     test('puts a parameter into a scene', async ({ page }) => {
-      await page.locator('.scene-show-all input').check()
+      await page.locator('.scene-show-all').click()
       const row = page.locator('.scene-track').first().locator('tr')
         .filter({ hasText: 'PTCH' }).first()
       await expect(row).toHaveClass(/unheld/)
@@ -2156,14 +2164,14 @@ test.describe('Scenes', () => {
     test('shows everything a scene could hold, on request', async ({ page }) => {
       const rows = page.locator('.scene-track').first().locator('.scene-locks tr')
       await expect(rows).toHaveCount(2)
-      await page.locator('.scene-show-all input').check()
+      await page.locator('.scene-show-all').click()
       // Every position of every page the track's machine and effects actually use
       await expect(rows).not.toHaveCount(2)
       await expect(rows.filter({ hasText: 'XVOL' })).toHaveCount(1)
     })
 
     test('copies one scene onto another', async ({ page }) => {
-      await page.locator('.scene-action', { hasText: 'Copy' }).click()
+      await page.getByRole('button', { name: 'Copy', exact: true }).click()
       await page.locator('.scene-card').nth(3).click()
       await expect(page.locator('.scene-detail-sub')).toHaveText('Nothing held')
 
@@ -2177,7 +2185,7 @@ test.describe('Scenes', () => {
 
     test('will not paste before something has been copied', async ({ page }) => {
       await expect(page.locator('.scene-action', { hasText: 'Paste' })).toBeDisabled()
-      await page.locator('.scene-action', { hasText: 'Copy' }).click()
+      await page.getByRole('button', { name: 'Copy', exact: true }).click()
       await expect(page.locator('.scene-action', { hasText: 'Paste' })).toBeEnabled()
     })
 
@@ -2259,10 +2267,166 @@ test.describe('Scenes', () => {
     })
 
     test('says when both ends are the same scene', async ({ page }) => {
-      await expect(page.locator('.crossfader-note')).toHaveCount(0)
+      await expect(page.locator('.toast-notification')).toHaveCount(0)
       await page.locator('.mode-toggle').click()
       await page.locator('.crossfader-scene').last().selectOption('0')
-      await expect(page.locator('.crossfader-note')).toContainText('moving the fader changes nothing')
+      await expect(page.locator('.toast-notification'))
+        .toContainText('moving the fader changes nothing')
+      // It floats clear of the row rather than widening it
+      await expect(page.locator('.crossfader .toast-notification')).toHaveCount(0)
+    })
+
+    /**
+     * Muting an end is FUNC + SCENE A/B on the device, kept with the project rather than
+     * with the Part. It is shown either way round: without it, a scene full of locks
+     * that does nothing looks like a bug in the scene.
+     */
+    test.describe('muting an end', () => {
+      /** The letter is the switch, as the crossed-out letter is on the device */
+      const ends = (page: Page) => page.locator('.crossfader-end-label')
+
+      test('shows both ends live when neither is muted', async ({ page }) => {
+        await expect(ends(page)).toHaveCount(2)
+        await expect(ends(page).first()).not.toHaveClass(/muted/)
+        await expect(ends(page).last()).not.toHaveClass(/muted/)
+      })
+
+      test('reads the mute off the project, per end', async ({ page }) => {
+        await setupTauriMocks(page, { sceneMutes: [false, true] })
+        // A hash-only goto is a same-document navigation, so the new mock would never
+        // be installed - the reload is what re-runs the init scripts.
+        await page.reload()
+        await openScenes(page)
+
+        await expect(ends(page).first()).not.toHaveClass(/muted/)
+        await expect(ends(page).last()).toHaveClass(/muted/)
+        await expect(ends(page).last()).toHaveAttribute('aria-pressed', 'true')
+        await expect(ends(page).last()).toHaveAttribute('title', /FUNC \+ SCENE B/)
+        // The letter is still the letter
+        await expect(ends(page).last()).toHaveText('B')
+      })
+
+      test('is read-only until Edit mode is on', async ({ page }) => {
+        await expect(ends(page).first()).toBeDisabled()
+        await page.locator('.mode-toggle').click()
+        await expect(ends(page).first()).toBeEnabled()
+      })
+
+      test('mutes the end it was clicked on, and says so to the project', async ({ page }) => {
+        await page.locator('.mode-toggle').click()
+        await ends(page).last().click()
+
+        await expect(ends(page).last()).toHaveClass(/muted/)
+        await expect(ends(page).first()).not.toHaveClass(/muted/)
+        await expect
+          .poll(async () => (await getInvokeCalls(page, 'save_scene_mute')).length)
+          .toBe(1)
+        const calls = await getInvokeCalls(page, 'save_scene_mute')
+        expect(calls[0].args).toMatchObject({ end: 'B', muted: true })
+        // It belongs to the project, so nothing was written to the bank
+        expect(await getInvokeCalls(page, 'save_crossfader')).toHaveLength(0)
+        expect(await getInvokeCalls(page, 'save_scene')).toHaveLength(0)
+      })
+
+      test('unmutes again', async ({ page }) => {
+        await page.locator('.mode-toggle').click()
+        const a = ends(page).first()
+        await a.click()
+        await expect(a).toHaveClass(/muted/)
+        await a.click()
+        await expect(a).not.toHaveClass(/muted/)
+
+        const calls = await getInvokeCalls(page, 'save_scene_mute')
+        expect(calls.map(c => c.args.muted)).toEqual([true, false])
+        expect(calls.every(c => c.args.end === 'A')).toBe(true)
+      })
+    })
+
+    /** Copying between the ends is a crossfader action, so it sits with the ends */
+    test.describe('copying between the ends', () => {
+      test('is offered only in Edit mode, with the scene own actions', async ({ page }) => {
+        await expect(page.getByRole('button', { name: 'Copy A to B' })).toHaveCount(0)
+        await page.locator('.mode-toggle').click()
+        const actions = page.locator('.scene-detail-head .scene-actions')
+        await expect(actions.getByRole('button', { name: 'Copy A to B' })).toBeVisible()
+        await expect(actions.getByRole('button', { name: 'Copy B to A' })).toBeVisible()
+      })
+
+      test('puts what one end holds into the other end', async ({ page }) => {
+        await page.locator('.mode-toggle').click()
+        // A is scene 1, which holds two parameters; B is scene 9, which holds none
+        await page.getByRole('button', { name: 'Copy A to B' }).click()
+
+        await expect
+          .poll(async () => (await getInvokeCalls(page, 'save_scene')).length)
+          .toBe(1)
+        const call = (await getInvokeCalls(page, 'save_scene'))[0]
+        expect(call.args.sceneId).toBe(8)
+        expect(call.args.tracks[0].amp[3]).toBe(100)
+        expect(call.args.tracks[0].xlv).toBe(64)
+      })
+
+      test('shows the scene it just wrote', async ({ page }) => {
+        await page.locator('.mode-toggle').click()
+        await page.getByRole('button', { name: 'Copy A to B' }).click()
+        await expect(page.locator('.scene-detail-title')).toContainText('Scene 9')
+        await expect(page.locator('.toast-notification')).toContainText('scene 9')
+      })
+
+      test('is refused when both ends are the same scene', async ({ page }) => {
+        await page.locator('.mode-toggle').click()
+        await page.locator('.crossfader-scene').last().selectOption('0')
+        await expect(page.getByRole('button', { name: 'Copy A to B' })).toBeDisabled()
+        await expect(page.getByRole('button', { name: 'Copy B to A' })).toBeDisabled()
+      })
+    })
+  })
+
+  /**
+   * Shuffling the values, not which parameters are held: which parameters a scene
+   * reaches for is the musical decision, and only the app knows each one's legal range.
+   */
+  test.describe('randomising a scene', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+    })
+
+    test('is refused on a scene that holds nothing', async ({ page }) => {
+      await page.locator('.scene-card').nth(8).click()
+      await expect(page.getByRole('button', { name: 'Randomize' })).toBeDisabled()
+    })
+
+    test('gives every held value a new one, and holds the same parameters', async ({ page }) => {
+      await page.getByRole('button', { name: 'Randomize' }).click()
+
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'save_scene')).length)
+        .toBe(1)
+      const track = (await getInvokeCalls(page, 'save_scene'))[0].args.tracks[0]
+      // Scene 1 holds AMP VOL and XLV on track 1, and nothing else, before and after
+      expect(track.amp.map((v: number | null) => v === null)).toEqual(
+        [true, true, true, false, true, true])
+      expect(track.xlv).not.toBeNull()
+      expect(track.machine).toEqual([null, null, null, null, null, null])
+    })
+
+    test('stays inside each parameter own range', async ({ page }) => {
+      const seen = new Set<number>()
+      for (let i = 0; i < 8; i++) {
+        await page.getByRole('button', { name: 'Randomize' }).click()
+        await expect
+          .poll(async () => (await getInvokeCalls(page, 'save_scene')).length)
+          .toBe(i + 1)
+        const track = (await getInvokeCalls(page, 'save_scene'))[i].args.tracks[0]
+        // Both AMP VOL and XLV are plain 0-127 levels
+        expect(track.amp[3]).toBeGreaterThanOrEqual(0)
+        expect(track.amp[3]).toBeLessThanOrEqual(127)
+        expect(track.xlv).toBeGreaterThanOrEqual(0)
+        expect(track.xlv).toBeLessThanOrEqual(127)
+        seen.add(track.amp[3])
+      }
+      // Eight rolls of a 128-value parameter landing on one number is not randomness
+      expect(seen.size).toBeGreaterThan(1)
     })
   })
 

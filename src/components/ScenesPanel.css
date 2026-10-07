@@ -44,8 +44,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 8px 4px;
+  gap: 1px;
+  padding: 5px 4px 8px;
   background: #252525;
   border: 1px solid #333;
   border-radius: 4px;
@@ -84,13 +84,13 @@
 }
 
 /* Which scenes the crossfader sits between - the one thing about a scene that is not
-   stored in the scene itself. */
+   stored in the scene itself. It has its own line above the number: an end can be both
+   ends at once ("A/B"), which over a two-digit number left neither readable. */
 .scene-end {
-  position: absolute;
-  top: 2px;
-  right: 4px;
-  font-size: 12px;
+  min-height: 15px;
+  font-size: 13px;
   font-weight: 700;
+  line-height: 15px;
   letter-spacing: 0.5px;
   color: var(--elektron-orange);
 }
@@ -134,31 +134,32 @@
   line-height: 1.5;
 }
 
-/* One column per track that the scene touches, so an empty scene shows no headings */
+/* Four tracks to a row rather than as many as fit: eight tracks then fall into two even
+   rows, and each column is wide enough to read the parameter names at full size. */
 .scene-tracks {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .scene-track {
   background: #252525;
   border: 1px solid #333;
   border-radius: 4px;
-  padding: 8px;
+  padding: 10px 12px;
 }
 
 .scene-track-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-  padding-bottom: 6px;
+  gap: 10px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
   border-bottom: 1px solid #333;
 }
 
 .scene-track-machine {
-  font-size: 10px;
+  font-size: 14px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--elektron-text-secondary);
@@ -166,39 +167,56 @@
 
 .scene-track-count {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 15px;
+  font-weight: 600;
   color: #5dade2;
 }
 
 .scene-locks {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .scene-locks td {
-  padding: 2px 0;
+  padding: 3px 0;
 }
 
 .scene-lock-page {
   color: var(--elektron-text-secondary);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   white-space: nowrap;
-  padding-right: 8px;
+  padding-right: 10px;
 }
 
 .scene-lock-label {
   font-weight: 600;
+  font-size: 14px;
   white-space: nowrap;
 }
 
 .scene-lock-value {
   text-align: right;
   font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+  font-size: 14px;
   color: #5dade2;
   white-space: nowrap;
+}
+
+/* Four columns stop fitting before the window gets narrow, so they halve rather than
+   squeezing the parameter names to nothing. */
+@media (max-width: 1100px) {
+  .scene-tracks {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .scene-tracks {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* The crossfader, drawn the way the device's own is: scene A at the left end, scene B
@@ -227,10 +245,49 @@
   gap: 6px;
 }
 
+/* The letter is the mute switch. Live, it is lit on nothing, the way the device shows
+   it; muted, it inverts into a solid red block - Elektron's own way of saying a value
+   is overridden, and readable at a glance from across a room. */
 .crossfader-end-label {
-  font-size: 15px;
+  min-width: 20px;
+  padding: 3px 5px;
+  font-family: inherit;
+  font-size: 17px;
   font-weight: 700;
+  line-height: 1;
+  text-align: center;
   color: var(--elektron-orange);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+}
+
+/* A muted end does nothing at all, so the whole end goes quiet rather than just its
+   letter: the scene it names fades back, and the letter alone stays legible, outlined
+   in red so it reads as deliberately switched off and not merely disabled. */
+.crossfader-end-picker.muted .crossfader-scene {
+  opacity: 0.4;
+  filter: grayscale(1);
+}
+
+.crossfader-end-label.muted {
+  color: #f44336;
+  background: rgba(244, 67, 54, 0.1);
+  border-color: #f44336;
+  border-style: dashed;
+}
+
+.crossfader-end-label:not(:disabled) {
+  cursor: pointer;
+}
+
+.crossfader-end-label:not(:disabled):hover {
+  border-color: var(--elektron-orange);
+}
+
+.crossfader-end-label.muted:not(:disabled):hover {
+  background: rgba(244, 67, 54, 0.25);
+  border-color: #ff6b5e;
 }
 
 .crossfader-scene {
@@ -287,12 +344,6 @@
   background: #666;
 }
 
-.crossfader-note {
-  font-size: 11px;
-  color: var(--elektron-text-secondary);
-}
-
-
 /* Sixteen across stops being readable on a narrow window, so it folds to two rows
    and then four, keeping the trig-key grouping rather than reflowing arbitrarily. */
 @media (max-width: 1100px) {
@@ -316,14 +367,18 @@
   gap: 8px;
 }
 
+/* Pinned to the end of the row, so the Copy/Paste/Clear buttons appearing with Edit
+   mode grow leftwards and leave it where it was. */
 .scene-show-all {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 11px;
+  margin-left: 8px;
   color: var(--elektron-text-secondary);
-  cursor: pointer;
   user-select: none;
+}
+
+.scene-show-all.on {
+  color: var(--elektron-orange);
+  border-color: var(--elektron-orange);
+  background: #2e2a24;
 }
 
 .scene-action {
@@ -365,13 +420,13 @@
    here too rather than inherited - otherwise these fall back to the browser's own
    white-on-light input, which is what they were doing. */
 .scene-value {
-  width: 56px;
-  height: 22px;
-  line-height: 22px;
+  width: 64px;
+  height: 25px;
+  line-height: 25px;
   box-sizing: border-box;
   padding: 0 5px;
   font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   text-align: center;
   color: #ffffff;
@@ -397,9 +452,9 @@
 
 /* Putting a parameter into the scene: the dash is the button */
 .scene-add {
-  width: 54px;
-  height: 22px;
-  font-size: 12px;
+  width: 62px;
+  height: 25px;
+  font-size: 13px;
   background: transparent;
   color: var(--elektron-text-secondary);
   border: 1px dashed #555;
@@ -420,16 +475,16 @@
 }
 
 .scene-lock-clear {
-  width: 18px;
-  padding-left: 4px;
+  width: 21px;
+  padding-left: 6px;
 }
 
 .scene-clear-one {
-  width: 16px;
-  height: 16px;
+  width: 19px;
+  height: 19px;
   padding: 0;
   line-height: 1;
-  font-size: 10px;
+  font-size: 12px;
   background: transparent;
   color: var(--elektron-text-secondary);
   border: 1px solid transparent;

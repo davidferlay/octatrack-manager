@@ -59,9 +59,9 @@ touched.
 | SC24 | Edit | Values are typed as they read | Change a centred parameter such as AMP VOL to -20 | It is stored as the device would store it, not as the number typed |
 | SC25 | Edit | Step with the wheel | Hover a value and turn the wheel | It steps one setting at a time, the same as on the Parts pages |
 | SC26 | Edit | Take a parameter out | Click the x beside a parameter the scene holds | It leaves the scene, the count drops by one, and the device goes back to using the Part's own value there |
-| SC27 | Edit | Put a parameter in | Turn on "Show everything", then click the dash beside a parameter the scene does not hold | It joins the scene at its default, and the count rises by one |
-| SC28 | Edit | Show everything | Turn "Show everything" on and off | On, every parameter the track's machine and effects actually use is listed; off, only the ones the scene holds |
-| SC29 | Edit | Positions the machine does not use | With "Show everything" on, look at a Thru or Neighbor track | Only the parameters that machine actually has are offered - a scene can store a byte elsewhere but the device has nothing to apply it to |
+| SC27 | Edit | Put a parameter in | Turn on "Show all params", then click the dash beside a parameter the scene does not hold | It joins the scene at its default, and the count rises by one |
+| SC28 | Edit | Show all params | Turn "Show all params" on and off | On, every parameter the track's machine and effects actually use is listed; off, only the ones the scene holds |
+| SC29 | Edit | Positions the machine does not use | With "Show all params" on, look at a Thru or Neighbor track | Only the parameters that machine actually has are offered - a scene can store a byte elsewhere but the device has nothing to apply it to |
 | SC30 | Edit | Copy and paste a scene | Copy one scene, select another, press Paste | The second holds exactly what the first did, and the first is unchanged |
 | SC31 | Edit | Paste needs a copy first | Before copying anything, look at Paste | It is disabled until a scene has been copied |
 | SC32 | Edit | Paste across Parts | Copy a scene, switch Part, then paste | The scene is written to the Part now being shown |
@@ -82,6 +82,25 @@ is shown and set on its own and never touches what a scene holds.
 | SC39 | Fader | Read-only in View mode | Look at the fader in View mode | Neither end can be changed |
 | SC40 | Fader | Move an end | In Edit mode, pick another scene for the A end | It is saved against the Part, and nothing a scene holds changes |
 | SC41 | Fader | Step with the wheel | Hover an end and turn the wheel | It moves through the scenes one at a time |
-| SC42 | Fader | Both ends on one scene | Set both ends to the same scene | It says so - moving the fader on the device then changes nothing |
+| SC42 | Fader | Both ends on one scene | Set both ends to the same scene | A floating note says moving the fader then changes nothing |
 | SC43 | Fader | Per Part | Set the ends on one Part, then switch Part | Each Part has its own pair of ends |
 | SC44 | Fader | The device agrees | Set the ends, save, then open the project on the device | The crossfader morphs between the scenes that were picked |
+| SC45 | Mute | Both ends live | Open Scenes on a project where neither end is muted | The A and B letters are both lit orange |
+| SC46 | Mute | Reads the project | Mute scene slot B on the device, save, reopen the project | The B end fades back and its letter is outlined in red; the A end is unchanged |
+| SC47 | Mute | Read-only outside Edit mode | Leave Edit mode off and click an end letter | Nothing changes; the letter is not clickable |
+| SC48 | Mute | Mute an end | In Edit mode, click the A letter | It turns red and outlined, and the scene beside it fades back |
+| SC49 | Mute | Unmute again | Click a red outlined letter | The end comes back to full strength |
+| SC50 | Mute | One end at a time | Mute A | B is left alone |
+| SC51 | Mute | Belongs to the project | Mute an end, then switch Part | The mute is the same on every Part of the project |
+| SC52 | Mute | Nothing else is rewritten | Mute an end, then check the project's sample slots and settings | Every other value in the project file is as it was |
+| SC53 | Mute | The device agrees | Mute an end, save, then open the project on the device | That scene slot is muted, as if FUNC + SCENE had been pressed |
+| SC54 | Mute | What a mute does | Mute the end a scene full of locks sits on | On the device, that end leaves everything as the Part sets it |
+| SC55 | Actions | Show all params stays put | Note where "Show all params" sits, then turn Edit mode on | Copy, Paste and Clear appear to its left and it does not move |
+| SC56 | Actions | Show all params reads as on | Turn "Show all params" on | It is highlighted, and every parameter is listed |
+| SC57 | Actions | Copy A to B | In Edit mode, with the ends on different scenes, press "Copy A to B" | The B end's scene holds what the A end's scene held, and is the one on show |
+| SC58 | Actions | Copy B to A | Press "Copy B to A" | The A end's scene holds what the B end's scene held |
+| SC59 | Actions | Copy between the same scene | Set both ends to one scene | Both copy buttons are refused |
+| SC60 | Actions | Randomize keeps the shape | Press "Randomize" on a scene holding three parameters | It still holds those three, with new values |
+| SC61 | Actions | Randomize stays legal | Randomize a scene holding a parameter with gaps in its range, several times | Every value is one the device's own encoder would produce |
+| SC62 | Actions | Randomize on an empty scene | Select a scene holding nothing | "Randomize" is refused |
+| SC63 | Actions | Randomize the device agrees | Randomize, save, then open the project on the device | The scene reads back the values the app showed |

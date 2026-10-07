@@ -37,6 +37,8 @@ interface ScenesResponse {
   machine_types: string[];
   fx1_types: number[];
   fx2_types: number[];
+  scene_a_muted: boolean;
+  scene_b_muted: boolean;
 }
 
 interface ScenesPanelProps {
@@ -155,6 +157,39 @@ function SceneValue({ slot, onChange, editable }: {
 }
 
 /**
+ * One end of the crossfader, named and muted in the same control.
+ *
+ * Muting is FUNC + SCENE A/B on the hardware, and it is the letter itself that the
+ * device shows crossed out - so the letter is the switch here too, rather than a second
+ * thing beside it. It is kept with the project rather than with the Part, so it holds
+ * across Part and pattern changes, which is also why a scene full of locks can appear
+ * to do nothing.
+ */
+function EndLabel({ end, muted, editable, onToggle }: {
+  end: 'A' | 'B';
+  muted: boolean;
+  editable: boolean;
+  onToggle: () => void;
+}) {
+  const state = muted
+    ? `Scene slot ${end} is MUTED: its locks are disregarded and the Part's own values apply at that end.`
+    : `Scene slot ${end} is live, so the scene assigned to it applies.`;
+  return (
+    <button
+      type="button"
+      className={`crossfader-end-label ${muted ? 'muted' : ''}`}
+      aria-pressed={muted}
+      aria-label={`Scene slot ${end}, ${muted ? 'muted' : 'live'}`}
+      disabled={!editable}
+      onClick={onToggle}
+      title={`${state} Click to ${muted ? 'unmute' : 'mute'} it, as FUNC + SCENE ${end} does on the device. Kept with the project, not with the Part.`}
+    >
+      {end}
+    </button>
+  );
+}
+
+/**
  * A Part's sixteen scenes: which parameters each one holds, and at what.
  *
  * A scene is a snapshot of parameter values that the crossfader morphs towards. It is
@@ -221,6 +256,24 @@ export function ScenesPanel({
   const scene = data?.scenes[selected];
 
   /**
+   * A passing note about the edit just made.
+   *
+   * It floats rather than sitting in the panel: these are remarks about a move, not
+   * states of the panel, so anywhere inline would push the controls about as they came
+   * and went. The CSS fades it out; the timer clears it just after.
+   */
+  const [tip, setTip] = useState<string | null>(null);
+  const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const showTip = useCallback((message: string) => {
+    if (tipTimer.current) clearTimeout(tipTimer.current);
+    setTip(message);
+    tipTimer.current = setTimeout(() => setTip(null), 2800);
+  }, []);
+  useEffect(() => () => {
+    if (tipTimer.current) clearTimeout(tipTimer.current);
+  }, []);
+
+  /**
    * Moves one or both ends of the crossfader.
    *
    * Which scenes it sits between belongs to the Part, not to either scene, so this is
@@ -228,6 +281,10 @@ export function ScenesPanel({
    */
   const setCrossfader = useCallback((sceneA: number, sceneB: number) => {
     setData(prev => prev && { ...prev, scene_a: sceneA, scene_b: sceneB });
+    // Said at the moment the ends are made equal, which is when it is worth knowing
+    if (sceneA === sceneB) {
+      showTip('Both ends are the same scene, so moving the fader changes nothing');
+    }
     onWriteStatusChange?.(writeStatus.writing());
     invoke('save_crossfader', {
       path: projectPath, bankId, partId, sceneA, sceneB,
@@ -242,6 +299,80 @@ export function ScenesPanel({
         setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
       });
   }, [projectPath, bankId, partId, onWriteStatusChange]);
+
+  /**
+   * Mutes or unmutes one end.
+   *
+   * Unlike everything else here this is a project setting, not a Part or scene one, so
+   * it is written to the project file and is the same whichever Part is open.
+   */
+  const setSceneMute = useCallback((end: 'A' | 'B', muted: boolean) => {
+    setData(prev => prev && (end === 'A'
+      ? { ...prev, scene_a_muted: muted }
+      : { ...prev, scene_b_muted: muted }));
+    onWriteStatusChange?.(writeStatus.writing());
+    invoke('save_scene_mute', { path: projectPath, end, muted })
+      .then(() => {
+        onWriteStatusChange?.(writeStatus.success(
+          `Scene ${end} ${muted ? 'muted' : 'unmuted'}`,
+        ));
+        setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
+      })
+      .catch(err => {
+        console.error('Failed to save the scene mute:', err);
+        // Put it back: the device still has it the other way round
+        setData(prev => prev && (end === 'A'
+          ? { ...prev, scene_a_muted: !muted }
+          : { ...prev, scene_b_muted: !muted }));
+        onWriteStatusChange?.(writeStatus.error(`Could not mute scene ${end}`));
+        setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
+      });
+  }, [projectPath, onWriteStatusChange]);
+
+  /** Copies what one end's scene holds into the other end's scene. */
+  const copyEnd = useCallback((from: 'A' | 'B', to: 'A' | 'B') => {
+    if (!data) return;
+    const source = from === 'A' ? data.scene_a : data.scene_b;
+    const target = to === 'A' ? data.scene_a : data.scene_b;
+    if (source === target) return;
+    writeScene(target, data.scenes[source].tracks);
+    setSelected(target);
+    showTip(`Scene ${source + 1} copied into scene ${target + 1}, the ${to} end`);
+  }, [data, writeScene, showTip]);
+
+  /**
+   * Gives every value the selected scene holds a new one, at random.
+   *
+   * Only the parameters it already holds are touched: which parameters a scene reaches
+   * for is the musical decision, and the values are the part worth shuffling. Each one
+   * stays inside its own legal range, gaps included.
+   */
+  const randomise = useCallback(() => {
+    if (!data || !scene) return;
+    const roll = (spec: FieldSpec) =>
+      clampToSpec(spec.min + Math.floor(Math.random() * (spec.max - spec.min + 1)), spec);
+
+    const tracks = scene.tracks.map(track => {
+      const slots = slotsForTrack(
+        track,
+        data.machine_types[track.track_id],
+        data.fx1_types[track.track_id],
+        data.fx2_types[track.track_id],
+      );
+      const next: SceneTrackLocks = {
+        ...track,
+        machine: [...track.machine], lfo: [...track.lfo], amp: [...track.amp],
+        fx1: [...track.fx1], fx2: [...track.fx2],
+      };
+      for (const slot of slots) {
+        if (slot.value === null) continue;
+        if (slot.page === 'xlv') next.xlv = roll(slot.spec);
+        else next[slot.page][slot.index] = roll(slot.spec);
+      }
+      return next;
+    });
+    writeScene(scene.scene_id, tracks);
+  }, [data, scene, writeScene]);
 
   const setSlot = useCallback((trackId: number, slot: Slot, value: number | null) => {
     if (!scene) return;
@@ -281,6 +412,11 @@ export function ScenesPanel({
     return <div className="scenes-panel-loading">Reading scenes...</div>;
   }
 
+  const endLabel = (id: number) => [
+    id === data.scene_a ? 'A' : null,
+    id === data.scene_b ? 'B' : null,
+  ].filter(Boolean).join('/');
+
   /** Every scene, for the two end pickers. A scene with nothing in it is still a
    *  legitimate end - the crossfader just has nothing to morph towards there. */
   const sceneOptions = data.scenes.map(s => (
@@ -288,11 +424,6 @@ export function ScenesPanel({
       {s.scene_id + 1}{s.locked_count ? '' : ' (empty)'}
     </option>
   ));
-
-  const endLabel = (id: number) => [
-    id === data.scene_a ? 'A' : null,
-    id === data.scene_b ? 'B' : null,
-  ].filter(Boolean).join('/');
 
   return (
     <div className="scenes-panel">
@@ -333,8 +464,9 @@ export function ScenesPanel({
                   ? `The crossfader's ${end} end` : null,
               ].filter(Boolean).join('\n')}
             >
+              {/* Always rendered, so a card with no end is the same height as one with */}
+              <span className="scene-end">{end}</span>
               <span className="scene-number">{s.scene_id + 1}</span>
-              {end && <span className="scene-end">{end}</span>}
               <span className="scene-count">{s.locked_count || '-'}</span>
             </button>
           );
@@ -351,17 +483,6 @@ export function ScenesPanel({
           </span>
 
           <div className="scene-actions">
-            <label
-              className="scene-show-all"
-              title="Show every parameter this scene could hold, not only the ones it does"
-            >
-              <input
-                type="checkbox"
-                checked={showAll}
-                onChange={e => setShowAll(e.target.checked)}
-              />
-              Show everything
-            </label>
             {isEditMode && (
               <>
                 <button
@@ -389,8 +510,42 @@ export function ScenesPanel({
                 >
                   Clear
                 </button>
+                <button
+                  className="scene-action"
+                  disabled={scene.locked_count === 0}
+                  onClick={randomise}
+                  title="Give every value this scene holds a new one at random, within each parameter's own range. Which parameters it holds stays as it is."
+                >
+                  Randomize
+                </button>
+                <button
+                  className="scene-action"
+                  disabled={data.scene_a === data.scene_b}
+                  onClick={() => copyEnd('A', 'B')}
+                  title="Put what the A end's scene holds into the B end's scene, replacing it"
+                >
+                  Copy A to B
+                </button>
+                <button
+                  className="scene-action"
+                  disabled={data.scene_a === data.scene_b}
+                  onClick={() => copyEnd('B', 'A')}
+                  title="Put what the B end's scene holds into the A end's scene, replacing it"
+                >
+                  Copy B to A
+                </button>
               </>
             )}
+            {/* Last in the row on purpose: the buttons above it come and go with Edit
+                mode, and anything after them would move when they do. */}
+            <button
+              className={`scene-action scene-show-all ${showAll ? 'on' : ''}`}
+              aria-pressed={showAll}
+              onClick={() => setShowAll(!showAll)}
+              title="List every parameter this scene could hold, not only the ones it does"
+            >
+              Show all params
+            </button>
           </div>
         </div>
 
@@ -398,7 +553,7 @@ export function ScenesPanel({
           <div className="scene-empty-message">
             This scene holds no parameters. Moving the crossfader towards it leaves
             everything as the Part sets it.
-            {isEditMode ? ' Turn on "Show everything" to put something into it.' : ''}
+            {isEditMode ? ' Turn on "Show all params" to put something into it.' : ''}
           </div>
         ) : (
           <div className="scene-tracks">
@@ -463,8 +618,13 @@ export function ScenesPanel({
 
       <div className="crossfader">
         <span className="crossfader-caption">Crossfader</span>
-        <div className="crossfader-end-picker">
-          <span className="crossfader-end-label">A</span>
+        <div className={`crossfader-end-picker ${data.scene_a_muted ? 'muted' : ''}`}>
+          <EndLabel
+            end="A"
+            muted={data.scene_a_muted}
+            editable={isEditMode}
+            onToggle={() => setSceneMute('A', !data.scene_a_muted)}
+          />
           <select
             className="crossfader-scene"
             value={data.scene_a}
@@ -484,7 +644,7 @@ export function ScenesPanel({
           <span className="crossfader-cap" />
         </div>
 
-        <div className="crossfader-end-picker">
+        <div className={`crossfader-end-picker ${data.scene_b_muted ? 'muted' : ''}`}>
           <select
             className="crossfader-scene"
             value={data.scene_b}
@@ -494,15 +654,22 @@ export function ScenesPanel({
           >
             {sceneOptions}
           </select>
-          <span className="crossfader-end-label">B</span>
+          <EndLabel
+            end="B"
+            muted={data.scene_b_muted}
+            editable={isEditMode}
+            onToggle={() => setSceneMute('B', !data.scene_b_muted)}
+          />
         </div>
-
-        {data.scene_a === data.scene_b && (
-          <span className="crossfader-note">
-            Both ends are the same scene, so moving the fader changes nothing
-          </span>
-        )}
       </div>
+
+      {/* Floating, because it is advice about the move just made rather than a state of
+          the panel - leaving it in the row would push the fader about as it came and went. */}
+      {tip && (
+        <div className="toast-notification tip">
+          <i className="fas fa-lightbulb"></i> {tip}
+        </div>
+      )}
     </div>
   );
 }

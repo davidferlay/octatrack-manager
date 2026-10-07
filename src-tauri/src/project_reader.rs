@@ -2586,6 +2586,32 @@ pub struct ScenesResponse {
     /// What each track's effect blocks hold, so an FX position can be named.
     pub fx1_types: Vec<u8>,
     pub fx2_types: Vec<u8>,
+    /// Whether each crossfader end is muted (FUNC + SCENE A/B on the device).
+    ///
+    /// This is live state kept in the project file's [STATES] block, beside which bank
+    /// and pattern are selected - not part of the Part, and not part of either scene.
+    /// A muted end's locks are disregarded and the Part's own values apply instead.
+    pub scene_a_muted: bool,
+    pub scene_b_muted: bool,
+}
+
+/// Whether each crossfader end is muted, from the project file's [STATES] block.
+///
+/// A project whose file will not parse still has readable scenes, so this answers "not
+/// muted" rather than failing the whole read.
+fn scene_end_mutes(project_path: &str) -> (bool, bool) {
+    let dir = Path::new(project_path);
+    let file = if dir.join("project.work").exists() {
+        dir.join("project.work")
+    } else if dir.join("project.strd").exists() {
+        dir.join("project.strd")
+    } else {
+        return (false, false);
+    };
+    match ProjectFile::from_data_file(&file) {
+        Ok(project) => (project.states.scene_a_mute, project.states.scene_b_mute),
+        Err(_) => (false, false),
+    }
 }
 
 /// 255 is how the device records "this scene does not touch that parameter".
@@ -2615,6 +2641,8 @@ pub fn read_scenes(
     let bank_file_path = bank_file_path(project_path, bank_id)?;
     let bank = BankFile::from_data_file(&bank_file_path)
         .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
+
+    let (scene_a_muted, scene_b_muted) = scene_end_mutes(project_path);
 
     let part = &bank.parts.unsaved.0[part_id as usize];
     let six = |values: [u8; 6]| values.iter().map(|v| scene_lock(*v)).collect::<Vec<_>>();
@@ -2693,6 +2721,8 @@ pub fn read_scenes(
             .collect(),
         fx1_types: part.audio_track_fx1.to_vec(),
         fx2_types: part.audio_track_fx2.to_vec(),
+        scene_a_muted,
+        scene_b_muted,
     })
 }
 
@@ -2727,6 +2757,35 @@ pub fn save_crossfader(
     bank.to_data_file(&bank_file_path)
         .map_err(|e| format!("Failed to write bank file: {:?}", e))?;
     Ok(())
+}
+
+/// Mutes or unmutes one end of the crossfader.
+///
+/// This is FUNC + SCENE A/B on the device, and it lives in the project file's [STATES]
+/// block rather than in the bank - so it is one setting for the project, not one per
+/// Part, and changing the Part does not change it.
+///
+/// Only the one line is rewritten. A full rewrite of the project file through our own
+/// writer loses device data (see `replace_settings_fields_surgical`).
+pub fn save_scene_mute(project_path: &str, end: &str, muted: bool) -> Result<(), String> {
+    let key = match end {
+        "A" => "SCENE_A_MUTE",
+        "B" => "SCENE_B_MUTE",
+        other => return Err(format!("Invalid crossfader end: {}", other)),
+    };
+    let dir = Path::new(project_path);
+    let file = if dir.join("project.work").exists() {
+        dir.join("project.work")
+    } else if dir.join("project.strd").exists() {
+        dir.join("project.strd")
+    } else {
+        return Err("Project file not found".to_string());
+    };
+    replace_block_fields_surgical(
+        &file,
+        "STATES",
+        &[(key, u8::from(muted).to_string())],
+    )
 }
 
 /// Writes one scene's locks back to the bank.
@@ -5064,13 +5123,27 @@ fn replace_settings_fields_surgical(
     project_file_path: &Path,
     updates: &[(&str, String)],
 ) -> Result<(), String> {
+    replace_block_fields_surgical(project_file_path, "SETTINGS", updates)
+}
+
+/// The same surgical replacement, in any of the project file's named blocks.
+///
+/// [STATES] needs it as much as [SETTINGS] does: it is the same file, so a full rewrite
+/// to change one line there would lose exactly the same device data.
+fn replace_block_fields_surgical(
+    project_file_path: &Path,
+    block: &str,
+    updates: &[(&str, String)],
+) -> Result<(), String> {
+    let open_tag = format!("[{}]", block);
+    let close_tag = format!("[/{}]", block);
     let raw_bytes = std::fs::read(project_file_path)
         .map_err(|e| format!("Failed to read project file: {}", e))?;
     let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw_bytes);
     let content = decoded.into_owned();
 
-    if !content.contains("[SETTINGS]") {
-        return Err("Malformed project file: no [SETTINGS] block".to_string());
+    if !content.contains(&open_tag) {
+        return Err(format!("Malformed project file: no {} block", open_tag));
     }
 
     let mut pending: std::collections::HashMap<&str, &String> =
@@ -5080,9 +5153,9 @@ fn replace_settings_fields_surgical(
 
     for line in content.split_inclusive('\n') {
         let trimmed = line.trim_end_matches(['\r', '\n']);
-        if trimmed == "[SETTINGS]" {
+        if trimmed == open_tag {
             in_settings = true;
-        } else if trimmed == "[/SETTINGS]" {
+        } else if trimmed == close_tag {
             for (key, value) in updates {
                 if pending.remove(*key).is_some() {
                     result.push_str(key);
@@ -18818,6 +18891,81 @@ mod tests {
 
             let scenes = read_scenes(&project.path, "A", 0).unwrap();
             assert_eq!((scenes.scene_a, scenes.scene_b), (2, 11));
+        }
+
+        /// Muting an end is FUNC + SCENE A/B on the device, and it is kept in the
+        /// project file's [STATES] block rather than in the bank - so it survives a
+        /// Part change, and reading it needs the project file as well as the bank.
+        ///
+        /// The lines are edited as text, which is what the device wrote, rather than
+        /// round-tripping the project file through our own writer.
+        #[test]
+        fn test_read_scenes_reports_a_muted_crossfader_end() {
+            let project = TestProject::new();
+            let work = std::path::Path::new(&project.path).join("project.work");
+
+            let before = read_scenes(&project.path, "A", 0).unwrap();
+            assert!(!before.scene_a_muted && !before.scene_b_muted, "neither to start");
+
+            let text = std::fs::read_to_string(&work).unwrap();
+            assert!(text.contains("SCENE_A_MUTE=0"), "the device writes the key");
+            std::fs::write(&work, text.replace("SCENE_B_MUTE=0", "SCENE_B_MUTE=1")).unwrap();
+
+            let after = read_scenes(&project.path, "A", 0).unwrap();
+            assert!(!after.scene_a_muted, "A was left alone");
+            assert!(after.scene_b_muted, "B reads as muted");
+        }
+
+        /// Muting is a project setting, so the write has to leave the rest of the
+        /// project file byte-for-byte as the device wrote it - the file also holds every
+        /// sample slot's path and timing.
+        #[test]
+        fn test_save_scene_mute_changes_one_line_and_nothing_else() {
+            let project = TestProject::new();
+            let work = std::path::Path::new(&project.path).join("project.work");
+            let before = std::fs::read(&work).unwrap();
+
+            save_scene_mute(&project.path, "A", true).unwrap();
+
+            let after = std::fs::read(&work).unwrap();
+            let before_text = String::from_utf8_lossy(&before).replace("SCENE_A_MUTE=0", "SCENE_A_MUTE=1");
+            assert_eq!(
+                String::from_utf8_lossy(&after),
+                before_text,
+                "only the SCENE_A_MUTE line may differ"
+            );
+            assert_eq!(before.len(), after.len(), "the byte count is unchanged");
+            assert!(read_scenes(&project.path, "A", 0).unwrap().scene_a_muted);
+        }
+
+        #[test]
+        fn test_save_scene_mute_unmutes_again() {
+            let project = TestProject::new();
+            save_scene_mute(&project.path, "B", true).unwrap();
+            assert!(read_scenes(&project.path, "A", 0).unwrap().scene_b_muted);
+            save_scene_mute(&project.path, "B", false).unwrap();
+            let scenes = read_scenes(&project.path, "A", 0).unwrap();
+            assert!(!scenes.scene_b_muted);
+            assert!(!scenes.scene_a_muted, "the other end was never touched");
+        }
+
+        #[test]
+        fn test_save_scene_mute_rejects_an_end_that_is_not_a_or_b() {
+            let project = TestProject::new();
+            assert!(save_scene_mute(&project.path, "C", true).is_err());
+        }
+
+        /// The mutes come from a second file, so a project whose file will not parse
+        /// still has readable scenes - it just reports neither end muted.
+        #[test]
+        fn test_read_scenes_survives_an_unreadable_project_file() {
+            let project = TestProject::new();
+            let work = std::path::Path::new(&project.path).join("project.work");
+            std::fs::write(&work, b"not a project file").unwrap();
+
+            let scenes = read_scenes(&project.path, "A", 0).unwrap();
+            assert_eq!(scenes.scenes.len(), 16);
+            assert!(!scenes.scene_a_muted && !scenes.scene_b_muted);
         }
 
         /// A scene position means whatever the track runs, so naming it needs the
