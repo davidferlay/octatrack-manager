@@ -72,12 +72,13 @@
 }
 
 .scene-number {
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 700;
+  line-height: 1.1;
 }
 
 .scene-count {
-  font-size: 11px;
+  font-size: 14px;
   color: #5dade2;
   font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
 }
@@ -88,7 +89,7 @@
   position: absolute;
   top: 2px;
   right: 4px;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.5px;
   color: var(--elektron-orange);
@@ -200,34 +201,97 @@
   white-space: nowrap;
 }
 
-.scenes-crossfader {
+/* The crossfader, drawn the way the device's own is: scene A at the left end, scene B
+   at the right, and the travel between them. The fader itself is on the hardware, so
+   there is no position to show - what matters here is which scenes sit at each end. */
+.crossfader {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  flex-wrap: wrap;
-  font-size: 12px;
-  color: var(--elektron-text-secondary);
-  padding: 8px 10px;
+  padding: 10px 14px;
   background: #1a1a1a;
   border: 1px solid #333;
   border-radius: 4px;
 }
 
-.scenes-crossfader-fx {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
+.crossfader-caption {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--elektron-text-secondary);
 }
 
-.scenes-fx-chip {
-  font-size: 10px;
-  padding: 2px 6px;
-  background: #252525;
-  border: 1px solid #333;
-  border-radius: 3px;
-  white-space: nowrap;
+.crossfader-end-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
+
+.crossfader-end-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--elektron-orange);
+}
+
+.crossfader-scene {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  min-width: 56px;
+  height: 26px;
+  padding: 0 6px;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  text-align-last: center;
+  color: #ffffff;
+  background: #333;
+  border: 1px solid #555;
+  border-radius: 3px;
+  outline: none;
+}
+
+.crossfader-scene:not(:disabled) {
+  border-color: #f59e0b;
+  cursor: pointer;
+}
+
+.crossfader-scene:not(:disabled):hover {
+  border-color: #fbbf24;
+}
+
+.crossfader-scene option {
+  background: #2a2a2a;
+  color: #ffffff;
+}
+
+/* The travel: a rail capped at each end, as the hardware fader runs between A and B */
+.crossfader-track {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 80px;
+}
+
+.crossfader-line {
+  flex: 1;
+  height: 2px;
+  background: linear-gradient(90deg, var(--elektron-orange), #5dade2);
+  opacity: 0.55;
+}
+
+.crossfader-cap {
+  width: 2px;
+  height: 12px;
+  background: #666;
+}
+
+.crossfader-note {
+  font-size: 11px;
+  color: var(--elektron-text-secondary);
+}
+
 
 /* Sixteen across stops being readable on a narrow window, so it folds to two rows
    and then four, keeping the trig-key grouping rather than reflowing arbitrarily. */
@@ -297,11 +361,38 @@
   display: inline-block;
 }
 
+/* The Parts pages' value box is scoped to their own containers, so it has to be stated
+   here too rather than inherited - otherwise these fall back to the browser's own
+   white-on-light input, which is what they were doing. */
 .scene-value {
-  width: 54px;
+  width: 56px;
   height: 22px;
   line-height: 22px;
+  box-sizing: border-box;
+  padding: 0 5px;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
   font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  color: #ffffff;
+  background: #333;
+  border: 1px solid #555;
+  border-radius: 3px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  cursor: default;
+  outline: none;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.scene-value.editable {
+  background: #1a1a1a;
+  border-color: #f59e0b;
+  cursor: text;
+}
+
+.scene-value.editable:focus {
+  border-color: #fbbf24;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
 }
 
 /* Putting a parameter into the scene: the dash is the button */

@@ -2696,6 +2696,39 @@ pub fn read_scenes(
     })
 }
 
+/// Sets which two scenes the crossfader morphs between.
+///
+/// This belongs to the Part rather than to either scene - the scenes themselves do not
+/// know they are in use - so it is written on its own.
+pub fn save_crossfader(
+    project_path: &str,
+    bank_id: &str,
+    part_id: u8,
+    scene_a: u8,
+    scene_b: u8,
+) -> Result<(), String> {
+    if part_id >= 4 {
+        return Err(format!("Invalid part: {}", part_id));
+    }
+    for (name, scene) in [("A", scene_a), ("B", scene_b)] {
+        if scene >= 16 {
+            return Err(format!("Invalid scene for the {} end: {}", name, scene));
+        }
+    }
+
+    let bank_file_path = bank_file_path(project_path, bank_id)?;
+    let mut bank = BankFile::from_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
+
+    let part = &mut bank.parts.unsaved.0[part_id as usize];
+    part.active_scenes.scene_a = scene_a;
+    part.active_scenes.scene_b = scene_b;
+
+    bank.to_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to write bank file: {:?}", e))?;
+    Ok(())
+}
+
 /// Writes one scene's locks back to the bank.
 ///
 /// Only `parts.unsaved` is touched, as the Parts editor does - `parts.saved` is the
@@ -18962,6 +18995,64 @@ mod tests {
                 save_scene(&project.path, "A", 0, 0, short).is_err(),
                 "a page has to arrive with all six of its positions"
             );
+        }
+
+        #[test]
+        fn test_save_crossfader_sets_both_ends() {
+            let project = TestProject::new();
+            save_crossfader(&project.path, "A", 0, 4, 11).unwrap();
+
+            let scenes = read_scenes(&project.path, "A", 0).unwrap();
+            assert_eq!((scenes.scene_a, scenes.scene_b), (4, 11));
+        }
+
+        /// Both ends on one scene is something the device allows, and it means the
+        /// crossfader does nothing - so it is not an error to write.
+        #[test]
+        fn test_save_crossfader_allows_both_ends_on_one_scene() {
+            let project = TestProject::new();
+            save_crossfader(&project.path, "A", 0, 7, 7).unwrap();
+
+            let scenes = read_scenes(&project.path, "A", 0).unwrap();
+            assert_eq!((scenes.scene_a, scenes.scene_b), (7, 7));
+        }
+
+        #[test]
+        fn test_save_crossfader_is_per_part() {
+            let project = TestProject::new();
+            let before = read_scenes(&project.path, "A", 1).unwrap();
+            save_crossfader(&project.path, "A", 0, 2, 3).unwrap();
+
+            let other = read_scenes(&project.path, "A", 1).unwrap();
+            assert_eq!(
+                (other.scene_a, other.scene_b),
+                (before.scene_a, before.scene_b)
+            );
+        }
+
+        /// Which scenes the crossfader uses says nothing about what they hold.
+        #[test]
+        fn test_save_crossfader_leaves_the_scenes_alone() {
+            let project = TestProject::new();
+            let mut tracks = read_scenes(&project.path, "A", 0).unwrap().scenes[5]
+                .tracks
+                .clone();
+            tracks[0].amp[3] = Some(80);
+            save_scene(&project.path, "A", 0, 5, tracks).unwrap();
+
+            save_crossfader(&project.path, "A", 0, 5, 6).unwrap();
+
+            let after = read_scenes(&project.path, "A", 0).unwrap();
+            assert_eq!(after.scenes[5].tracks[0].amp[3], Some(80));
+            assert_eq!(after.scenes[5].locked_count, 1);
+        }
+
+        #[test]
+        fn test_save_crossfader_refuses_a_scene_that_does_not_exist() {
+            let project = TestProject::new();
+            assert!(save_crossfader(&project.path, "A", 0, 16, 0).is_err());
+            assert!(save_crossfader(&project.path, "A", 0, 0, 16).is_err());
+            assert!(save_crossfader(&project.path, "A", 4, 0, 0).is_err());
         }
 
         /// A track's machine can be changed from the editor, so the payload decides it.

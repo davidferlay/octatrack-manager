@@ -17,8 +17,8 @@ bank. A bank whose scenes were built on the device gives the most to look at.
 | SC1 | Grid | Sixteen scenes | Open the Scenes tab | Sixteen cards, numbered 1 to 16 |
 | SC2 | Grid | How much each holds | Look at the cards | Each shows how many parameters it holds; one holding nothing shows a dash and is dimmed |
 | SC3 | Grid | Counts match the device | Compare a scene's count with the same scene on the device | The same parameters are counted - every track, every page, plus the track's XLV |
-| SC4 | Grid | Crossfader ends marked | Look for the A and B markers | They sit on the two scenes the crossfader morphs between, and the line underneath names them |
-| SC5 | Grid | Both ends on one scene | Open a Part whose A and B are the same scene | Both markers are on it, and the line says moving the crossfader changes nothing |
+| SC4 | Grid | Crossfader ends marked | Look for the A and B markers | They sit on the two scenes the crossfader morphs between, matching the fader below |
+| SC5 | Grid | Both ends on one scene | Open a Part whose A and B are the same scene | Both markers are on it, and the fader says moving it changes nothing |
 | SC6 | Select | Choosing a scene | Click a scene card | Its contents are listed below, and the card is marked as the chosen one |
 | SC7 | Select | No reload on select | Click through several scenes | They switch at once - the bank is read once for the whole Part, not once per scene |
 
@@ -69,3 +69,19 @@ touched.
 | SC34 | Edit | Nothing else is disturbed | Change one scene, then check the other fifteen and the other Parts on the device | Only the scene that was edited changed |
 | SC35 | Edit | The device agrees | Make an edit, save, then open the project on the device | The scene holds what the app showed, and the crossfader morphs to it |
 | SC36 | Edit | Reload Part still works | Edit a scene in the app, then use Reload Part on the device | The device restores its own backup - the app never wrote to it |
+
+## The crossfader
+
+Which two scenes the fader sits between belongs to the Part, not to either scene, so it
+is shown and set on its own and never touches what a scene holds.
+
+| # | Operation | Test | Steps | Pass Criteria |
+|---|-----------|------|-------|---------------|
+| SC37 | Fader | Both ends shown | Look at the fader below the scene list | Scene A at the left end, scene B at the right, with the travel drawn between them |
+| SC38 | Fader | An end with nothing to reach | Point an end at a scene that holds nothing | That entry is marked as empty - the fader has nothing to morph towards there |
+| SC39 | Fader | Read-only in View mode | Look at the fader in View mode | Neither end can be changed |
+| SC40 | Fader | Move an end | In Edit mode, pick another scene for the A end | It is saved against the Part, and nothing a scene holds changes |
+| SC41 | Fader | Step with the wheel | Hover an end and turn the wheel | It moves through the scenes one at a time |
+| SC42 | Fader | Both ends on one scene | Set both ends to the same scene | It says so - moving the fader on the device then changes nothing |
+| SC43 | Fader | Per Part | Set the ends on one Part, then switch Part | Each Part has its own pair of ends |
+| SC44 | Fader | The device agrees | Set the ends, save, then open the project on the device | The crossfader morphs between the scenes that were picked |

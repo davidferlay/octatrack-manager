@@ -2022,8 +2022,9 @@ test.describe('Scenes', () => {
     await expect(card(page, 1).locator('.scene-end')).toHaveText('A')
     await expect(card(page, 9).locator('.scene-end')).toHaveText('B')
     await expect(card(page, 2).locator('.scene-end')).toHaveCount(0)
-    await expect(page.locator('.scenes-crossfader'))
-      .toContainText('morphs between scene 1 and scene 9')
+    // ...and the fader itself says the same, with a pair of ends rather than a sentence
+    await expect(page.locator('.crossfader-scene').first()).toHaveValue('0')
+    await expect(page.locator('.crossfader-scene').last()).toHaveValue('8')
   })
 
   test('lists what the selected scene holds, by track', async ({ page }) => {
@@ -2208,6 +2209,60 @@ test.describe('Scenes', () => {
         await page.locator('input.scene-value').first().fill('20')
       })
       expect(args.partId).toBe(1)
+    })
+  })
+
+  /**
+   * The crossfader sits between two of the sixteen, which belongs to the Part rather
+   * than to either scene - so it is shown and set on its own.
+   */
+  test.describe('the crossfader', () => {
+    test('shows which scene each end reaches', async ({ page }) => {
+      const xf = page.locator('.crossfader')
+      await expect(xf.locator('.crossfader-scene').first()).toHaveValue('0')
+      await expect(xf.locator('.crossfader-scene').last()).toHaveValue('8')
+      await expect(xf.locator('.crossfader-end-label').first()).toHaveText('A')
+      await expect(xf.locator('.crossfader-end-label').last()).toHaveText('B')
+    })
+
+    test('marks an end that has nothing to morph towards', async ({ page }) => {
+      // Scene 9 holds nothing in the fixture
+      await expect(page.locator('.crossfader-scene').last().locator('option[value="8"]'))
+        .toHaveText('9 (empty)')
+    })
+
+    test('is read-only until Edit mode is on', async ({ page }) => {
+      await expect(page.locator('.crossfader-scene').first()).toBeDisabled()
+      await page.locator('.mode-toggle').click()
+      await expect(page.locator('.crossfader-scene').first()).toBeEnabled()
+    })
+
+    test('moves an end, and says so to the Part rather than to a scene', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await page.locator('.crossfader-scene').first().selectOption('5')
+
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'save_crossfader')).length)
+        .toBeGreaterThan(0)
+      const calls = await getInvokeCalls(page, 'save_crossfader')
+      expect(calls[calls.length - 1].args).toMatchObject({ partId: 0, sceneA: 5, sceneB: 8 })
+      // What the scenes hold is untouched - nothing was written to a scene
+      expect(await getInvokeCalls(page, 'save_scene')).toHaveLength(0)
+    })
+
+    test('can be stepped with the wheel, like any other list', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      const a = page.locator('.crossfader-scene').first()
+      await a.hover()
+      await page.mouse.wheel(0, -120)
+      await expect(a).toHaveValue('1')
+    })
+
+    test('says when both ends are the same scene', async ({ page }) => {
+      await expect(page.locator('.crossfader-note')).toHaveCount(0)
+      await page.locator('.mode-toggle').click()
+      await page.locator('.crossfader-scene').last().selectOption('0')
+      await expect(page.locator('.crossfader-note')).toContainText('moving the fader changes nothing')
     })
   })
 

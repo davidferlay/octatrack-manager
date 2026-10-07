@@ -7,7 +7,7 @@ import {
   machineParamLabels, machineParamFields, AMP_PARAM_FIELDS, LFO_PARAM_FIELDS,
   SCENE_XVOL_SPEC, SCENE_XLV_SPEC,
 } from '../utils/partFieldSpecs';
-import { getFxMainLabels, fxShortName, formatFxType } from '../utils/fxLabels';
+import { getFxMainLabels, fxShortName } from '../utils/fxLabels';
 import { useWheelStep } from '../utils/wheelStep';
 import './ScenesPanel.css';
 
@@ -220,6 +220,29 @@ export function ScenesPanel({
 
   const scene = data?.scenes[selected];
 
+  /**
+   * Moves one or both ends of the crossfader.
+   *
+   * Which scenes it sits between belongs to the Part, not to either scene, so this is
+   * written on its own and leaves what the scenes hold untouched.
+   */
+  const setCrossfader = useCallback((sceneA: number, sceneB: number) => {
+    setData(prev => prev && { ...prev, scene_a: sceneA, scene_b: sceneB });
+    onWriteStatusChange?.(writeStatus.writing());
+    invoke('save_crossfader', {
+      path: projectPath, bankId, partId, sceneA, sceneB,
+    })
+      .then(() => {
+        onWriteStatusChange?.(writeStatus.success('Crossfader saved'));
+        setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
+      })
+      .catch(err => {
+        console.error('Failed to save the crossfader:', err);
+        onWriteStatusChange?.(writeStatus.error('Could not save the crossfader'));
+        setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
+      });
+  }, [projectPath, bankId, partId, onWriteStatusChange]);
+
   const setSlot = useCallback((trackId: number, slot: Slot, value: number | null) => {
     if (!scene) return;
     const tracks = scene.tracks.map(t => {
@@ -257,6 +280,14 @@ export function ScenesPanel({
   if (!data || !scene) {
     return <div className="scenes-panel-loading">Reading scenes...</div>;
   }
+
+  /** Every scene, for the two end pickers. A scene with nothing in it is still a
+   *  legitimate end - the crossfader just has nothing to morph towards there. */
+  const sceneOptions = data.scenes.map(s => (
+    <option key={s.scene_id} value={s.scene_id}>
+      {s.scene_id + 1}{s.locked_count ? '' : ' (empty)'}
+    </option>
+  ));
 
   const endLabel = (id: number) => [
     id === data.scene_a ? 'A' : null,
@@ -430,20 +461,47 @@ export function ScenesPanel({
         )}
       </div>
 
-      <div className="scenes-crossfader">
-        <span>
-          The crossfader morphs between scene {data.scene_a + 1} and scene {data.scene_b + 1}
-          {data.scene_a === data.scene_b
-            ? ' - both of its ends are the same scene, so moving it changes nothing'
-            : ''}
-        </span>
-        <span className="scenes-crossfader-fx">
-          {data.fx1_types.map((fx, i) => (
-            <span key={i} className="scenes-fx-chip" title={`T${i + 1}: ${formatFxType(fx)}`}>
-              T{i + 1} {fxShortName(fx, 'FX1')}
-            </span>
-          ))}
-        </span>
+      <div className="crossfader">
+        <span className="crossfader-caption">Crossfader</span>
+        <div className="crossfader-end-picker">
+          <span className="crossfader-end-label">A</span>
+          <select
+            className="crossfader-scene"
+            value={data.scene_a}
+            disabled={!isEditMode}
+            onChange={e => setCrossfader(Number(e.target.value), data.scene_b)}
+            title="The scene the crossfader reaches at its left end"
+          >
+            {sceneOptions}
+          </select>
+        </div>
+
+        {/* The travel between the two ends. Nothing moves here - the fader is on the
+            device - so it shows which scenes sit at each end rather than a position. */}
+        <div className="crossfader-track" aria-hidden="true">
+          <span className="crossfader-cap" />
+          <span className="crossfader-line" />
+          <span className="crossfader-cap" />
+        </div>
+
+        <div className="crossfader-end-picker">
+          <select
+            className="crossfader-scene"
+            value={data.scene_b}
+            disabled={!isEditMode}
+            onChange={e => setCrossfader(data.scene_a, Number(e.target.value))}
+            title="The scene the crossfader reaches at its right end"
+          >
+            {sceneOptions}
+          </select>
+          <span className="crossfader-end-label">B</span>
+        </div>
+
+        {data.scene_a === data.scene_b && (
+          <span className="crossfader-note">
+            Both ends are the same scene, so moving the fader changes nothing
+          </span>
+        )}
       </div>
     </div>
   );
