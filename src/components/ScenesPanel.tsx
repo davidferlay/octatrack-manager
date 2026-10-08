@@ -9,6 +9,7 @@ import {
 } from '../utils/partFieldSpecs';
 import { getFxMainLabels, fxShortName } from '../utils/fxLabels';
 import { useWheelStep } from '../utils/wheelStep';
+import { usePartCommits, PartSaveControls } from './PartSaveControls';
 import './ScenesPanel.css';
 
 /** The five parameter pages a scene can hold. The crossfader level sits beside them. */
@@ -37,6 +38,8 @@ interface ScenesResponse {
   machine_types: string[];
   fx1_types: number[];
   fx2_types: number[];
+  parts_edited_bitmask: number;
+  parts_saved_state: number[];
   scene_a_muted: boolean;
   scene_b_muted: boolean;
 }
@@ -197,6 +200,9 @@ function EndLabel({ end, muted, editable, onToggle }: {
  * other one carries on from the Part itself. That is why this reads as a list of what a
  * scene holds rather than as a second set of parameter pages.
  */
+/** How long a run of edits settles before the bank is rewritten, as the Parts editor. */
+const SAVE_DELAY = 500;
+
 export function ScenesPanel({
   projectPath, bankId, bankName, partId, partNames, isEditMode = false,
   onPartChange, onWriteStatusChange,
@@ -206,19 +212,70 @@ export function ScenesPanel({
   const [selected, setSelected] = useState(0);
   const [showAll, setShowAll] = useState(false);
   const [clipboard, setClipboard] = useState<{ from: number; tracks: SceneTrackLocks[] } | null>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  // Scene data lives in the Part, so this editor writes the same `parts.unsaved` the
+  // Parts editor does and offers the device's same way back from it
+  const commits = usePartCommits({
+    projectPath, bankId, partNames, onWriteStatusChange,
+    // Reload puts the saved Part back, so every scene in it has to be read again
+    onReloaded: () => { reload(); },
+    onError: setError,
+  });
+  const { markModified, adoptBankState } = commits;
+
+  const reload = useCallback(() => {
+    invoke<ScenesResponse>('load_scenes', { path: projectPath, bankId, partId })
+      .then(response => {
+        setData(response);
+        adoptBankState(response.parts_edited_bitmask, response.parts_saved_state);
+      })
+      .catch(err => setError(String(err)));
+  }, [projectPath, bankId, partId, adoptBankState]);
 
   useEffect(() => {
     let current = true;
     setData(null);
     setError(null);
     invoke<ScenesResponse>('load_scenes', { path: projectPath, bankId, partId })
-      .then(response => { if (current) setData(response); })
+      .then(response => {
+        if (!current) return;
+        setData(response);
+        adoptBankState(response.parts_edited_bitmask, response.parts_saved_state);
+      })
       .catch(err => { if (current) setError(String(err)); });
     return () => { current = false; };
-  }, [projectPath, bankId, partId]);
+  }, [projectPath, bankId, partId, adoptBankState]);
 
-  useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
+  useEffect(() => () => {
+    for (const timer of Object.values(saveTimers.current)) clearTimeout(timer);
+  }, []);
+
+  /**
+   * Queues a write, the way the Parts editor queues one behind its knobs.
+   *
+   * Nothing here goes to the file as it is typed or dragged: a run of keystrokes or
+   * wheel notches would otherwise be a run of bank rewrites. One timer per thing being
+   * written, so moving the crossfader does not cancel a scene edit still in flight.
+   */
+  const queueWrite = useCallback((
+    key: string, what: string, run: () => Promise<unknown>,
+  ) => {
+    clearTimeout(saveTimers.current[key]);
+    onWriteStatusChange?.(writeStatus.writing());
+    saveTimers.current[key] = setTimeout(() => {
+      run()
+        .then(() => {
+          onWriteStatusChange?.(writeStatus.success(`${what} saved`));
+          setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
+        })
+        .catch(err => {
+          console.error(`Failed to save the ${what.toLowerCase()}:`, err);
+          onWriteStatusChange?.(writeStatus.error(`Could not save the ${what.toLowerCase()}`));
+          setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
+        });
+    }, SAVE_DELAY);
+  }, [onWriteStatusChange]);
 
   /**
    * Writes a whole scene.
@@ -235,23 +292,11 @@ export function ScenesPanel({
         ? { ...s, tracks, locked_count: countLocks(tracks) }
         : s),
     });
-
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    onWriteStatusChange?.(writeStatus.writing());
-    saveTimer.current = setTimeout(() => {
-      invoke('save_scene', { path: projectPath, bankId, partId, sceneId, tracks })
-        .then(() => {
-          onWriteStatusChange?.(writeStatus.success(`Scene ${sceneId + 1} saved`));
-          setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
-        })
-        .catch(err => {
-          console.error('Failed to save the scene:', err);
-          onWriteStatusChange?.(writeStatus.error('Could not save the scene'));
-          setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
-        });
-      saveTimer.current = null;
-    }, 400);
-  }, [projectPath, bankId, partId, onWriteStatusChange]);
+    markModified(partId);
+    queueWrite(`scene:${sceneId}`, `Scene ${sceneId + 1}`, () => invoke(
+      'save_scene', { path: projectPath, bankId, partId, sceneId, tracks },
+    ));
+  }, [projectPath, bankId, partId, markModified, queueWrite]);
 
   const scene = data?.scenes[selected];
 
@@ -285,20 +330,11 @@ export function ScenesPanel({
     if (sceneA === sceneB) {
       showTip('Both ends are the same scene, so moving the fader changes nothing');
     }
-    onWriteStatusChange?.(writeStatus.writing());
-    invoke('save_crossfader', {
-      path: projectPath, bankId, partId, sceneA, sceneB,
-    })
-      .then(() => {
-        onWriteStatusChange?.(writeStatus.success('Crossfader saved'));
-        setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
-      })
-      .catch(err => {
-        console.error('Failed to save the crossfader:', err);
-        onWriteStatusChange?.(writeStatus.error('Could not save the crossfader'));
-        setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
-      });
-  }, [projectPath, bankId, partId, onWriteStatusChange]);
+    markModified(partId);
+    queueWrite('crossfader', 'Crossfader', () => invoke(
+      'save_crossfader', { path: projectPath, bankId, partId, sceneA, sceneB },
+    ));
+  }, [projectPath, bankId, partId, markModified, queueWrite, showTip]);
 
   /**
    * Mutes or unmutes one end.
@@ -310,24 +346,18 @@ export function ScenesPanel({
     setData(prev => prev && (end === 'A'
       ? { ...prev, scene_a_muted: muted }
       : { ...prev, scene_b_muted: muted }));
-    onWriteStatusChange?.(writeStatus.writing());
-    invoke('save_scene_mute', { path: projectPath, end, muted })
-      .then(() => {
-        onWriteStatusChange?.(writeStatus.success(
-          `Scene ${end} ${muted ? 'muted' : 'unmuted'}`,
-        ));
-        setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
-      })
-      .catch(err => {
-        console.error('Failed to save the scene mute:', err);
-        // Put it back: the device still has it the other way round
-        setData(prev => prev && (end === 'A'
-          ? { ...prev, scene_a_muted: !muted }
-          : { ...prev, scene_b_muted: !muted }));
-        onWriteStatusChange?.(writeStatus.error(`Could not mute scene ${end}`));
-        setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
-      });
-  }, [projectPath, onWriteStatusChange]);
+    // No markModified: this is project state, not Part data, so there is nothing for
+    // Save or Reload Part to do with it
+    queueWrite(`mute:${end}`, `Scene ${end} mute`, () =>
+      invoke('save_scene_mute', { path: projectPath, end, muted })
+        .catch(err => {
+          // Put it back: the device still has it the other way round
+          setData(prev => prev && (end === 'A'
+            ? { ...prev, scene_a_muted: !muted }
+            : { ...prev, scene_b_muted: !muted }));
+          throw err;
+        }));
+  }, [projectPath, queueWrite]);
 
   /** Copies what one end's scene holds into the other end's scene. */
   const copyEnd = useCallback((from: 'A' | 'B', to: 'A' | 'B') => {
@@ -426,17 +456,29 @@ export function ScenesPanel({
   ));
 
   return (
-    <div className="scenes-panel">
-      <div className="scenes-header">
-        <span className="scenes-title">{bankName} - Scenes</span>
+    <div className={`scenes-panel bank-card ${commits.modifiedPartIds.size > 0 ? 'edit-mode' : ''}`}>
+      <div className="bank-card-header">
+        <div className="bank-card-header-left">
+          <h3>{bankName} - Scenes</h3>
+        </div>
+        <PartSaveControls
+          state={commits}
+          activePartIndex={partId}
+          partNames={partNames}
+          visible={isEditMode}
+        />
         <div className="parts-part-tabs">
           {partNames.map((name, index) => (
             <button
               key={index}
-              className={`parts-part-tab ${partId === index ? 'active' : ''}`}
+              className={`parts-part-tab ${partId === index ? 'active' : ''} ${commits.modifiedPartIds.has(index) ? 'modified' : ''}`}
               onClick={() => { onPartChange(index); setSelected(0); }}
+              title={commits.modifiedPartIds.has(index)
+                ? 'Modified. Save keeps the changes; Reload discards them.'
+                : undefined}
             >
               {name} ({index + 1})
+              <span className={`unsaved-indicator ${commits.modifiedPartIds.has(index) ? 'visible' : ''}`}>*</span>
             </button>
           ))}
         </div>
@@ -464,8 +506,7 @@ export function ScenesPanel({
                   ? `The crossfader's ${end} end` : null,
               ].filter(Boolean).join('\n')}
             >
-              {/* Always rendered, so a card with no end is the same height as one with */}
-              <span className="scene-end">{end}</span>
+              {end && <span className="scene-end">{end}</span>}
               <span className="scene-number">{s.scene_id + 1}</span>
               <span className="scene-count">{s.locked_count || '-'}</span>
             </button>

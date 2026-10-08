@@ -2586,6 +2586,11 @@ pub struct ScenesResponse {
     /// What each track's effect blocks hold, so an FX position can be named.
     pub fx1_types: Vec<u8>,
     pub fx2_types: Vec<u8>,
+    /// Which Parts hold edits the device has not been told to keep, and which have a
+    /// saved copy to go back to. Scene data lives in the Part, so the Scenes editor
+    /// offers the same Reload/Save as the Parts editor and needs the same two.
+    pub parts_edited_bitmask: u8,
+    pub parts_saved_state: [u8; 4],
     /// Whether each crossfader end is muted (FUNC + SCENE A/B on the device).
     ///
     /// This is live state kept in the project file's [STATES] block, beside which bank
@@ -2721,9 +2726,22 @@ pub fn read_scenes(
             .collect(),
         fx1_types: part.audio_track_fx1.to_vec(),
         fx2_types: part.audio_track_fx2.to_vec(),
+        parts_edited_bitmask: bank.parts_edited_bitmask,
+        parts_saved_state: bank.parts_saved_state,
         scene_a_muted,
         scene_b_muted,
     })
+}
+
+/// Flags a Part as holding edits the device has not been told to keep.
+///
+/// A scene lives inside its Part, so changing one is changing the Part - the same flag
+/// the Parts editor sets. Without it the device shows no asterisk and offers no Reload
+/// Part, and our own Save button would never light up.
+fn mark_part_edited(bank: &mut BankFile, part_id: u8) {
+    if part_id < 4 {
+        bank.parts_edited_bitmask |= 1 << part_id;
+    }
 }
 
 /// Sets which two scenes the crossfader morphs between.
@@ -2753,6 +2771,7 @@ pub fn save_crossfader(
     let part = &mut bank.parts.unsaved.0[part_id as usize];
     part.active_scenes.scene_a = scene_a;
     part.active_scenes.scene_b = scene_b;
+    mark_part_edited(&mut bank, part_id);
 
     bank.to_data_file(&bank_file_path)
         .map_err(|e| format!("Failed to write bank file: {:?}", e))?;
@@ -2883,6 +2902,7 @@ pub fn save_scene(
 
         xlvs.track_xlvs[track_id] = incoming.xlv.unwrap_or(SCENE_UNASSIGNED);
     }
+    mark_part_edited(&mut bank, part_id);
 
     bank.to_data_file(&bank_file_path)
         .map_err(|e| format!("Failed to write bank file: {:?}", e))?;
@@ -18914,6 +18934,44 @@ mod tests {
             let after = read_scenes(&project.path, "A", 0).unwrap();
             assert!(!after.scene_a_muted, "A was left alone");
             assert!(after.scene_b_muted, "B reads as muted");
+        }
+
+        /// A scene lives inside its Part, so changing one is changing the Part. Without
+        /// the edited flag the device shows no asterisk against it and offers no Reload
+        /// Part - the one way back from a scene edit the user did not mean.
+        #[test]
+        fn test_saving_a_scene_marks_its_part_edited() {
+            let project = TestProject::new();
+            let bank_path = bank_file_path(&project.path, "A").unwrap();
+            assert_eq!(
+                BankFile::from_data_file(&bank_path).unwrap().parts_edited_bitmask, 0,
+                "nothing edited to start"
+            );
+
+            let scenes = read_scenes(&project.path, "A", 2).unwrap();
+            save_scene(&project.path, "A", 2, 0, scenes.scenes[0].tracks.clone()).unwrap();
+
+            let bank = BankFile::from_data_file(&bank_path).unwrap();
+            assert_eq!(bank.parts_edited_bitmask, 0b0100, "only Part 3 is flagged");
+            assert_eq!(read_scenes(&project.path, "A", 2).unwrap().parts_edited_bitmask, 0b0100);
+        }
+
+        /// Which scenes the crossfader reaches is Part data too, so it counts the same.
+        #[test]
+        fn test_moving_a_crossfader_end_marks_its_part_edited() {
+            let project = TestProject::new();
+            save_crossfader(&project.path, "A", 1, 3, 7).unwrap();
+            let bank = BankFile::from_data_file(&bank_file_path(&project.path, "A").unwrap()).unwrap();
+            assert_eq!(bank.parts_edited_bitmask, 0b0010);
+        }
+
+        /// Muting an end is a project setting, not Part data, so it leaves the Part alone
+        #[test]
+        fn test_muting_an_end_does_not_mark_the_part_edited() {
+            let project = TestProject::new();
+            save_scene_mute(&project.path, "A", true).unwrap();
+            let bank = BankFile::from_data_file(&bank_file_path(&project.path, "A").unwrap()).unwrap();
+            assert_eq!(bank.parts_edited_bitmask, 0);
         }
 
         /// Muting is a project setting, so the write has to leave the rest of the

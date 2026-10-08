@@ -104,3 +104,13 @@ is shown and set on its own and never touches what a scene holds.
 | SC61 | Actions | Randomize stays legal | Randomize a scene holding a parameter with gaps in its range, several times | Every value is one the device's own encoder would produce |
 | SC62 | Actions | Randomize on an empty scene | Select a scene holding nothing | "Randomize" is refused |
 | SC63 | Actions | Randomize the device agrees | Randomize, save, then open the project on the device | The scene reads back the values the app showed |
+| SC64 | Saving | The header matches Parts | Open Scenes | The same bank header as Parts: name, Reload/Save/Save All, and the four Part tabs |
+| SC65 | Saving | Nothing to save at first | Open Scenes in Edit mode without changing anything | Save and Save All are refused |
+| SC66 | Saving | A scene edit marks the Part | Change any scene value | The Part's tab gains its asterisk and Save becomes available |
+| SC67 | Saving | Save commits the Part | Press Save | The Part's saved copy is replaced and the asterisk clears |
+| SC68 | Saving | Reload discards scene edits | Change a scene, then press Reload | Every scene in the Part goes back to the saved copy |
+| SC69 | Saving | Reload needs a saved copy | Open a Part never saved, change a scene | Reload is refused with "No saved state yet" |
+| SC70 | Saving | The device agrees | Change a scene, save, open the project on the device | The Part shows no asterisk, and Reload Part restores what was saved |
+| SC71 | Saving | A mute is not a Part edit | Mute an end | Save stays refused: the mute is project state, not Part data |
+| SC72 | Saving | Writes wait | Turn a scene value quickly with the wheel | The bank is written once the turning stops, not once per notch |
+| SC73 | Saving | A change of mind is one write | Mute and unmute an end quickly | One write, of where it ended up |

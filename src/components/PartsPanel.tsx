@@ -12,6 +12,7 @@ import {
   TRACK_LEVEL_SPEC,
 } from '../utils/partFieldSpecs';
 import { PositionBar, WaveGlyph, WheelStepper } from './ParamWidgets';
+import { usePartCommits, PartSaveControls } from './PartSaveControls';
 import {
   fieldHelp, helpTitle, pageHelp, sectionHelp, machineHelp, LEVEL_HELP,
 } from '../utils/partFieldHelp';
@@ -104,15 +105,18 @@ export default function PartsPanel({
   const [localActivePartIndex, setLocalActivePartIndex] = useState<number>(initialActivePart ?? 0);
   const [localLfoTab, setLocalLfoTab] = useState<LfoTabType>('LFO1');
 
-  // Editing state - always editable (like Octatrack behavior)
-  // modifiedPartIds tracks which parts have been edited (and auto-saved to parts.unsaved)
-  const [isCommitting, setIsCommitting] = useState(false);
-  const [isReloading, setIsReloading] = useState(false);
-  const [modifiedPartIds, setModifiedPartIds] = useState<Set<number>>(new Set());
-  // Bank-level state flags from the file (persisted across app restarts)
-  // partsEditedBitmask is kept in sync but we use modifiedPartIds for UI logic
-  const [, setPartsEditedBitmask] = useState<number>(0);
-  const [partsSavedState, setPartsSavedState] = useState<number[]>([0, 0, 0, 0]);
+  // Reload / Save / Save All, shared with the Scenes editor - scene data lives in the
+  // Part, so both write the same two copies the device keeps and need the same buttons
+  const commits = usePartCommits<PartData>({
+    projectPath, bankId, partNames, onWriteStatusChange,
+    onReloaded: (partIndex, part) => setPartsData(prev => {
+      const next = [...prev];
+      next[partIndex] = part;
+      return next;
+    }),
+    onError: setError,
+  });
+  const { modifiedPartIds, markModified, adoptBankState } = commits;
 
   // Ref for tracking LFO drawing state
   const lfoDrawingRef = useRef<{ isDrawing: boolean; partId: number; section: 'lfos' | 'midi_lfos'; trackId: number } | null>(null);
@@ -163,16 +167,7 @@ export default function PartsPanel({
         bankId: bankId
       });
       setPartsData(response.parts);
-      setPartsEditedBitmask(response.parts_edited_bitmask);
-      setPartsSavedState(response.parts_saved_state);
-      // Initialize modifiedPartIds from the bitmask (for parts edited before app opened)
-      const editedParts = new Set<number>();
-      for (let i = 0; i < 4; i++) {
-        if ((response.parts_edited_bitmask & (1 << i)) !== 0) {
-          editedParts.add(i);
-        }
-      }
-      setModifiedPartIds(editedParts);
+      adoptBankState(response.parts_edited_bitmask, response.parts_saved_state);
     } catch (err) {
       console.error('Failed to load parts data:', err);
       setError(err as string);
@@ -180,122 +175,6 @@ export default function PartsPanel({
       setLoading(false);
     }
   };
-
-  // Commit part: copy parts.unsaved to parts.saved (like Octatrack's "SAVE" command)
-  const commitPart = useCallback(async (partIndex: number) => {
-    const partName = partNames[partIndex] || `Part ${partIndex + 1}`;
-    try {
-      setIsCommitting(true);
-      onWriteStatusChange?.(writeStatus.writing(`Saving part ${partName}...`));
-      console.log('[PartsPanel] Committing part:', partIndex);
-      await invoke('commit_part', {
-        path: projectPath,
-        bankId: bankId,
-        partId: partIndex
-      });
-
-      // Remove from modified set after successful commit
-      setModifiedPartIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(partIndex);
-        return newSet;
-      });
-
-      // Update local state: part now has valid saved state, edited flag is cleared
-      setPartsSavedState(prev => {
-        const newState = [...prev];
-        newState[partIndex] = 1;
-        return newState;
-      });
-      setPartsEditedBitmask(prev => prev & ~(1 << partIndex));
-
-      onWriteStatusChange?.(writeStatus.success(`Part ${partName} saved`));
-      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
-    } catch (err) {
-      console.error('Failed to commit part:', err);
-      setError(`Failed to save: ${err}`);
-      onWriteStatusChange?.(writeStatus.error(`Failed to save part ${partName}`));
-      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
-    } finally {
-      setIsCommitting(false);
-    }
-  }, [projectPath, bankId, partNames, onWriteStatusChange]);
-
-  // Commit all parts: copy all parts.unsaved to parts.saved (like Octatrack's "SAVE ALL" command)
-  const commitAllParts = useCallback(async () => {
-    if (modifiedPartIds.size === 0) return;
-
-    try {
-      setIsCommitting(true);
-      onWriteStatusChange?.(writeStatus.writing('Saving all parts...'));
-      console.log('[PartsPanel] Committing all parts');
-      await invoke('commit_all_parts', {
-        path: projectPath,
-        bankId: bankId
-      });
-
-      // Clear all modified indicators
-      setModifiedPartIds(new Set());
-
-      // Update local state: all parts now have valid saved state, all edited flags cleared
-      setPartsSavedState([1, 1, 1, 1]);
-      setPartsEditedBitmask(0);
-
-      onWriteStatusChange?.(writeStatus.success('All parts saved'));
-      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
-    } catch (err) {
-      console.error('Failed to commit all parts:', err);
-      setError(`Failed to save all: ${err}`);
-      onWriteStatusChange?.(writeStatus.error('Failed to save all'));
-      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
-    } finally {
-      setIsCommitting(false);
-    }
-  }, [projectPath, bankId, modifiedPartIds.size, onWriteStatusChange]);
-
-  // Reload part: copy parts.saved back to parts.unsaved (like Octatrack's "RELOAD" command)
-  // Only available if the part has valid saved state AND has been edited
-  const reloadPart = useCallback(async (partIndex: number) => {
-    const partName = partNames[partIndex] || `Part ${partIndex + 1}`;
-    try {
-      setIsReloading(true);
-      onWriteStatusChange?.(writeStatus.writing(`Reloading part ${partName}...`));
-      console.log('[PartsPanel] Reloading part:', partIndex);
-      const reloadedPart = await invoke<PartData>('reload_part', {
-        path: projectPath,
-        bankId: bankId,
-        partId: partIndex
-      });
-
-      // Update local state with reloaded data
-      setPartsData(prev => {
-        const newData = [...prev];
-        newData[partIndex] = reloadedPart;
-        return newData;
-      });
-
-      // Remove from modified set after successful reload
-      setModifiedPartIds(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(partIndex);
-        return newSet;
-      });
-
-      // Update local state: edited flag is cleared for this part
-      setPartsEditedBitmask(prev => prev & ~(1 << partIndex));
-
-      onWriteStatusChange?.(writeStatus.success(`Part ${partName} reloaded`));
-      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
-    } catch (err) {
-      console.error('Failed to reload part:', err);
-      setError(`Failed to reload: ${err}`);
-      onWriteStatusChange?.(writeStatus.error(`Failed to reload part ${partName}`));
-      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
-    } finally {
-      setIsReloading(false);
-    }
-  }, [projectPath, bankId, partNames, onWriteStatusChange]);
-
 
   // Generic function to update a parameter value and auto-save to parts.unsaved
   /**
@@ -306,7 +185,7 @@ export default function PartsPanel({
    * snapshot each time and only the last write would survive.
    */
   const queuePartSave = useCallback((partId: number, what: string) => {
-    setModifiedPartIds(prev => new Set([...prev, partId]));
+    markModified(partId);
 
     if (saveDebounceRef.current.timer) {
       clearTimeout(saveDebounceRef.current.timer);
@@ -506,7 +385,7 @@ export default function PartsPanel({
     });
 
     // Track which part was modified (shows * indicator)
-    setModifiedPartIds(prev => new Set([...prev, partId]));
+    markModified(partId);
   }, []);
 
   // Save LFO design to backend (called on mouse release)
@@ -571,7 +450,7 @@ export default function PartsPanel({
     });
 
     // Track which part was modified (shows * indicator)
-    setModifiedPartIds(prev => new Set([...prev, partId]));
+    markModified(partId);
   }, []);
 
   // Save part to backend (called on mouse release from knob)
@@ -2740,41 +2619,12 @@ export default function PartsPanel({
         <div className="bank-card-header-left">
           <h3>{bankName} - Parts</h3>
         </div>
-        <div className={`parts-edit-controls ${isEditMode ? 'visible' : 'hidden'}`}>
-          {/* Reload: restore active part from parts.saved (requires valid saved state AND unsaved changes) */}
-          <button
-            className="cancel-button"
-            onClick={() => reloadPart(activePartIndex)}
-            disabled={isReloading || isCommitting || !modifiedPartIds.has(activePartIndex) || partsSavedState[activePartIndex] !== 1}
-            title={
-              partsSavedState[activePartIndex] !== 1
-                ? 'No saved state yet: Save part first!'
-                : modifiedPartIds.has(activePartIndex)
-                  ? `Reload part ${partNames[activePartIndex]} from saved state`
-                  : 'No changes to reload'
-            }
-          >
-            Reload
-          </button>
-          {/* Save: commit active part from parts.unsaved to parts.saved */}
-          <button
-            className="save-button"
-            onClick={() => commitPart(activePartIndex)}
-            disabled={isCommitting || isReloading || !modifiedPartIds.has(activePartIndex)}
-            title={modifiedPartIds.has(activePartIndex) ? `Save part ${partNames[activePartIndex]}` : 'No changes to save'}
-          >
-            Save
-          </button>
-          {/* Save All: commit all modified parts */}
-          <button
-            className="save-button"
-            onClick={commitAllParts}
-            disabled={isCommitting || isReloading || modifiedPartIds.size === 0}
-            title={modifiedPartIds.size > 0 ? `Save all ${modifiedPartIds.size} modified parts` : 'No changes to save'}
-          >
-            Save All
-          </button>
-        </div>
+        <PartSaveControls
+          state={commits}
+          activePartIndex={activePartIndex}
+          partNames={partNames}
+          visible={isEditMode}
+        />
         <div className="parts-part-tabs">
           {partNames.map((partName, index) => (
             <button

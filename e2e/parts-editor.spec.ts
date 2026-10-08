@@ -195,6 +195,8 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
               machine_types: Array(8).fill('Flex'),
               fx1_types: Array(8).fill(opts.fx1Type),
               fx2_types: Array(8).fill(8),
+              parts_edited_bitmask: opts.partsEditedBitmask,
+              parts_saved_state: opts.partsSavedState,
               scene_a_muted: opts.sceneMutes[0],
               scene_b_muted: opts.sceneMutes[1],
             }
@@ -2100,8 +2102,7 @@ test.describe('Scenes', () => {
   test('marks the two ends of the crossfader', async ({ page }) => {
     await expect(card(page, 1).locator('.scene-end')).toHaveText('A')
     await expect(card(page, 9).locator('.scene-end')).toHaveText('B')
-    // Present but empty on a scene that is neither end, so every card is one height
-    await expect(card(page, 2).locator('.scene-end')).toHaveText('')
+    await expect(card(page, 2).locator('.scene-end')).toHaveCount(0)
     // ...and the fader itself says the same, with a pair of ends rather than a sentence
     await expect(page.locator('.crossfader-scene').first()).toHaveValue('0')
     await expect(page.locator('.crossfader-scene').last()).toHaveValue('8')
@@ -2407,12 +2408,38 @@ test.describe('Scenes', () => {
         const a = ends(page).first()
         await a.click()
         await expect(a).toHaveClass(/muted/)
+        await expect
+          .poll(async () => (await getInvokeCalls(page, 'save_scene_mute')).length)
+          .toBe(1)
+
         await a.click()
         await expect(a).not.toHaveClass(/muted/)
-
+        await expect
+          .poll(async () => (await getInvokeCalls(page, 'save_scene_mute')).length)
+          .toBe(2)
         const calls = await getInvokeCalls(page, 'save_scene_mute')
         expect(calls.map(c => c.args.muted)).toEqual([true, false])
         expect(calls.every(c => c.args.end === 'A')).toBe(true)
+      })
+
+      /**
+       * The write waits, the way the Parts editor's does behind its knobs. Clicking
+       * twice before it settles is one change of mind, so it is one write of where it
+       * ended up rather than two of every step on the way.
+       */
+      test('a change of mind before it settles is a single write', async ({ page }) => {
+        await page.locator('.mode-toggle').click()
+        const a = ends(page).first()
+        await a.click()
+        await a.click()
+        await expect(a).not.toHaveClass(/muted/)
+
+        await expect
+          .poll(async () => (await getInvokeCalls(page, 'save_scene_mute')).length,
+            { timeout: 3000 })
+          .toBe(1)
+        const calls = await getInvokeCalls(page, 'save_scene_mute')
+        expect(calls[0].args).toMatchObject({ end: 'A', muted: false })
       })
     })
 
@@ -2500,6 +2527,80 @@ test.describe('Scenes', () => {
       }
       // Eight rolls of a 128-value parameter landing on one number is not randomness
       expect(seen.size).toBeGreaterThan(1)
+    })
+  })
+
+  /**
+   * Scene data lives in the Part, so the Scenes editor writes the same `parts.unsaved`
+   * the Parts editor does - and has to offer the same way back from it.
+   */
+  test.describe('saving the Part', () => {
+    const header = (page: Page) => page.locator('.scenes-panel .bank-card-header')
+
+    test('wears the same header as the Parts editor', async ({ page }) => {
+      await expect(header(page).locator('h3')).toContainText('Scenes')
+      await expect(header(page).locator('.parts-part-tabs .parts-part-tab')).toHaveCount(4)
+    })
+
+    test('offers Reload, Save and Save All only in Edit mode', async ({ page }) => {
+      await expect(header(page).locator('.parts-edit-controls')).toHaveClass(/hidden/)
+      await page.locator('.mode-toggle').click()
+      await expect(header(page).locator('.parts-edit-controls')).toHaveClass(/visible/)
+      for (const name of ['Reload', 'Save', 'Save All']) {
+        await expect(header(page).getByRole('button', { name, exact: true })).toBeVisible()
+      }
+    })
+
+    test('has nothing to save until a scene is changed', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await expect(header(page).getByRole('button', { name: 'Save', exact: true }))
+        .toBeDisabled()
+      await expect(header(page).getByRole('button', { name: 'Save All' })).toBeDisabled()
+    })
+
+    test('a scene edit marks the Part, and Save commits it', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await page.getByRole('button', { name: 'Clear' }).click()
+
+      const save = header(page).getByRole('button', { name: 'Save', exact: true })
+      await expect(save).toBeEnabled()
+      // ...and the Part's own tab says so, as it does on the Parts page
+      await expect(page.locator('.parts-part-tab').first().locator('.unsaved-indicator'))
+        .toHaveClass(/visible/)
+
+      await save.click()
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'commit_part')).length)
+        .toBe(1)
+      expect((await getInvokeCalls(page, 'commit_part'))[0].args).toMatchObject({ partId: 0 })
+      await expect(save).toBeDisabled()
+    })
+
+    test('Reload needs a saved copy to go back to', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await page.getByRole('button', { name: 'Clear' }).click()
+      const reload = header(page).getByRole('button', { name: 'Reload' })
+      // Part 1 has a saved copy in the fixture, so Reload is offered once it is dirty
+      await expect(reload).toBeEnabled()
+
+      await reload.click()
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'reload_part')).length)
+        .toBe(1)
+      // The scenes are read again, because reloading replaced every one of them
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'load_scenes')).length)
+        .toBeGreaterThan(1)
+    })
+
+    test('muting an end is project state, so it does not dirty the Part', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await page.locator('.crossfader-end-label').first().click()
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'save_scene_mute')).length)
+        .toBe(1)
+      await expect(header(page).getByRole('button', { name: 'Save', exact: true }))
+        .toBeDisabled()
     })
   })
 

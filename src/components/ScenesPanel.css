@@ -32,11 +32,16 @@
   color: var(--elektron-text-primary);
 }
 
-/* All sixteen in one row, as they sit under the sixteen trig keys. */
+/* All sixteen in one row, as they sit under the sixteen trig keys - and framed as one
+   block, because that is what they are: the device's own row of trig keys. */
 .scenes-grid {
   display: grid;
   grid-template-columns: repeat(16, 1fr);
   gap: 4px;
+  padding: 8px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
 }
 
 .scene-card {
@@ -44,8 +49,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
-  padding: 5px 4px 8px;
+  gap: 2px;
+  padding: 11px 4px 8px;
   background: #252525;
   border: 1px solid #333;
   border-radius: 4px;
@@ -84,14 +89,16 @@
 }
 
 /* Which scenes the crossfader sits between - the one thing about a scene that is not
-   stored in the scene itself. It has its own line above the number: an end can be both
-   ends at once ("A/B"), which over a two-digit number left neither readable. */
+   stored in the scene itself. In the top right corner, out of the number's way: an end
+   can be both at once ("A/B"), so it is small and the card keeps a gutter for it. */
 .scene-end {
-  min-height: 15px;
-  font-size: 13px;
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  font-size: 10px;
   font-weight: 700;
-  line-height: 15px;
-  letter-spacing: 0.5px;
+  line-height: 1;
+  letter-spacing: 0.3px;
   color: var(--elektron-orange);
 }
 
