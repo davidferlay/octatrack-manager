@@ -31,7 +31,7 @@ interface SceneData {
   locked_count: number;
 }
 
-interface ScenesResponse {
+export interface ScenesResponse {
   scenes: SceneData[];
   scene_a: number;
   scene_b: number;
@@ -53,6 +53,8 @@ interface ScenesPanelProps {
   isEditMode?: boolean;
   onPartChange: (partId: number) => void;
   onWriteStatusChange?: (status: WriteStatus) => void;
+  /** Already read by the project page, so the tab opens on data rather than a spinner. */
+  preloaded?: ScenesResponse;
 }
 
 /** One position of one page on one track: what it is, and what the scene holds there. */
@@ -205,13 +207,18 @@ const SAVE_DELAY = 500;
 
 export function ScenesPanel({
   projectPath, bankId, bankName, partId, partNames, isEditMode = false,
-  onPartChange, onWriteStatusChange,
+  onPartChange, onWriteStatusChange, preloaded,
 }: ScenesPanelProps) {
-  const [data, setData] = useState<ScenesResponse | null>(null);
+  const [data, setData] = useState<ScenesResponse | null>(preloaded ?? null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState(0);
   const [showAll, setShowAll] = useState(false);
   const [clipboard, setClipboard] = useState<{ from: number; tracks: SceneTrackLocks[] } | null>(null);
+  // One track's worth, kept apart from the whole-scene clipboard so taking a copy of
+  // one track does not throw away a scene already copied
+  const [trackClip, setTrackClip] = useState<
+    { from: number; trackId: number; track: SceneTrackLocks } | null
+  >(null);
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Scene data lives in the Part, so this editor writes the same `parts.unsaved` the
@@ -233,10 +240,18 @@ export function ScenesPanel({
       .catch(err => setError(String(err)));
   }, [projectPath, bankId, partId, adoptBankState]);
 
+  // Read ahead by the project page where it could be, so switching to this tab - or
+  // to All Banks - shows the scenes rather than a row of "Reading bank...". Anything
+  // not read ahead is still read here, so this works either way.
   useEffect(() => {
     let current = true;
-    setData(null);
     setError(null);
+    if (preloaded) {
+      setData(preloaded);
+      adoptBankState(preloaded.parts_edited_bitmask, preloaded.parts_saved_state);
+      return;
+    }
+    setData(null);
     invoke<ScenesResponse>('load_scenes', { path: projectPath, bankId, partId })
       .then(response => {
         if (!current) return;
@@ -245,7 +260,7 @@ export function ScenesPanel({
       })
       .catch(err => { if (current) setError(String(err)); });
     return () => { current = false; };
-  }, [projectPath, bankId, partId, adoptBankState]);
+  }, [projectPath, bankId, partId, adoptBankState, preloaded]);
 
   useEffect(() => () => {
     for (const timer of Object.values(saveTimers.current)) clearTimeout(timer);
@@ -358,6 +373,36 @@ export function ScenesPanel({
           throw err;
         }));
   }, [projectPath, queueWrite]);
+
+  /**
+   * One track's worth of a scene, taken from one scene and put into another.
+   *
+   * Scenes are mostly built a track at a time - a filter sweep on one track, a volume
+   * drop on another - so moving one track's settings to the next scene is the edit
+   * that comes up, and copying the whole scene to get it would bring seven other
+   * tracks along with it.
+   *
+   * It only ever goes back into the same track: position four of the SRC page is a
+   * different parameter on a Flex machine than on a Pickup one, so the same bytes in
+   * another track would not mean the same thing.
+   */
+  const copyTrack = useCallback((trackId: number) => {
+    const track = scene?.tracks.find(t => t.track_id === trackId);
+    if (!scene || !track) return;
+    setTrackClip({ from: scene.scene_id, trackId, track });
+    showTip(`T${trackId + 1} scene params copied from scene ${scene.scene_id + 1}`);
+  }, [scene, showTip]);
+
+  const pasteTrack = useCallback((trackId: number) => {
+    if (!scene || !trackClip || trackClip.trackId !== trackId) return;
+    writeScene(scene.scene_id, scene.tracks.map(t => (
+      t.track_id === trackId ? { ...trackClip.track, track_id: trackId } : t
+    )));
+    showTip(
+      `T${trackId + 1} scene params from scene ${trackClip.from + 1}`
+      + ` put into scene ${scene.scene_id + 1}`,
+    );
+  }, [scene, trackClip, writeScene, showTip]);
 
   /** Copies what one end's scene holds into the other end's scene. */
   const copyEnd = useCallback((from: 'A' | 'B', to: 'A' | 'B') => {
@@ -605,6 +650,35 @@ export function ScenesPanel({
                   <span className="scene-track-machine">
                     {data.machine_types[track.track_id]}
                   </span>
+                  {isEditMode && (
+                    <span className="scene-track-actions">
+                      <button
+                        className="scene-track-action"
+                        onClick={() => copyTrack(track.track_id)}
+                        title={`Take a copy of what scene ${selected + 1} holds for this track`}
+                        aria-label={`Copy track ${track.track_id + 1}`}
+                      >
+                        <i className="fas fa-copy" />
+                      </button>
+                      <button
+                        className={`scene-track-action ${
+                          trackClip && trackClip.trackId === track.track_id
+                            && trackClip.from !== selected ? 'armed' : ''}`}
+                        disabled={!trackClip
+                          || trackClip.trackId !== track.track_id
+                          || trackClip.from === selected}
+                        onClick={() => pasteTrack(track.track_id)}
+                        title={trackClip && trackClip.trackId === track.track_id
+                          ? (trackClip.from === selected
+                            ? 'Already this scene'
+                            : `Put this track's settings from scene ${trackClip.from + 1} here, replacing them`)
+                          : 'Copy this track from another scene first'}
+                        aria-label={`Paste track ${track.track_id + 1}`}
+                      >
+                        <i className="fas fa-paste" />
+                      </button>
+                    </span>
+                  )}
                   <span className="scene-track-count">{held}</span>
                 </div>
                 <table className="scene-locks">

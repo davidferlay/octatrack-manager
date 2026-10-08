@@ -114,3 +114,16 @@ is shown and set on its own and never touches what a scene holds.
 | SC71 | Saving | A mute is not a Part edit | Mute an end | Save stays refused: the mute is project state, not Part data |
 | SC72 | Saving | Writes wait | Turn a scene value quickly with the wheel | The bank is written once the turning stops, not once per notch |
 | SC73 | Saving | A change of mind is one write | Mute and unmute an end quickly | One write, of where it ended up |
+| SC74 | Track copy | Offered only in Edit mode | Look at a track's heading outside Edit mode | No copy or paste buttons |
+| SC75 | Track copy | Nothing to paste at first | Enter Edit mode without copying | Paste is refused on every track |
+| SC76 | Track copy | Copy one track | Press copy on a track, pick another scene, press paste on the same track | That scene holds what the first one held for that track |
+| SC77 | Track copy | The other tracks are untouched | After the paste above, check the other seven tracks | They hold what they held before |
+| SC78 | Track copy | Same track only | Copy track 1, then look at track 2's paste | It is refused: the same byte means a different parameter on another machine |
+| SC79 | Track copy | Not back into its own scene | Copy a track and stay on that scene | Paste is refused, saying it is already this scene |
+| SC80 | Track copy | Separate from the whole-scene clipboard | Copy a scene, then copy a track | The scene is still there to paste |
+| SC81 | Track copy | The device agrees | Copy a track between scenes, save, open the project on the device | That scene holds the copied track's locks |
+| SC82 | Loading | All Banks is offered | Open Scenes once the project has loaded | "All Banks" is selectable, not stuck on "(loading...)" |
+| SC83 | Loading | All Banks shows every bank | Pick All Banks on Scenes | One Scenes panel per loaded bank |
+| SC84 | Loading | Read ahead | Open a project, wait for the banks, then open Scenes | The scenes are already there, with no per-bank wait |
+| SC85 | Track copy | Green marks the destination | Copy a track, then pick another scene | That track's paste button is green; the other tracks' are not |
+| SC86 | Track copy | The count does not move | Note where a track's parameter count sits, then toggle Edit mode | The buttons appear to its left and the count stays put |

@@ -2604,6 +2604,117 @@ test.describe('Scenes', () => {
     })
   })
 
+  /**
+   * A scene is built a track at a time, so moving one track's settings to the next
+   * scene is the edit that comes up - copying the whole scene would bring the other
+   * seven along with it.
+   */
+  test.describe('copying one track between scenes', () => {
+    const head = (page: Page, track: number) =>
+      page.locator('.scene-track').nth(track).locator('.scene-track-head')
+    const copy = (page: Page, track: number) =>
+      head(page, track).getByRole('button', { name: `Copy track ${track + 1}` })
+    const paste = (page: Page, track: number) =>
+      head(page, track).getByRole('button', { name: `Paste track ${track + 1}` })
+
+    test('is offered only in Edit mode', async ({ page }) => {
+      await expect(page.locator('.scene-track-actions')).toHaveCount(0)
+      await page.locator('.mode-toggle').click()
+      await expect(copy(page, 0)).toBeVisible()
+      await expect(paste(page, 0)).toBeVisible()
+    })
+
+    test('will not paste before something has been copied', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await expect(paste(page, 0)).toBeDisabled()
+    })
+
+    test('puts one track from one scene into another, leaving the rest alone', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      // Scene 1 holds AMP VOL 100 and XLV 64 on track 1
+      await copy(page, 0).click()
+      await page.locator('.scene-card').nth(5).click()
+      await expect(paste(page, 0)).toBeEnabled()
+      await paste(page, 0).click()
+
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'save_scene')).length)
+        .toBe(1)
+      const call = (await getInvokeCalls(page, 'save_scene'))[0]
+      expect(call.args.sceneId).toBe(5)
+      expect(call.args.tracks[0].amp[3]).toBe(100)
+      expect(call.args.tracks[0].xlv).toBe(64)
+      // Scene 6 holds an LFO value and an AMP one on track 1 in the fixture, both of
+      // which the paste replaces - and every other track is untouched
+      expect(call.args.tracks[1].amp).toEqual([null, null, null, null, null, null])
+      expect(call.args.tracks.length).toBe(8)
+    })
+
+    test('only offers the track it was copied from', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await copy(page, 0).click()
+      await page.locator('.scene-card').nth(5).click()
+      // Only tracks holding something are listed, so the rest need showing first
+      await page.locator('.scene-show-all').click()
+      await expect(page.locator('.scene-track')).toHaveCount(8)
+      await expect(paste(page, 0)).toBeEnabled()
+      // Position four of the SRC page is a different parameter on another machine,
+      // so the same bytes are not offered to a different track
+      await expect(paste(page, 1)).toBeDisabled()
+      await expect(paste(page, 7)).toBeDisabled()
+    })
+
+    /** Eight tracks and one of them will take it: green says which, without reading. */
+    test('marks where the copy can go', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await expect(paste(page, 0)).not.toHaveClass(/armed/)
+
+      await copy(page, 0).click()
+      // Not yet: it is still the scene it came from
+      await expect(paste(page, 0)).not.toHaveClass(/armed/)
+
+      await page.locator('.scene-card').nth(5).click()
+      await expect(paste(page, 0)).toHaveClass(/armed/)
+      await page.locator('.scene-show-all').click()
+      await expect(paste(page, 1)).not.toHaveClass(/armed/)
+    })
+
+    test('the count stays put when Edit mode is toggled', async ({ page }) => {
+      const count = page.locator('.scene-track').first().locator('.scene-track-count')
+      const before = await count.boundingBox()
+      await page.locator('.mode-toggle').click()
+      await expect(page.locator('.scene-track-actions').first()).toBeVisible()
+      expect((await count.boundingBox())?.x).toBe(before?.x)
+    })
+
+    test('will not paste a track back into the scene it came from', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await copy(page, 0).click()
+      await expect(paste(page, 0)).toBeDisabled()
+      await expect(paste(page, 0)).toHaveAttribute('title', /Already this scene/)
+    })
+
+    test('says what it did', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await copy(page, 0).click()
+      await expect(page.locator('.toast-notification'))
+        .toContainText('T1 scene params copied from scene 1')
+      await page.locator('.scene-card').nth(2).click()
+      await paste(page, 0).click()
+      await expect(page.locator('.toast-notification'))
+        .toContainText('T1 scene params from scene 1 put into scene 3')
+    })
+
+    test('keeps the whole-scene clipboard separate', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await page.getByRole('button', { name: 'Copy', exact: true }).click()
+      await copy(page, 0).click()
+      // The scene copied first is still there to paste
+      await page.locator('.scene-card').nth(3).click()
+      await expect(page.getByRole('button', { name: 'Paste', exact: true })).toBeEnabled()
+    })
+  })
+
   test('selecting a scene does not reload anything', async ({ page }) => {
     const before = (await getInvokeCalls(page, 'load_scenes')).length
     await card(page, 6).click()

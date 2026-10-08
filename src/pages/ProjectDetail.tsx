@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { ProjectMetadata, Bank, PartsDataResponse, SampleSlotUsage } from "../context/ProjectsContext";
 import { BankSelector, ALL_BANKS, formatBankName } from "../components/BankSelector";
 import { TrackSelector, ALL_AUDIO_TRACKS, ALL_MIDI_TRACKS } from "../components/TrackSelector";
-import { ScenesPanel } from "../components/ScenesPanel";
+import { ScenesPanel, ScenesResponse } from "../components/ScenesPanel";
 import { PatternSelector, ALL_PATTERNS } from "../components/PatternSelector";
 import { SampleSlotsTable } from "../components/SampleSlotsTable";
 import PartsPanel from "../components/PartsPanel";
@@ -311,6 +311,42 @@ export function ProjectDetail() {
     }));
     return used;
   }, [banks, loadedBankIndices, selectedBankIndex, selectedPatternIndex, selectedTrackIndex]);
+
+  /**
+   * Every bank's scenes, read in the background once the banks are in.
+   *
+   * Without this the Scenes tab starts reading only when it is first displayed, and
+   * "All Banks" then waits on sixteen bank reads in a row with nothing on screen. The
+   * read is one call per bank covering all four of its Parts, run one bank at a time
+   * so it stays out of the way of whatever the user is actually doing.
+   */
+  const [scenesCache, setScenesCache] = useState<Map<string, ScenesResponse[]>>(new Map());
+  useEffect(() => {
+    if (!projectPath || !allBanksLoaded) return;
+    let cancelled = false;
+    (async () => {
+      for (const bankIndex of Array.from(loadedBankIndices).sort((a, b) => a - b)) {
+        if (cancelled) return;
+        const bank = banks[bankIndex];
+        if (!bank || scenesCache.has(bank.id)) continue;
+        try {
+          const parts = await invoke<ScenesResponse[]>('load_bank_scenes', {
+            path: projectPath, bankId: bank.id,
+          });
+          if (cancelled) return;
+          setScenesCache(prev => new Map(prev).set(bank.id, parts));
+        } catch (err) {
+          // A bank that will not read is already reported by the bank loader; the
+          // Scenes tab falls back to reading it itself and shows the error there
+          console.error(`Failed to read ahead scenes for bank ${bankIndex}:`, err);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+    // scenesCache is read but deliberately not a dependency: adding to it would
+    // restart the loop on every bank it finishes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectPath, allBanksLoaded, loadedBankIndices, banks]);
 
   // Where each sample slot is used (machine assignments + sample locks),
   // computed in the background as soon as the project opens so the badges
@@ -1587,11 +1623,16 @@ export function ProjectDetail() {
                     value={selectedBankIndex}
                     onChange={setSelectedBankIndex}
                     currentBank={metadata?.current_state.bank}
+                    loadedBankIndices={loadedBankIndices}
+                    failedBankIndices={failedBankIndices}
+                    allBanksLoaded={allBanksLoaded}
                   />
                 </div>
                 {(() => {
-                  const bank = banks[selectedBankIndex];
-                  if (!bank || !loadedBankIndices.has(selectedBankIndex)) {
+                  const banksToDisplay = selectedBankIndex === ALL_BANKS
+                    ? Array.from(loadedBankIndices).sort((a, b) => a - b)
+                    : loadedBankIndices.has(selectedBankIndex) ? [selectedBankIndex] : [];
+                  if (banksToDisplay.length === 0) {
                     return <div className="scenes-panel-loading">Reading bank...</div>;
                   }
                   // The Part follows the Parts tab's own selection, so switching between
@@ -1599,17 +1640,26 @@ export function ProjectDetail() {
                   const activePart = sharedPartsActivePartIndex
                     ?? metadata?.current_state.part ?? 0;
                   return (
-                    <ScenesPanel
-                      key={`bank-scenes-${selectedBankIndex}`}
-                      projectPath={projectPath || ''}
-                      bankId={bank.id}
-                      bankName={formatBankName(bank.name, selectedBankIndex)}
-                      partId={activePart}
-                      partNames={bank.parts.map(part => part.name)}
-                      isEditMode={isEditMode}
-                      onPartChange={setSharedPartsActivePartIndex}
-                      onWriteStatusChange={handleWriteStatusChange}
-                    />
+                    <div className="bank-cards">
+                      {banksToDisplay.map(bankIndex => {
+                        const bank = banks[bankIndex];
+                        if (!bank) return null;
+                        return (
+                          <ScenesPanel
+                            key={`bank-scenes-${bankIndex}`}
+                            projectPath={projectPath || ''}
+                            bankId={bank.id}
+                            bankName={formatBankName(bank.name, bankIndex)}
+                            partId={activePart}
+                            partNames={bank.parts.map(part => part.name)}
+                            isEditMode={isEditMode}
+                            onPartChange={setSharedPartsActivePartIndex}
+                            onWriteStatusChange={handleWriteStatusChange}
+                            preloaded={scenesCache.get(bank.id)?.[activePart]}
+                          />
+                        );
+                      })}
+                    </div>
                   );
                 })()}
               </div>

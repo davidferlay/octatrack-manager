@@ -2647,8 +2647,31 @@ pub fn read_scenes(
     let bank = BankFile::from_data_file(&bank_file_path)
         .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
 
-    let (scene_a_muted, scene_b_muted) = scene_end_mutes(project_path);
+    Ok(scenes_for_part(&bank, part_id, scene_end_mutes(project_path)))
+}
 
+/// Every Part of one bank, from a single read of it.
+///
+/// The Scenes editor is read ahead in the background so a bank is ready before it is
+/// looked at, and four calls to `read_scenes` would read the same file four times.
+pub fn read_bank_scenes(
+    project_path: &str,
+    bank_id: &str,
+) -> Result<Vec<ScenesResponse>, String> {
+    let bank_file_path = bank_file_path(project_path, bank_id)?;
+    let bank = BankFile::from_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
+
+    let mutes = scene_end_mutes(project_path);
+    Ok((0..4).map(|part_id| scenes_for_part(&bank, part_id, mutes)).collect())
+}
+
+/// One Part's sixteen scenes, out of a bank already in hand.
+fn scenes_for_part(
+    bank: &BankFile,
+    part_id: u8,
+    (scene_a_muted, scene_b_muted): (bool, bool),
+) -> ScenesResponse {
     let part = &bank.parts.unsaved.0[part_id as usize];
     let six = |values: [u8; 6]| values.iter().map(|v| scene_lock(*v)).collect::<Vec<_>>();
 
@@ -2717,7 +2740,7 @@ pub fn read_scenes(
         })
         .collect();
 
-    Ok(ScenesResponse {
+    ScenesResponse {
         scenes,
         scene_a: part.active_scenes.scene_a,
         scene_b: part.active_scenes.scene_b,
@@ -2730,7 +2753,7 @@ pub fn read_scenes(
         parts_saved_state: bank.parts_saved_state,
         scene_a_muted,
         scene_b_muted,
-    })
+    }
 }
 
 /// Flags a Part as holding edits the device has not been told to keep.
@@ -18934,6 +18957,40 @@ mod tests {
             let after = read_scenes(&project.path, "A", 0).unwrap();
             assert!(!after.scene_a_muted, "A was left alone");
             assert!(after.scene_b_muted, "B reads as muted");
+        }
+
+        /// Reading a bank once for all four Parts has to give exactly what reading it
+        /// four times gives, or the Scenes editor would show something different
+        /// depending on whether it was read ahead or on demand.
+        #[test]
+        fn test_reading_a_whole_bank_matches_reading_each_part() {
+            let project = TestProject::new();
+            save_crossfader(&project.path, "A", 2, 5, 9).unwrap();
+            save_scene_mute(&project.path, "B", true).unwrap();
+
+            let whole = read_bank_scenes(&project.path, "A").unwrap();
+            assert_eq!(whole.len(), 4, "one per Part");
+            for part_id in 0..4u8 {
+                let one = read_scenes(&project.path, "A", part_id).unwrap();
+                let many = &whole[part_id as usize];
+                assert_eq!(many.scene_a, one.scene_a, "part {}", part_id);
+                assert_eq!(many.scene_b, one.scene_b, "part {}", part_id);
+                assert_eq!(many.machine_types, one.machine_types, "part {}", part_id);
+                assert_eq!(many.parts_edited_bitmask, one.parts_edited_bitmask);
+                assert_eq!(many.scene_b_muted, one.scene_b_muted);
+                assert_eq!(many.scenes.len(), one.scenes.len());
+                for (a, b) in many.scenes.iter().zip(one.scenes.iter()) {
+                    assert_eq!(a.locked_count, b.locked_count, "part {}", part_id);
+                    assert_eq!(a.tracks.len(), b.tracks.len());
+                }
+            }
+            // Each Part keeps its own ends: the one that was moved, and the rest
+            assert_eq!((whole[2].scene_a, whole[2].scene_b), (5, 9));
+            assert_ne!(
+                (whole[0].scene_a, whole[0].scene_b),
+                (whole[2].scene_a, whole[2].scene_b),
+                "one read of the bank must not share one Part's ends with another"
+            );
         }
 
         /// A scene lives inside its Part, so changing one is changing the Part. Without

@@ -214,6 +214,18 @@ async fn save_crossfader(
 }
 
 #[tauri::command]
+async fn load_bank_scenes(
+    path: String,
+    bank_id: String,
+) -> Result<Vec<project_reader::ScenesResponse>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::read_bank_scenes(&path, &bank_id)
+    })
+    .await
+    .unwrap()
+}
+
+#[tauri::command]
 async fn save_scene_mute(path: String, end: String, muted: bool) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         project_reader::save_scene_mute(&path, &end, muted)
@@ -1536,6 +1548,7 @@ pub fn run() {
             save_scene,
             save_crossfader,
             save_scene_mute,
+            load_bank_scenes,
             save_parts,
             save_memory_settings,
             commit_part,
