@@ -148,13 +148,13 @@
   justify-content: center;
 }
 
-/* When full-width tracks are inside centered content, let them stretch */
+/* When full-width tracks are inside centered content, let them stretch.
+ * No negative bleed: it used to cancel a 1rem .bank-card padding that is now
+ * 7px/5px, so the card's own padding is all the room there is. */
 .parts-content.centered:has(.parts-tracks.full-width),
 .parts-content.centered:has(.parts-individual-grid) {
   display: block;
   padding: 8px 0;
-  margin: 0 -1rem;
-  width: calc(100% + 2rem);
 }
 
 .parts-tracks {

@@ -311,3 +311,4 @@ Up is more, down is less, throughout.
 | PE203 | Levels | FX1 offers ten effects | Open FX1 in Edit mode | The delay and the three reverbs are not listed |
 | PE204 | Levels | FX2 offers all fifteen | Open FX2 in Edit mode | The delay and the three reverbs are listed |
 | PE205 | Levels | A block keeps naming what it holds | Open a project whose FX1 holds a reverb | The picker names it rather than reading as another effect |
+| PE206 | Layout | No sideways scrollbar | Open each page tab at a normal window width | The window never scrolls horizontally |

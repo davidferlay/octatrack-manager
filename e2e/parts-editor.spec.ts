@@ -2991,3 +2991,21 @@ test.describe('Scenes', () => {
     expect(await getInvokeCalls(page, 'load_scenes')).toHaveLength(before)
   })
 })
+
+test.describe('Parts Editor - Nothing overflows sideways', () => {
+  /** The card's padding is the only room there is: a child that bleeds past it with a
+   *  negative margin puts a horizontal scrollbar on the whole window. */
+  test('no page is wider than the window', async ({ page }) => {
+    await setupTauriMocks(page)
+    await openPartsTab(page)
+
+    for (const label of await page.locator('.parts-page-tabs .parts-tab').allTextContents()) {
+      await page.locator('.parts-page-tabs .parts-tab', { hasText: label }).first().click()
+      const widths = await page.evaluate(() => ({
+        scroll: document.documentElement.scrollWidth,
+        client: document.documentElement.clientWidth,
+      }))
+      expect(widths.scroll, `${label} page overflows sideways`).toBe(widths.client)
+    }
+  })
+})
