@@ -1655,6 +1655,54 @@ test.describe('Parts Editor - Effect type', () => {
     await selectTrack(page, '0')
   })
 
+  /**
+   * Manual 11.4.10: "The selectable effects differ between the two effect pages."
+   * The delay and the three reverbs are FX2's alone.
+   */
+  test.describe('what each block offers', () => {
+    const options = (page: Page) =>
+      fxPicker(page).locator('option').allTextContents()
+
+    test('FX1 leaves out the delay and the reverbs', async ({ page }) => {
+      await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
+      await enterEditMode(page)
+      const names = await options(page)
+      for (const absent of ['DELAY', 'PLATE REV', 'SPRING REV', 'DARK REV']) {
+        expect(names, absent).not.toContain(absent)
+      }
+      expect(names).toHaveLength(11)
+      expect(names[0]).toBe('OFF')
+    })
+
+    test('FX2 offers all fifteen', async ({ page }) => {
+      await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX2$/ }).click()
+      await enterEditMode(page)
+      const names = await options(page)
+      for (const present of ['DELAY', 'PLATE REV', 'SPRING REV', 'DARK REV']) {
+        expect(names, present).toContain(present)
+      }
+      expect(names).toHaveLength(15)
+    })
+
+    /**
+     * A project made elsewhere could hold one in FX1. The picker still has to name
+     * what is loaded, or it would silently read as a different effect.
+     */
+    test('FX1 still names an effect it would not offer', async ({ page }) => {
+      await setupTauriMocks(page, { fx1Type: 8 })
+      await page.reload()
+      await openPartsTab(page)
+      await selectTrack(page, '0')
+      await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
+      await enterEditMode(page)
+
+      await expect(fxPicker(page)).toHaveValue('8')
+      const names = await options(page)
+      expect(names).toContain('DELAY')
+      expect(names).toHaveLength(12)
+    })
+  })
+
   test('is a name in View mode and a picker in Edit mode', async ({ page }) => {
     await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
     await expect(page.locator('.params-column-label').first()).toHaveText('MAIN - FILTER')

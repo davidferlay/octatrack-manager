@@ -16,7 +16,7 @@ import { usePartCommits, PartSaveControls } from './PartSaveControls';
 import {
   fieldHelp, helpTitle, pageHelp, sectionHelp, machineHelp, LEVEL_HELP,
 } from '../utils/partFieldHelp';
-import { formatFxType, getFxMainLabels, getFxSetupLabels, FX_TYPES } from '../utils/fxLabels';
+import { formatFxType, getFxMainLabels, getFxSetupLabels, FX_TYPES, fxTypesForSlot } from '../utils/fxLabels';
 import { fxDefaults } from '../utils/fxDefaults';
 import { SlotPickerModal } from './SlotPickerModal';
 import './PartsPanel.css';
@@ -965,6 +965,9 @@ export default function PartsPanel({
     slot: 'fx1' | 'fx2',
     fxType: number,
   ) => {
+    // The two blocks do not offer the same effects, and a block already holding one
+    // the other cannot take still has to name it rather than silently show something else
+    const choices = fxTypesForSlot(slot);
     const known = FX_TYPES.some(fx => fx.value === fxType);
     if (!isEditMode || !known) {
       // Same box as the picker, minus the border colour, so switching mode does not
@@ -983,9 +986,12 @@ export default function PartsPanel({
             activePart.part_id, trackId, slot, parseInt(e.target.value, 10),
           )}
         >
-          {FX_TYPES.map(fx => (
+          {choices.map(fx => (
             <option key={fx.value} value={fx.value}>{fx.label}</option>
           ))}
+          {!choices.some(fx => fx.value === fxType) && (
+            <option value={fxType}>{formatFxType(fxType)}</option>
+          )}
         </select>
       </span>
     );

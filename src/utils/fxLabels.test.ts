@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  formatFxType, getFxMainLabels, getFxSetupLabels, fxShortName, FX_TYPES,
+  formatFxType, getFxMainLabels, getFxSetupLabels, fxShortName, FX_TYPES, fxTypesForSlot,
 } from './fxLabels'
 
 /** Every effect the device offers, by the value its slot stores. */
@@ -139,5 +139,45 @@ describe('the effect picker list', () => {
       const hasPage = getFxMainLabels(fx.value).some(l => l !== '')
       expect(hasPage, fx.label).toBe(fx.value !== 0)
     }
+  })
+})
+
+/**
+ * The two effect blocks do not offer the same list. Manual 11.4.10 spells it out:
+ * "The selectable effects differ between the two effect pages." The FX1 list stops at
+ * the Lo-fi Collection; FX2 adds the delay and the three reverbs.
+ */
+describe('what each effect block can hold', () => {
+  const FX2_ONLY = [8, 20, 21, 22] // Delay, Plate Rev, Spring Rev, Dark Rev
+
+  it('keeps the delay and the reverbs out of FX1', () => {
+    const fx1 = fxTypesForSlot('fx1').map(fx => fx.value)
+    for (const value of FX2_ONLY) {
+      expect(fx1, formatFxType(value)).not.toContain(value)
+    }
+  })
+
+  it('offers every effect in FX2', () => {
+    expect(fxTypesForSlot('fx2')).toEqual(FX_TYPES)
+  })
+
+  it('gives FX1 the ten the manual lists, plus OFF', () => {
+    expect(fxTypesForSlot('fx1').map(fx => fx.label)).toEqual([
+      'OFF', 'FILTER', 'EQ', 'DJ EQ', 'PHASER', 'FLANGER', 'CHORUS',
+      'SPATIALIZER', 'COMB FILTER', 'COMPRESSOR', 'LO-FI',
+    ])
+  })
+
+  it('leaves the device order alone in both', () => {
+    for (const slot of ['fx1', 'fx2'] as const) {
+      const offered = fxTypesForSlot(slot).map(fx => fx.value)
+      const inOrder = FX_TYPES.map(fx => fx.value).filter(v => offered.includes(v))
+      expect(offered, slot).toEqual(inOrder)
+    }
+  })
+
+  it('starts both lists with OFF, which is not an effect', () => {
+    expect(fxTypesForSlot('fx1')[0].value).toBe(0)
+    expect(fxTypesForSlot('fx2')[0].value).toBe(0)
   })
 })

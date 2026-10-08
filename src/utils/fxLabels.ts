@@ -35,6 +35,20 @@ export const FX_TYPES: { value: number; label: string }[] = [
   0, 4, 12, 13, 16, 17, 18, 5, 19, 24, 28, 8, 20, 21, 22,
 ].map(value => ({ value, label: FX_NAMES[value] }));
 
+/**
+ * The delay and the three reverbs, which only the second effect block offers.
+ *
+ * Manual 11.4.10: "The selectable effects differ between the two effect pages." Its
+ * FX1 list stops at the Lo-fi Collection; the FX2 list adds the Echo Freeze Delay,
+ * the Gatebox Plate Reverb, the Spring Reverb and the Dark Reverb.
+ */
+const FX2_ONLY = new Set([8, 20, 21, 22]);
+
+/** What the given block can be set to, in the order the device lists them. */
+export function fxTypesForSlot(slot: 'fx1' | 'fx2'): { value: number; label: string }[] {
+  return slot === 'fx2' ? FX_TYPES : FX_TYPES.filter(fx => !FX2_ONLY.has(fx.value));
+}
+
 export function formatFxType(value: number): string {
   return FX_NAMES[value] || `FX ${value}`;
 }
