@@ -55,6 +55,9 @@ interface ScenesPanelProps {
   onWriteStatusChange?: (status: WriteStatus) => void;
   /** Already read by the project page, so the tab opens on data rather than a spinner. */
   preloaded?: ScenesResponse;
+  /** Which scene is open. Held by the project page so it survives leaving the tab. */
+  selectedScene: number;
+  onSceneChange: (sceneId: number) => void;
 }
 
 /** One position of one page on one track: what it is, and what the scene holds there. */
@@ -207,11 +210,13 @@ const SAVE_DELAY = 500;
 
 export function ScenesPanel({
   projectPath, bankId, bankName, partId, partNames, isEditMode = false,
-  onPartChange, onWriteStatusChange, preloaded,
+  onPartChange, onWriteStatusChange, preloaded, selectedScene, onSceneChange,
 }: ScenesPanelProps) {
   const [data, setData] = useState<ScenesResponse | null>(preloaded ?? null);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState(0);
+  // The scene number means the same thing in every Part and every bank, so the one the
+  // project page remembers is used as it is rather than clamped or reset
+  const selected = selectedScene;
   const [showAll, setShowAll] = useState(false);
   const [clipboard, setClipboard] = useState<{ from: number; tracks: SceneTrackLocks[] } | null>(null);
   // One track's worth, kept apart from the whole-scene clipboard so taking a copy of
@@ -411,9 +416,9 @@ export function ScenesPanel({
     const target = to === 'A' ? data.scene_a : data.scene_b;
     if (source === target) return;
     writeScene(target, data.scenes[source].tracks);
-    setSelected(target);
+    onSceneChange(target);
     showTip(`Scene ${source + 1} copied into scene ${target + 1}, the ${to} end`);
-  }, [data, writeScene, showTip]);
+  }, [data, writeScene, showTip, onSceneChange]);
 
   /**
    * Gives every value the selected scene holds a new one, at random.
@@ -517,7 +522,7 @@ export function ScenesPanel({
             <button
               key={index}
               className={`parts-part-tab ${partId === index ? 'active' : ''} ${commits.modifiedPartIds.has(index) ? 'modified' : ''}`}
-              onClick={() => { onPartChange(index); setSelected(0); }}
+              onClick={() => onPartChange(index)}
               title={commits.modifiedPartIds.has(index)
                 ? 'Modified. Save keeps the changes; Reload discards them.'
                 : undefined}
@@ -541,7 +546,7 @@ export function ScenesPanel({
                 s.locked_count === 0 ? 'empty' : '',
                 end ? 'crossfader-end' : '',
               ].filter(Boolean).join(' ')}
-              onClick={() => setSelected(s.scene_id)}
+              onClick={() => onSceneChange(s.scene_id)}
               title={[
                 `Scene ${s.scene_id + 1}`,
                 s.locked_count === 0

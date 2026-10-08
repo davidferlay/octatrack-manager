@@ -436,6 +436,39 @@ export function ProjectDetail() {
   const [audioPoolPath, setAudioPoolPath] = useState<string | null>(null); // Path to AUDIO/ directory (for sidebar)
   const [sidebarRefreshTrigger, setSidebarRefreshTrigger] = useState(0); // Incremented to trigger sidebar refresh after import
 
+  /**
+   * Which scene the Scenes tab has open, remembered per project.
+   *
+   * It lives here rather than in the panel so it survives leaving the tab, switching
+   * bank or Part, and a round-trip to another page - a scene number means the same
+   * thing in every bank and Part, so there is nothing to reset on the way.
+   *
+   * Stored as it is chosen rather than from an effect watching it. An effect pair -
+   * one reading, one writing - races on every remount: both run in the same commit,
+   * so the write goes out with the value from before the read, and the next read gets
+   * that back. Writing at the point of the change has no such ordering to get wrong.
+   */
+  const storedScene = (path: string | null) => {
+    if (!path) return 0;
+    const stored = Number(sessionStorage.getItem(`projScene:${path}`));
+    return Number.isInteger(stored) && stored >= 0 && stored < 16 ? stored : 0;
+  };
+  const [selectedSceneIndex, setSelectedSceneIndex] = useState<number>(
+    () => storedScene(projectPath),
+  );
+  const sceneProjectRef = useRef(projectPath);
+  useEffect(() => {
+    if (sceneProjectRef.current === projectPath) return;
+    sceneProjectRef.current = projectPath;
+    setSelectedSceneIndex(storedScene(projectPath));
+    // storedScene reads sessionStorage and holds no state of its own
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectPath]);
+  const chooseScene = useCallback((sceneId: number) => {
+    setSelectedSceneIndex(sceneId);
+    if (projectPath) sessionStorage.setItem(`projScene:${projectPath}`, String(sceneId));
+  }, [projectPath]);
+
   // Remember edit mode per project across navigation (e.g. round-trip to the Audio Pool page)
   useEffect(() => {
     if (projectPath && sessionStorage.getItem(`projEdit:${projectPath}`) === '1') setIsEditMode(true);
@@ -1656,6 +1689,8 @@ export function ProjectDetail() {
                             onPartChange={setSharedPartsActivePartIndex}
                             onWriteStatusChange={handleWriteStatusChange}
                             preloaded={scenesCache.get(bank.id)?.[activePart]}
+                            selectedScene={selectedSceneIndex}
+                            onSceneChange={chooseScene}
                           />
                         );
                       })}

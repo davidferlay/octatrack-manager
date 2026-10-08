@@ -2715,6 +2715,46 @@ test.describe('Scenes', () => {
     })
   })
 
+  /**
+   * The scene number means the same thing in every bank and Part, so there is nothing
+   * to reset when one of those changes - and losing the scene on the way to another
+   * tab and back is the thing that makes picking it again a chore.
+   */
+  test.describe('remembering the scene', () => {
+    // The card's own text is the A/B marker, the number and the count run together,
+    // so the number is read from its own element
+    const selectedScene = (page: Page) =>
+      page.locator('.scene-card.active').locator('.scene-number')
+
+    test('keeps it when the tab is left and come back to', async ({ page }) => {
+      await card(page, 6).click()
+      await expect(selectedScene(page)).toHaveText(/^6/)
+
+      await page.getByRole('button', { name: 'Parts', exact: true }).click()
+      await expect(page.locator('.scenes-grid')).toHaveCount(0)
+      await page.getByRole('button', { name: 'Scenes', exact: true }).click()
+      await expect(selectedScene(page)).toHaveText(/^6/)
+    })
+
+    test('keeps it across a Part change', async ({ page }) => {
+      await card(page, 11).click()
+      await page.locator('.parts-part-tab').nth(2).click()
+      await expect(selectedScene(page)).toHaveText(/^11/)
+    })
+
+    test('keeps it when the page is left entirely', async ({ page }) => {
+      await card(page, 4).click()
+      await expect(selectedScene(page)).toHaveText('4')
+      await page.goto('/')
+      await openScenes(page)
+      await expect(selectedScene(page)).toHaveText(/^4/)
+    })
+
+    test('starts at the first scene for a project not seen before', async ({ page }) => {
+      await expect(selectedScene(page)).toHaveText(/^1/)
+    })
+  })
+
   test('selecting a scene does not reload anything', async ({ page }) => {
     const before = (await getInvokeCalls(page, 'load_scenes')).length
     await card(page, 6).click()
