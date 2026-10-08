@@ -2442,6 +2442,62 @@ test.describe('Scenes', () => {
       await expect(value).toHaveValue('37')
     })
 
+    /**
+     * Writes wait a moment and then go, the way the Parts editor's knobs do: a scene
+     * edit rewrites the whole Part, and typing through four digits must not be four
+     * rewrites of the bank.
+     */
+    test.describe('when the write goes', () => {
+      const sceneWrites = (page: Page) => getInvokeCalls(page, 'save_scene')
+
+      test('typing through several values is one write, of the last one',
+        async ({ page }) => {
+          const value = page.locator('input.scene-value').first()
+          await value.fill('10')
+          await value.fill('20')
+          await value.fill('40')
+
+          await expect.poll(async () => (await sceneWrites(page)).length, { timeout: 3000 })
+            .toBe(1)
+          const calls = await sceneWrites(page)
+          expect(calls[0].args.tracks[0].amp[3]).toBe(104)
+        })
+
+      // Timed from the edit, which can only ever make the gap look longer than it is
+      test('the write waits rather than going straight away', async ({ page }) => {
+        const start = Date.now()
+        await page.locator('input.scene-value').first().fill('40')
+        await expect.poll(async () => (await sceneWrites(page)).length, { timeout: 3000 })
+          .toBe(1)
+        expect(Date.now() - start).toBeGreaterThan(300)
+      })
+
+      test('each scene gets its own write', async ({ page }) => {
+        await page.locator('input.scene-value').first().fill('40')
+        await card(page, 3).click()
+        await page.locator('input.scene-value').first().fill('50')
+
+        await expect.poll(async () => (await sceneWrites(page)).length, { timeout: 3000 })
+          .toBe(2)
+        const calls = await sceneWrites(page)
+        expect(calls.map(c => c.args.sceneId).sort()).toEqual([0, 2])
+      })
+
+      test('moving the crossfader is one write, however far it is moved',
+        async ({ page }) => {
+          const end = page.locator('.crossfader-end-picker select').first()
+          await end.selectOption('3')
+          await end.selectOption('5')
+
+          await expect
+            .poll(async () => (await getInvokeCalls(page, 'save_crossfader')).length,
+              { timeout: 3000 })
+            .toBe(1)
+          const calls = await getInvokeCalls(page, 'save_crossfader')
+          expect(calls[0].args.sceneA).toBe(5)
+        })
+    })
+
     test('writes against the Part being shown', async ({ page }) => {
       await page.locator('.parts-part-tab', { hasText: 'GROOVE' }).click()
       const args = await saved(page, async () => {
@@ -3050,7 +3106,7 @@ test.describe('Scenes', () => {
 
       await page.getByRole('button', { name: 'Scenes', exact: true }).click()
       await expect(page.locator('.scene-card')).toHaveCount(16)
-      await page.locator('.scenes-panel .parts-tab', { hasText: 'GROOVE' }).click()
+      await page.locator('.parts-part-tab', { hasText: 'GROOVE' }).click()
       await expect(page.locator('.scene-card')).toHaveCount(16)
 
       expect(await bankScenesCalls(page)).toHaveLength(2)
@@ -3071,10 +3127,25 @@ test.describe('Scenes', () => {
       await expect.poll(async () => (await bankScenesCalls(page)).length).toBe(2)
       await page.getByRole('button', { name: 'Scenes', exact: true }).click()
 
-      await page.locator('.scenes-panel .parts-tab', { hasText: 'GROOVE' }).click()
+      await page.locator('.parts-part-tab', { hasText: 'GROOVE' }).click()
 
       await expect(page.locator('.scene-card')).toHaveCount(16)
       expect(await getInvokeCalls(page, 'load_scenes')).toHaveLength(0)
+    })
+
+    test('reads the banks again for another project', async ({ page }) => {
+      await reopenProject(page, true)
+      await expect.poll(async () => (await bankScenesCalls(page)).length).toBe(2)
+
+      // Bank ids repeat across projects, so what was read ahead for one must not be
+      // shown as the other's
+      await page.goto('/#/project?path=%2Fmock%2FOTHERPROJECT&name=OTHERPROJECT')
+      await expect
+        .poll(async () => (await bankScenesCalls(page)).map(c => c.args.path))
+        .toEqual([
+          '/mock/TESTPROJECT', '/mock/TESTPROJECT',
+          '/mock/OTHERPROJECT', '/mock/OTHERPROJECT',
+        ])
     })
 
     test('a bank the read-ahead could not read is read by the tab itself',
@@ -3136,9 +3207,9 @@ test.describe('Scenes', () => {
 
       await selector(page).selectOption('-1')
 
-      await expect(page.locator('.scene-card.selected')).toHaveCount(2)
-      for (const selected of await page.locator('.scene-card.selected').all()) {
-        await expect(selected.locator('.scene-number')).toHaveText('6')
+      await expect(page.locator('.scene-card.active')).toHaveCount(2)
+      for (const active of await page.locator('.scene-card.active').all()) {
+        await expect(active.locator('.scene-number')).toHaveText('6')
       }
     })
 

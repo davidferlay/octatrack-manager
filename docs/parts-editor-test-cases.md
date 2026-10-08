@@ -312,3 +312,4 @@ Up is more, down is less, throughout.
 | PE204 | Levels | FX2 offers all fifteen | Open FX2 in Edit mode | The delay and the three reverbs are listed |
 | PE205 | Levels | A block keeps naming what it holds | Open a project whose FX1 holds a reverb | The picker names it rather than reading as another effect |
 | PE206 | Layout | No sideways scrollbar | Open each page tab at a normal window width | The window never scrolls horizontally |
+| PE207 | Save | A refused save says so | Make the card read-only, then press Save | The failure is reported, the Part stays marked as holding changes, and the buttons come back |

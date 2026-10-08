@@ -132,3 +132,14 @@ is shown and set on its own and never touches what a scene holds.
 | SC89 | Help | The scene-only pair | Hover XLV and XVOL | Each says what it does and what MIN and MAX mean, and that one acts before the effects and the other after |
 | SC90 | Grid | Wheel through the scenes | Hover the scene grid and turn the wheel | The selection moves one scene at a time, and stops at either end |
 | SC91 | Grid | Wheel outside Edit mode | Turn the wheel over the grid without Edit mode | The selection still moves; nothing is written |
+| SC92 | Loading | One read per bank | Open a project, wait for the banks, then open Scenes and step through all four Parts | No Part waits on a read: one read of a bank covers all four of its Parts |
+| SC93 | Loading | A bank that will not read | Open a project with one damaged bank file, then open Scenes on that bank | The other banks still show their scenes, and that bank reports its own error |
+| SC94 | Loading | Another project is read again | Open one project, open Scenes, then open a different project and open Scenes | The second project's own scenes are shown - bank letters repeat between projects, so the first one's must not be reused |
+| SC95 | All banks | The same scene in every bank | Pick a scene, then pick All Banks | Every bank shows that same scene number as the chosen one |
+| SC96 | All banks | Back to one bank | From All Banks, pick a single bank | Only that bank is shown, and it is the one picked |
+| SC97 | All banks | Each bank named | Pick All Banks | Each panel carries its own bank name and letter |
+| SC98 | Saving | Each scene is written once | Change a value in one scene, then another in a different scene | Both changes reach the file - the two writes do not collapse into one |
+| SC99 | Saving | Moving the fader twice is one write | Move one crossfader end through two scenes quickly | The bank is written once, for where it ended up |
+| SC100 | Saving | A refused write says so | Make the card read-only, then change a scene value | The failure is reported, and the Part stays marked as holding changes |
+| SC101 | Mute | A freshly copied project | Copy a project folder that has no project.work, open it, and look at the ends | The mutes read as the device left them in the stored project file |
+| SC102 | Mute | A project file without the keys | Open a project whose file carries no SCENE_A_MUTE line, mute an end | The mute takes, and the key is added to the project's state rather than lost |

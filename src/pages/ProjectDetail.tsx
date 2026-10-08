@@ -325,7 +325,13 @@ export function ProjectDetail() {
   // itself, because the loop has to see it as it fills: the cache is state, so a
   // restarted loop would read its first value again and re-read every bank.
   const scenesAsked = useRef<Set<string>>(new Set());
+  // Bank ids repeat across projects, so another project's scenes would read as this
+  // one's. The page is not remounted on the way between them, so this is the only
+  // thing that clears them.
+  const scenesProjectRef = useRef(projectPath);
   useEffect(() => {
+    if (scenesProjectRef.current === projectPath) return;
+    scenesProjectRef.current = projectPath;
     scenesAsked.current = new Set();
     setScenesCache(new Map());
   }, [projectPath]);

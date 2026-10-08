@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { machineTypesForTrack, MACHINE_TYPES, fieldSpec, stepInSpec, clampToSpec, formatSpecValue, parseSpecValue, isDeviceField, noteName, machineParamLabels, SCENE_XVOL_SPEC, SCENE_XLV_SPEC } from './partFieldSpecs'
+import { machineTypesForTrack, MACHINE_TYPES, fieldSpec, stepInSpec, clampToSpec, formatSpecValue, parseSpecValue, isDeviceField, noteName, machineParamLabels, SCENE_XVOL_SPEC, SCENE_XLV_SPEC, TRACK_LEVEL_SPEC } from './partFieldSpecs'
 
 /**
  * The numbers asserted here are what the device itself wrote: each preset project was
@@ -715,5 +715,52 @@ describe('the two volume parameters only a scene can set', () => {
     const vol = fieldSpec('vol', 'Flex')!
     expect(clampToSpec(64, vol)).toBe(64)
     expect(parseSpecValue('MIN', vol)).toBeNull()
+  })
+})
+
+/**
+ * The two levels in the track header, which the device keeps per Part. Unlike the
+ * scene-only pair above, these really are levels - the byte stored is the number shown.
+ */
+describe('the Track and Cue levels', () => {
+  it('runs the whole byte, as the device min and max projects do', () => {
+    expect([TRACK_LEVEL_SPEC.min, TRACK_LEVEL_SPEC.max]).toEqual([0, 127])
+  })
+
+  it('comes up where a factory bank comes up', () => {
+    expect(TRACK_LEVEL_SPEC.default).toBe(108)
+  })
+
+  it('shows the number the device stores, with nothing in between to step over', () => {
+    expect(formatSpecValue(108, TRACK_LEVEL_SPEC)).toBe('108')
+    expect(formatSpecValue(0, TRACK_LEVEL_SPEC)).toBe('0')
+    expect(formatSpecValue(127, TRACK_LEVEL_SPEC)).toBe('127')
+  })
+
+  it('reads a typed number back as itself', () => {
+    expect(parseSpecValue('64', TRACK_LEVEL_SPEC)).toBe(64)
+  })
+
+  it('refuses something that is not a number', () => {
+    expect(parseSpecValue('loud', TRACK_LEVEL_SPEC)).toBeNull()
+    expect(parseSpecValue('', TRACK_LEVEL_SPEC)).toBeNull()
+  })
+
+  it('names neither end, because the device shows neither as a name', () => {
+    expect(parseSpecValue('MIN', TRACK_LEVEL_SPEC)).toBeNull()
+    expect(parseSpecValue('MAX', TRACK_LEVEL_SPEC)).toBeNull()
+  })
+
+  it('holds a typed value inside the range', () => {
+    expect(clampToSpec(200, TRACK_LEVEL_SPEC)).toBe(127)
+    expect(clampToSpec(-5, TRACK_LEVEL_SPEC)).toBe(0)
+    expect(clampToSpec(64, TRACK_LEVEL_SPEC)).toBe(64)
+  })
+
+  it('steps one at a time, and stops at each end', () => {
+    expect(stepInSpec(100, 1, TRACK_LEVEL_SPEC)).toBe(101)
+    expect(stepInSpec(100, -1, TRACK_LEVEL_SPEC)).toBe(99)
+    expect(stepInSpec(127, 1, TRACK_LEVEL_SPEC)).toBe(127)
+    expect(stepInSpec(0, -1, TRACK_LEVEL_SPEC)).toBe(0)
   })
 })
