@@ -3472,8 +3472,6 @@ test.describe('Tools Tab - Copy Banks Sample Options', () => {
   })
 
   test('Execute sends correct parameters with sample options', async ({ page }) => {
-    const optionsPanel = page.locator('.tools-options-panel')
-
     // Default is Copy Sample Slots = Yes, so just wait for validation
     await page.waitForTimeout(500)
 

@@ -26,6 +26,12 @@ interface MockOptions {
   t1FlexSlot?: number
   /** Whether each crossfader end is muted on the device. Neither, by default. */
   sceneMutes?: [boolean, boolean]
+  /**
+   * What the project page's background read-ahead of the scenes finds. Off by
+   * default, as a bank the read-ahead has not reached yet behaves: the Scenes tab
+   * reads the bank itself. `'fail'` is a bank the read-ahead could not read.
+   */
+  preloadScenes?: boolean | 'fail'
 }
 
 async function setupTauriMocks(page: Page, options?: MockOptions) {
@@ -36,8 +42,9 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
     loadedFlexSlots: options?.loadedFlexSlots ?? 3,
     t1FlexSlot: options?.t1FlexSlot ?? null,
     sceneMutes: options?.sceneMutes ?? ([false, false] as [boolean, boolean]),
+    preloadScenes: options?.preloadScenes ?? false,
   }
-  await page.addInitScript((opts: { partsEditedBitmask: number; partsSavedState: number[]; fx1Type: number; loadedFlexSlots: number; t1FlexSlot: number | null; sceneMutes: [boolean, boolean] }) => {
+  await page.addInitScript((opts: { partsEditedBitmask: number; partsSavedState: number[]; fx1Type: number; loadedFlexSlots: number; t1FlexSlot: number | null; sceneMutes: [boolean, boolean]; preloadScenes: boolean | 'fail' }) => {
     const makeMachine = (trackId: number) => ({
       track_id: trackId,
       machine_type: 'Flex',
@@ -118,6 +125,42 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
       midi_ctrl2s: tracks.map(makeMidiCtrl2),
     })
 
+    /** One Part's sixteen scenes. Three hold something; the rest are empty,
+     *  as a real Part mostly is. */
+    const makeScenes = () => {
+          // Three scenes hold something; the rest are empty, as a real Part mostly is
+          const held: Record<number, Record<string, unknown>> = {
+            0: { amp: [null, null, null, 100, null, null], xlv: 64 },
+            2: { machine: [70, null, null, null, null, null], fx1: [null, 30, null, null, null, null] },
+            5: { lfo: [null, null, null, 12, null, null], amp: [null, null, null, null, null, 9] },
+          }
+          const six = () => [null, null, null, null, null, null]
+          return {
+            scenes: Array.from({ length: 16 }, (_, sceneId) => {
+              const tracks = Array.from({ length: 8 }, (_, trackId) => ({
+                track_id: trackId,
+                machine: six(), lfo: six(), amp: six(), fx1: six(), fx2: six(), xlv: null,
+                // Only track 1 carries anything, which keeps the fixture readable
+                ...(trackId === 0 ? (held[sceneId] ?? {}) : {}),
+              }))
+              const locked_count = tracks.reduce((n, t) => n
+                + [t.machine, t.lfo, t.amp, t.fx1, t.fx2]
+                  .reduce((m, page) => m + (page as (number | null)[]).filter(v => v !== null).length, 0)
+                + (t.xlv === null ? 0 : 1), 0)
+              return { scene_id: sceneId, tracks, locked_count }
+            }),
+            scene_a: 0,
+            scene_b: 8,
+            machine_types: Array(8).fill('Flex'),
+            fx1_types: Array(8).fill(opts.fx1Type),
+            fx2_types: Array(8).fill(8),
+            parts_edited_bitmask: opts.partsEditedBitmask,
+            parts_saved_state: opts.partsSavedState,
+            scene_a_muted: opts.sceneMutes[0],
+            scene_b_muted: opts.sceneMutes[1],
+          }
+    }
+
     const invokeCalls: { cmd: string; args: any }[] = []
     ;(window as any).__invokeCalls = invokeCalls
 
@@ -168,39 +211,16 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
             }
           }
 
-          case 'load_scenes': {
-            // Three scenes hold something; the rest are empty, as a real Part mostly is
-            const held: Record<number, Record<string, unknown>> = {
-              0: { amp: [null, null, null, 100, null, null], xlv: 64 },
-              2: { machine: [70, null, null, null, null, null], fx1: [null, 30, null, null, null, null] },
-              5: { lfo: [null, null, null, 12, null, null], amp: [null, null, null, null, null, 9] },
-            }
-            const six = () => [null, null, null, null, null, null]
-            return {
-              scenes: Array.from({ length: 16 }, (_, sceneId) => {
-                const tracks = Array.from({ length: 8 }, (_, trackId) => ({
-                  track_id: trackId,
-                  machine: six(), lfo: six(), amp: six(), fx1: six(), fx2: six(), xlv: null,
-                  // Only track 1 carries anything, which keeps the fixture readable
-                  ...(trackId === 0 ? (held[sceneId] ?? {}) : {}),
-                }))
-                const locked_count = tracks.reduce((n, t) => n
-                  + [t.machine, t.lfo, t.amp, t.fx1, t.fx2]
-                    .reduce((m, page) => m + (page as (number | null)[]).filter(v => v !== null).length, 0)
-                  + (t.xlv === null ? 0 : 1), 0)
-                return { scene_id: sceneId, tracks, locked_count }
-              }),
-              scene_a: 0,
-              scene_b: 8,
-              machine_types: Array(8).fill('Flex'),
-              fx1_types: Array(8).fill(opts.fx1Type),
-              fx2_types: Array(8).fill(8),
-              parts_edited_bitmask: opts.partsEditedBitmask,
-              parts_saved_state: opts.partsSavedState,
-              scene_a_muted: opts.sceneMutes[0],
-              scene_b_muted: opts.sceneMutes[1],
-            }
-          }
+          case 'load_scenes':
+            return makeScenes()
+
+          // One read of the bank covering all four of its Parts, which is what the
+          // project page reads ahead with
+          case 'load_bank_scenes':
+            if (opts.preloadScenes === 'fail') throw new Error('bank will not read')
+            if (!opts.preloadScenes) return null
+            return [0, 1, 2, 3].map(() => makeScenes())
+
           case 'load_parts_data':
             return {
               parts: [0, 1, 2, 3].map((partId) => makePart(partId)),
@@ -1708,7 +1728,9 @@ test.describe('Parts Editor - Effect type', () => {
    * the effect, and the parameter's own debounced save lands first. Without the count,
    * the assertions read that earlier save and pass or fail for the wrong reason.
    */
-  const savedAfter = async (page: Page, act: () => Promise<void>) => {
+  // Whatever the action resolves to is ignored; selectOption, for one, answers with
+  // the values it picked
+  const savedAfter = async (page: Page, act: () => Promise<unknown>) => {
     const before = (await getInvokeCalls(page, 'save_parts')).length
     await act()
     await expect
@@ -2982,6 +3004,154 @@ test.describe('Scenes', () => {
     await expect(button).toHaveClass(/\bon\b/)
     await button.hover()
     expect(await border()).toBe('rgb(138, 198, 234)')
+  })
+
+  /**
+   * The project page reads every bank's scenes in the background as soon as the banks
+   * are loaded, so the tab - and All Banks above all, which is sixteen bank reads -
+   * shows scenes rather than a row of "Reading bank...".
+   */
+  test.describe('reading the banks ahead', () => {
+    /**
+     * A hash-only goto is a same-document navigation, so a new mock would never be
+     * installed - the reload is what re-runs the init scripts. It also lands back on
+     * the project page with no tab chosen, which is where the read-ahead has to work.
+     */
+    const reopenProject = async (page: Page, preloadScenes: boolean | 'fail') => {
+      await setupTauriMocks(page, { preloadScenes })
+      await page.reload()
+      await expect(page.getByRole('button', { name: 'Scenes', exact: true })).toBeVisible()
+    }
+
+    const bankScenesCalls = (page: Page) => getInvokeCalls(page, 'load_bank_scenes')
+
+    test('reads every bank without the tab being opened', async ({ page }) => {
+      await reopenProject(page, true)
+
+      await expect
+        .poll(async () => (await bankScenesCalls(page)).map(c => c.args.bankId))
+        .toEqual(['A', 'B'])
+      expect(await getInvokeCalls(page, 'load_scenes')).toHaveLength(0)
+    })
+
+    test('one call covers all four Parts of a bank', async ({ page }) => {
+      await reopenProject(page, true)
+      await expect.poll(async () => (await bankScenesCalls(page)).length).toBe(2)
+
+      expect((await bankScenesCalls(page)).map(c => c.args)).toEqual([
+        { path: '/mock/TESTPROJECT', bankId: 'A' },
+        { path: '/mock/TESTPROJECT', bankId: 'B' },
+      ])
+    })
+
+    test('reads each bank once, however long the tab stays open', async ({ page }) => {
+      await reopenProject(page, true)
+      await expect.poll(async () => (await bankScenesCalls(page)).length).toBe(2)
+
+      await page.getByRole('button', { name: 'Scenes', exact: true }).click()
+      await expect(page.locator('.scene-card')).toHaveCount(16)
+      await page.locator('.scenes-panel .parts-tab', { hasText: 'GROOVE' }).click()
+      await expect(page.locator('.scene-card')).toHaveCount(16)
+
+      expect(await bankScenesCalls(page)).toHaveLength(2)
+    })
+
+    test('shows the scenes without reading the bank again', async ({ page }) => {
+      await reopenProject(page, true)
+      await expect.poll(async () => (await bankScenesCalls(page)).length).toBe(2)
+
+      await page.getByRole('button', { name: 'Scenes', exact: true }).click()
+
+      await expect(page.locator('.scene-card')).toHaveCount(16)
+      expect(await getInvokeCalls(page, 'load_scenes')).toHaveLength(0)
+    })
+
+    test('switching Part uses what was read ahead for that Part', async ({ page }) => {
+      await reopenProject(page, true)
+      await expect.poll(async () => (await bankScenesCalls(page)).length).toBe(2)
+      await page.getByRole('button', { name: 'Scenes', exact: true }).click()
+
+      await page.locator('.scenes-panel .parts-tab', { hasText: 'GROOVE' }).click()
+
+      await expect(page.locator('.scene-card')).toHaveCount(16)
+      expect(await getInvokeCalls(page, 'load_scenes')).toHaveLength(0)
+    })
+
+    test('a bank the read-ahead could not read is read by the tab itself',
+      async ({ page }) => {
+        await reopenProject(page, 'fail')
+        await page.getByRole('button', { name: 'Scenes', exact: true }).click()
+
+        await expect(page.locator('.scene-card')).toHaveCount(16)
+        expect((await getInvokeCalls(page, 'load_scenes')).length).toBeGreaterThan(0)
+      })
+  })
+
+  /** Every bank at once, which is the selection the read-ahead exists for. */
+  test.describe('every bank at once', () => {
+    const selector = (page: Page) => page.locator('#scenes-bank-select')
+
+    const openAllBanks = async (page: Page) => {
+      await setupTauriMocks(page, { preloadScenes: true })
+      await page.reload()
+      await page.getByRole('button', { name: 'Scenes', exact: true }).click()
+      await expect(page.locator('.scenes-grid')).toHaveCount(1)
+    }
+
+    test('offers All Banks once the banks are loaded', async ({ page }) => {
+      const all = selector(page).locator('option[value="-1"]')
+      await expect(all).toHaveText('All Banks')
+      await expect(all).not.toBeDisabled()
+    })
+
+    test('shows one scene grid per bank', async ({ page }) => {
+      await openAllBanks(page)
+
+      await selector(page).selectOption('-1')
+
+      await expect(page.locator('.scenes-grid')).toHaveCount(2)
+      await expect(page.locator('.scene-card')).toHaveCount(32)
+    })
+
+    test('names each bank it shows', async ({ page }) => {
+      await openAllBanks(page)
+      await selector(page).selectOption('-1')
+
+      const headings = page.locator('.scenes-panel .bank-card-header h3')
+      await expect(headings.first()).toContainText('BANK A')
+      await expect(headings.nth(1)).toContainText('BANK B')
+    })
+
+    test('shows them from what was read ahead, not by reading again', async ({ page }) => {
+      await openAllBanks(page)
+      await selector(page).selectOption('-1')
+
+      await expect(page.locator('.scenes-grid')).toHaveCount(2)
+      expect(await getInvokeCalls(page, 'load_scenes')).toHaveLength(0)
+    })
+
+    test('shows the same scene in every bank', async ({ page }) => {
+      await openAllBanks(page)
+      await card(page, 6).click()
+
+      await selector(page).selectOption('-1')
+
+      await expect(page.locator('.scene-card.selected')).toHaveCount(2)
+      for (const selected of await page.locator('.scene-card.selected').all()) {
+        await expect(selected.locator('.scene-number')).toHaveText('6')
+      }
+    })
+
+    test('goes back to one bank again', async ({ page }) => {
+      await openAllBanks(page)
+      await selector(page).selectOption('-1')
+      await expect(page.locator('.scenes-grid')).toHaveCount(2)
+
+      await selector(page).selectOption('1')
+
+      await expect(page.locator('.scenes-grid')).toHaveCount(1)
+      await expect(page.locator('.scenes-panel .bank-card-header h3')).toContainText('BANK B')
+    })
   })
 
   test('selecting a scene does not reload anything', async ({ page }) => {

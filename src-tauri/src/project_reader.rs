@@ -2647,23 +2647,26 @@ pub fn read_scenes(
     let bank = BankFile::from_data_file(&bank_file_path)
         .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
 
-    Ok(scenes_for_part(&bank, part_id, scene_end_mutes(project_path)))
+    Ok(scenes_for_part(
+        &bank,
+        part_id,
+        scene_end_mutes(project_path),
+    ))
 }
 
 /// Every Part of one bank, from a single read of it.
 ///
 /// The Scenes editor is read ahead in the background so a bank is ready before it is
 /// looked at, and four calls to `read_scenes` would read the same file four times.
-pub fn read_bank_scenes(
-    project_path: &str,
-    bank_id: &str,
-) -> Result<Vec<ScenesResponse>, String> {
+pub fn read_bank_scenes(project_path: &str, bank_id: &str) -> Result<Vec<ScenesResponse>, String> {
     let bank_file_path = bank_file_path(project_path, bank_id)?;
     let bank = BankFile::from_data_file(&bank_file_path)
         .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
 
     let mutes = scene_end_mutes(project_path);
-    Ok((0..4).map(|part_id| scenes_for_part(&bank, part_id, mutes)).collect())
+    Ok((0..4)
+        .map(|part_id| scenes_for_part(&bank, part_id, mutes))
+        .collect())
 }
 
 /// One Part's sixteen scenes, out of a bank already in hand.
@@ -2823,11 +2826,7 @@ pub fn save_scene_mute(project_path: &str, end: &str, muted: bool) -> Result<(),
     } else {
         return Err("Project file not found".to_string());
     };
-    replace_block_fields_surgical(
-        &file,
-        "STATES",
-        &[(key, u8::from(muted).to_string())],
-    )
+    replace_block_fields_surgical(&file, "STATES", &[(key, u8::from(muted).to_string())])
 }
 
 /// Writes one scene's locks back to the bank.
@@ -18948,7 +18947,10 @@ mod tests {
             let work = std::path::Path::new(&project.path).join("project.work");
 
             let before = read_scenes(&project.path, "A", 0).unwrap();
-            assert!(!before.scene_a_muted && !before.scene_b_muted, "neither to start");
+            assert!(
+                !before.scene_a_muted && !before.scene_b_muted,
+                "neither to start"
+            );
 
             let text = std::fs::read_to_string(&work).unwrap();
             assert!(text.contains("SCENE_A_MUTE=0"), "the device writes the key");
@@ -19001,7 +19003,10 @@ mod tests {
             let project = TestProject::new();
             let bank_path = bank_file_path(&project.path, "A").unwrap();
             assert_eq!(
-                BankFile::from_data_file(&bank_path).unwrap().parts_edited_bitmask, 0,
+                BankFile::from_data_file(&bank_path)
+                    .unwrap()
+                    .parts_edited_bitmask,
+                0,
                 "nothing edited to start"
             );
 
@@ -19010,7 +19015,12 @@ mod tests {
 
             let bank = BankFile::from_data_file(&bank_path).unwrap();
             assert_eq!(bank.parts_edited_bitmask, 0b0100, "only Part 3 is flagged");
-            assert_eq!(read_scenes(&project.path, "A", 2).unwrap().parts_edited_bitmask, 0b0100);
+            assert_eq!(
+                read_scenes(&project.path, "A", 2)
+                    .unwrap()
+                    .parts_edited_bitmask,
+                0b0100
+            );
         }
 
         /// Which scenes the crossfader reaches is Part data too, so it counts the same.
@@ -19018,7 +19028,8 @@ mod tests {
         fn test_moving_a_crossfader_end_marks_its_part_edited() {
             let project = TestProject::new();
             save_crossfader(&project.path, "A", 1, 3, 7).unwrap();
-            let bank = BankFile::from_data_file(&bank_file_path(&project.path, "A").unwrap()).unwrap();
+            let bank =
+                BankFile::from_data_file(&bank_file_path(&project.path, "A").unwrap()).unwrap();
             assert_eq!(bank.parts_edited_bitmask, 0b0010);
         }
 
@@ -19027,7 +19038,8 @@ mod tests {
         fn test_muting_an_end_does_not_mark_the_part_edited() {
             let project = TestProject::new();
             save_scene_mute(&project.path, "A", true).unwrap();
-            let bank = BankFile::from_data_file(&bank_file_path(&project.path, "A").unwrap()).unwrap();
+            let bank =
+                BankFile::from_data_file(&bank_file_path(&project.path, "A").unwrap()).unwrap();
             assert_eq!(bank.parts_edited_bitmask, 0);
         }
 
@@ -19043,7 +19055,8 @@ mod tests {
             save_scene_mute(&project.path, "A", true).unwrap();
 
             let after = std::fs::read(&work).unwrap();
-            let before_text = String::from_utf8_lossy(&before).replace("SCENE_A_MUTE=0", "SCENE_A_MUTE=1");
+            let before_text =
+                String::from_utf8_lossy(&before).replace("SCENE_A_MUTE=0", "SCENE_A_MUTE=1");
             assert_eq!(
                 String::from_utf8_lossy(&after),
                 before_text,
@@ -19068,6 +19081,142 @@ mod tests {
         fn test_save_scene_mute_rejects_an_end_that_is_not_a_or_b() {
             let project = TestProject::new();
             assert!(save_scene_mute(&project.path, "C", true).is_err());
+        }
+
+        /// An older project, or one the device wrote before the mutes existed, has no
+        /// such line. Muting an end then has to add it rather than silently do nothing.
+        #[test]
+        fn test_save_scene_mute_adds_a_key_the_project_file_does_not_carry() {
+            let project = TestProject::new();
+            let work = std::path::Path::new(&project.path).join("project.work");
+            let text = std::fs::read_to_string(&work).unwrap();
+            std::fs::write(&work, text.replace("SCENE_A_MUTE=0\r\n", "")).unwrap();
+            assert!(
+                !std::fs::read_to_string(&work).unwrap().contains("SCENE_A_MUTE"),
+                "the key is gone to start"
+            );
+
+            save_scene_mute(&project.path, "A", true).unwrap();
+
+            assert!(read_scenes(&project.path, "A", 0).unwrap().scene_a_muted);
+            let after = std::fs::read_to_string(&work).unwrap();
+            assert_eq!(after.matches("SCENE_A_MUTE=1").count(), 1, "added once");
+            let states = after.split("[STATES]").nth(1).unwrap();
+            assert!(
+                states.split("[/STATES]").next().unwrap().contains("SCENE_A_MUTE=1"),
+                "and inside the block it belongs to"
+            );
+        }
+
+        /// The mutes live in the project file, so without one there is nowhere to put
+        /// them - which has to be an error rather than a write that goes nowhere.
+        #[test]
+        fn test_save_scene_mute_needs_a_project_file() {
+            let project = TestProject::new();
+            std::fs::remove_file(std::path::Path::new(&project.path).join("project.work")).unwrap();
+            assert!(save_scene_mute(&project.path, "A", true).is_err());
+        }
+
+        /// The line is found by name inside one block. A project file holds the same
+        /// name in more than one block in places, and the wrong one would be a setting
+        /// changed behind the user's back.
+        #[test]
+        fn test_save_scene_mute_leaves_the_same_key_in_another_block_alone() {
+            let project = TestProject::new();
+            let work = std::path::Path::new(&project.path).join("project.work");
+            let text = std::fs::read_to_string(&work).unwrap();
+            std::fs::write(
+                &work,
+                text.replace("[SETTINGS]\r\n", "[SETTINGS]\r\nSCENE_A_MUTE=0\r\n"),
+            )
+            .unwrap();
+
+            save_scene_mute(&project.path, "A", true).unwrap();
+
+            let after = std::fs::read_to_string(&work).unwrap();
+            let settings = after.split("[SETTINGS]").nth(1).unwrap();
+            assert!(
+                settings
+                    .split("[/SETTINGS]")
+                    .next()
+                    .unwrap()
+                    .contains("SCENE_A_MUTE=0"),
+                "the one in [SETTINGS] is left as it was"
+            );
+            assert!(
+                read_scenes(&project.path, "A", 0).unwrap().scene_a_muted,
+                "and the one in [STATES] is the one that changed"
+            );
+        }
+
+        /// A project the device has written and ejected has only the stored file. Its
+        /// mutes have to read back, or every freshly-copied project would show both
+        /// ends live whatever the device left them on.
+        #[test]
+        fn test_the_mutes_come_from_the_stored_project_file_when_there_is_no_work_file() {
+            let project = TestProject::new();
+            let dir = std::path::Path::new(&project.path);
+            let text = std::fs::read_to_string(dir.join("project.work")).unwrap();
+            std::fs::write(
+                dir.join("project.strd"),
+                text.replace("SCENE_A_MUTE=0", "SCENE_A_MUTE=1"),
+            )
+            .unwrap();
+            std::fs::remove_file(dir.join("project.work")).unwrap();
+
+            let scenes = read_scenes(&project.path, "A", 0).unwrap();
+            assert!(scenes.scene_a_muted, "read from project.strd");
+            assert!(!scenes.scene_b_muted);
+        }
+
+        /// With neither file there is nothing to read, and the scenes themselves are in
+        /// the bank - so the read still answers, with neither end muted.
+        #[test]
+        fn test_the_scenes_still_read_without_a_project_file_at_all() {
+            let project = TestProject::new();
+            std::fs::remove_file(std::path::Path::new(&project.path).join("project.work")).unwrap();
+
+            let scenes = read_scenes(&project.path, "A", 0).unwrap();
+            assert_eq!(scenes.scenes.len(), 16);
+            assert!(!scenes.scene_a_muted && !scenes.scene_b_muted);
+        }
+
+        #[test]
+        fn test_reading_a_whole_bank_refuses_a_bank_that_does_not_exist() {
+            let project = TestProject::new();
+            assert!(read_bank_scenes(&project.path, "Z").is_err());
+        }
+
+        /// The mutes are one setting for the project, not one per Part, so one read of
+        /// the bank has to report them against every Part it returns.
+        #[test]
+        fn test_reading_a_whole_bank_reports_the_mutes_against_every_part() {
+            let project = TestProject::new();
+            save_scene_mute(&project.path, "A", true).unwrap();
+
+            let whole = read_bank_scenes(&project.path, "A").unwrap();
+            assert_eq!(whole.len(), 4);
+            for (part_id, part) in whole.iter().enumerate() {
+                assert!(part.scene_a_muted, "part {}", part_id);
+                assert!(!part.scene_b_muted, "part {}", part_id);
+            }
+        }
+
+        /// Reading ahead must not look like editing: the device shows an asterisk
+        /// against an edited Part and offers Reload Part, and a background read that
+        /// set either would be telling the user about an edit that never happened.
+        #[test]
+        fn test_reading_a_whole_bank_changes_nothing() {
+            let project = TestProject::new();
+            let bank_path = bank_file_path(&project.path, "A").unwrap();
+            let before = std::fs::read(&bank_path).unwrap();
+
+            let whole = read_bank_scenes(&project.path, "A").unwrap();
+
+            assert_eq!(std::fs::read(&bank_path).unwrap(), before, "bank untouched");
+            for part in &whole {
+                assert_eq!(part.parts_edited_bitmask, 0, "nothing reads as edited");
+            }
         }
 
         /// The mutes come from a second file, so a project whose file will not parse

@@ -218,11 +218,9 @@ async fn load_bank_scenes(
     path: String,
     bank_id: String,
 ) -> Result<Vec<project_reader::ScenesResponse>, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        project_reader::read_bank_scenes(&path, &bank_id)
-    })
-    .await
-    .unwrap()
+    tauri::async_runtime::spawn_blocking(move || project_reader::read_bank_scenes(&path, &bank_id))
+        .await
+        .unwrap()
 }
 
 #[tauri::command]

@@ -59,7 +59,7 @@ async function setupTauriMocks(page: Page) {
     })
 
     ;(window as any).__TAURI_INTERNALS__ = {
-      invoke: async (cmd: string, args?: any) => {
+      invoke: async (cmd: string) => {
         switch (cmd) {
           case 'load_project_metadata':
             return {

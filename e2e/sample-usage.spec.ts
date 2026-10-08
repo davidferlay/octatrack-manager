@@ -10,7 +10,16 @@ import { test, expect, Page } from '@playwright/test'
 
 async function setupMocks(page: Page) {
   await page.addInitScript(() => {
-    const emptyUsage = () => Array(128).fill(null).map(() => [])
+    interface UsageRow {
+      bank: number
+      kind: string
+      track: number
+      part: number | null
+      pattern: number | null
+      step: number | null
+      audible: boolean
+    }
+    const emptyUsage = (): UsageRow[][] => Array(128).fill(null).map(() => [])
 
     ;(window as any).__TAURI_INTERNALS__ = {
       invoke: async (cmd: string) => {

@@ -321,6 +321,14 @@ export function ProjectDetail() {
    * so it stays out of the way of whatever the user is actually doing.
    */
   const [scenesCache, setScenesCache] = useState<Map<string, ScenesResponse[]>>(new Map());
+  // Which banks the read-ahead has already asked for. A ref rather than the cache
+  // itself, because the loop has to see it as it fills: the cache is state, so a
+  // restarted loop would read its first value again and re-read every bank.
+  const scenesAsked = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    scenesAsked.current = new Set();
+    setScenesCache(new Map());
+  }, [projectPath]);
   useEffect(() => {
     if (!projectPath || !allBanksLoaded) return;
     let cancelled = false;
@@ -328,7 +336,8 @@ export function ProjectDetail() {
       for (const bankIndex of Array.from(loadedBankIndices).sort((a, b) => a - b)) {
         if (cancelled) return;
         const bank = banks[bankIndex];
-        if (!bank || scenesCache.has(bank.id)) continue;
+        if (!bank || scenesAsked.current.has(bank.id)) continue;
+        scenesAsked.current.add(bank.id);
         try {
           const parts = await invoke<ScenesResponse[]>('load_bank_scenes', {
             path: projectPath, bankId: bank.id,
@@ -337,15 +346,14 @@ export function ProjectDetail() {
           setScenesCache(prev => new Map(prev).set(bank.id, parts));
         } catch (err) {
           // A bank that will not read is already reported by the bank loader; the
-          // Scenes tab falls back to reading it itself and shows the error there
+          // Scenes tab falls back to reading it itself and shows the error there.
+          // Asking again is allowed, in case the next attempt is on a settled card.
+          scenesAsked.current.delete(bank.id);
           console.error(`Failed to read ahead scenes for bank ${bankIndex}:`, err);
         }
       }
     })();
     return () => { cancelled = true; };
-    // scenesCache is read but deliberately not a dependency: adding to it would
-    // restart the loop on every bank it finishes
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectPath, allBanksLoaded, loadedBankIndices, banks]);
 
   // Where each sample slot is used (machine assignments + sample locks),

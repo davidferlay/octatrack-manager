@@ -35,7 +35,7 @@ async function setupTauriMocks(page: Page) {
       unregisterListener: () => {},
     }
     ;(window as any).__TAURI_INTERNALS__ = {
-      transformCallback: (cb: any) => {
+      transformCallback: () => {
         // Return a callback ID (just a number)
         return 0
       },
