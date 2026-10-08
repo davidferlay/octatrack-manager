@@ -442,8 +442,18 @@
   background: rgba(93, 173, 226, 0.12);
 }
 
-.scene-show-all.on:hover {
+/* Blue in both states: the generic action hover is orange, which is the colour every
+   device-value control uses - this button only changes what is on screen.
+   Written against both classes so it outranks `.scene-action:hover` whichever order
+   the two end up in: at equal specificity that rule wins simply by sitting later. */
+.scene-action.scene-show-all:hover:not(:disabled) {
+  border-color: #5dade2;
+  color: #5dade2;
+}
+
+.scene-action.scene-show-all.on:hover:not(:disabled) {
   border-color: #8ac6ea;
+  color: #8ac6ea;
 }
 
 .scene-action {

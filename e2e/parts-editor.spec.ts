@@ -566,14 +566,17 @@ test.describe('Parts Editor - Sample slot per track and Part', () => {
     await expect(modal).toHaveCount(0)
     expect(await page.evaluate(() => document.body.style.overflow)).toBe('')
 
-    // Short enough that the page is certainly taller than the window. Without this the
-    // check rests on the page happening to overflow at the default size, which a few
-    // pixels of padding anywhere above can take away.
+    // Short enough that the page is certainly taller than the window, so "it scrolls"
+    // means something. Left to the default size this rests on the page happening to
+    // overflow, which a few pixels of padding anywhere above can take away.
     await page.setViewportSize({ width: 1280, height: 400 })
     await expect
       .poll(() => page.evaluate(() => document.body.scrollHeight > window.innerHeight))
       .toBe(true)
-    await page.mouse.wheel(0, 600)
+    // Scrolled outright rather than with the wheel: a frozen page refuses this just the
+    // same, and it does not depend on what happens to sit under the pointer, which is
+    // what the lock is being checked against.
+    await page.evaluate(() => window.scrollTo(0, 300))
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before)
   })
 
@@ -2961,6 +2964,24 @@ test.describe('Scenes', () => {
       // ...and nothing was written
       expect(await getInvokeCalls(page, 'save_scene')).toHaveLength(0)
     })
+  })
+
+  /**
+   * Blue, not the orange every device-value control uses: this button changes what is
+   * on screen, not what is stored. Checked because the generic action hover sits later
+   * in the stylesheet at the same specificity and would otherwise win.
+   */
+  test('Show all params hovers blue, not orange', async ({ page }) => {
+    const button = page.locator('.scene-show-all')
+    const border = () => button.evaluate(el => getComputedStyle(el).borderTopColor)
+
+    await button.hover()
+    expect(await border()).toBe('rgb(93, 173, 226)')
+
+    await button.click()
+    await expect(button).toHaveClass(/\bon\b/)
+    await button.hover()
+    expect(await border()).toBe('rgb(138, 198, 234)')
   })
 
   test('selecting a scene does not reload anything', async ({ page }) => {
