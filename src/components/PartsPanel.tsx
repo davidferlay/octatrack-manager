@@ -12,6 +12,7 @@ import {
   TRACK_LEVEL_SPEC,
 } from '../utils/partFieldSpecs';
 import { PositionBar, WaveGlyph, WheelStepper } from './ParamWidgets';
+import { useWheelStep } from '../utils/wheelStep';
 import { usePartCommits, PartSaveControls } from './PartSaveControls';
 import {
   fieldHelp, helpTitle, pageHelp, sectionHelp, machineHelp, LEVEL_HELP,
@@ -145,6 +146,17 @@ export default function PartsPanel({
   // Derive the actual page type based on whether we're viewing Audio or MIDI tracks
   const activeAudioPage: AudioPageType = activePageIndex === -1 ? 'ALL' : (['SRC', 'AMP', 'LFO', 'FX1', 'FX2', 'REC'][activePageIndex] as AudioPageType);
   const activeMidiPage: MidiPageType = activePageIndex === -1 ? 'ALL' : (['NOTE', 'ARP', 'LFO', 'CTRL1', 'CTRL2'][activePageIndex] as MidiPageType);
+
+  // The strip of pages is one control, so the wheel runs through it anywhere over the
+  // strip rather than only over a tab. ALL is -1 and sits before the first page; a MIDI
+  // track has one page fewer, so the top end follows the track.
+  const lastPageIndex = isMidiTrack ? 4 : 5;
+  const pageTabsWheelRef = useWheelStep(
+    (by: 1 | -1) => setActivePageIndex(
+      Math.min(lastPageIndex, Math.max(-1, activePageIndex + by)),
+    ),
+    null,
+  );
 
   // Always use partsData directly - we edit in place and auto-save
   const activePartsData = partsData;
@@ -2651,7 +2663,7 @@ export default function PartsPanel({
       </div>
 
       {/* Page Tabs - Audio or MIDI based on selected track */}
-      <div className="parts-page-tabs">
+      <div className="parts-page-tabs" ref={pageTabsWheelRef}>
         {!isMidiTrack ? (
           <>
             <button

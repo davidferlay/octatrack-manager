@@ -859,6 +859,64 @@ test.describe('Parts Editor - Track and Cue volume', () => {
   })
 })
 
+/** The strip of pages is one control, like the scene grid, so the wheel runs it. */
+test.describe('Parts Editor - Stepping the page tabs with the wheel', () => {
+  const active = (page: Page) => page.locator('.parts-page-tabs .parts-tab.active')
+
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await openPartsTab(page)
+  })
+
+  test('moves to the next page and back', async ({ page }) => {
+    await selectTrack(page, '0')
+    await expect(active(page)).toHaveText('All')
+
+    await page.locator('.parts-page-tabs').hover()
+    await page.mouse.wheel(0, -120)
+    await expect(active(page)).toHaveText('SRC')
+    await page.mouse.wheel(0, -120)
+    await expect(active(page)).toHaveText('AMP')
+    await page.mouse.wheel(0, 120)
+    await expect(active(page)).toHaveText('SRC')
+  })
+
+  test('stops at either end rather than wrapping', async ({ page }) => {
+    await selectTrack(page, '0')
+    await page.locator('.parts-page-tabs').hover()
+    // ALL is the first, so there is nothing before it
+    await page.mouse.wheel(0, 120)
+    await expect(active(page)).toHaveText('All')
+
+    for (let i = 0; i < 8; i++) await page.mouse.wheel(0, -120)
+    await expect(active(page)).toHaveText('REC')
+  })
+
+  /** A MIDI track has one page fewer, and REC is not one of them. */
+  test('stops at the last page a MIDI track has', async ({ page }) => {
+    await selectTrack(page, '8')
+    await page.locator('.parts-page-tabs').hover()
+    for (let i = 0; i < 8; i++) await page.mouse.wheel(0, -120)
+    await expect(active(page)).toHaveText('CTRL 2')
+  })
+
+  test('works anywhere over the strip, not only over a tab', async ({ page }) => {
+    await selectTrack(page, '0')
+    const box = (await page.locator('.parts-page-tabs').boundingBox())!
+    await page.mouse.move(box.x + 4, box.y + box.height / 2)
+    await page.mouse.wheel(0, -120)
+    await expect(active(page)).toHaveText('SRC')
+  })
+
+  test('steps without Edit mode, because it only changes what is shown', async ({ page }) => {
+    await selectTrack(page, '0')
+    await page.locator('.parts-page-tabs').hover()
+    await page.mouse.wheel(0, -120)
+    await expect(active(page)).toHaveText('SRC')
+    expect(await getInvokeCalls(page, 'save_parts')).toHaveLength(0)
+  })
+})
+
 test.describe('Parts Editor - Field ranges and widgets', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
@@ -2817,6 +2875,83 @@ test.describe('Scenes', () => {
 
     test('starts at the first scene for a project not seen before', async ({ page }) => {
       await expect(selectedScene(page)).toHaveText(/^1/)
+    })
+  })
+
+  /**
+   * The same help the Parts pages give, because they are the same parameters - a scene
+   * sets FLTR BASE, not something of its own, and knowing what it does is the same
+   * question in both places.
+   */
+  test.describe('what each row explains', () => {
+    const row = (page: Page, label: string) =>
+      page.locator('.scene-track').first().locator('.scene-locks tr')
+        .filter({ has: page.locator('.scene-lock-label', { hasText: new RegExp(`^${label}$`) }) })
+
+    test('explains an AMP parameter the way the Parts page does', async ({ page }) => {
+      await expect(row(page, 'VOL')).toHaveAttribute('title', /^VOL - Track volume before/)
+    })
+
+    test('explains the two a scene alone can set', async ({ page }) => {
+      await expect(row(page, 'XLV')).toHaveAttribute('title', /after the track effects/)
+      await expect(row(page, 'XLV')).toHaveAttribute('title', /MIN:/)
+
+      await page.locator('.scene-show-all').click()
+      await expect(row(page, 'XVOL')).toHaveAttribute('title', /before the track effects/)
+    })
+
+    test('names an effect parameter by the effect that is loaded', async ({ page }) => {
+      await page.locator('.scene-show-all').click()
+      // The fixture runs a filter in FX1, so its first position is the filter's BASE
+      const base = page.locator('.scene-track').first().locator('.scene-locks tr')
+        .filter({ has: page.locator('.scene-lock-page', { hasText: /^FLTR$/ }) }).first()
+      await expect(base).toHaveAttribute('title', /^BASE - /)
+    })
+
+    test('explains a parameter the scene does not hold either', async ({ page }) => {
+      await page.locator('.scene-show-all').click()
+      await expect(row(page, 'ATK').first()).toHaveAttribute('title', /^ATK - /)
+    })
+  })
+
+  /** The row of sixteen is one control, so the wheel runs through it. */
+  test.describe('stepping the grid with the wheel', () => {
+    const selected = (page: Page) =>
+      page.locator('.scene-card.active').locator('.scene-number')
+
+    test('moves to the next scene and back', async ({ page }) => {
+      await page.locator('.scenes-grid').hover()
+      await page.mouse.wheel(0, -120)
+      await expect(selected(page)).toHaveText('2')
+      await page.mouse.wheel(0, 120)
+      await expect(selected(page)).toHaveText('1')
+    })
+
+    test('works anywhere over the grid, not only over a card', async ({ page }) => {
+      const box = (await page.locator('.scenes-grid').boundingBox())!
+      // The grid's own padding, which is not a card
+      await page.mouse.move(box.x + 3, box.y + 3)
+      await page.mouse.wheel(0, -120)
+      await expect(selected(page)).toHaveText('2')
+    })
+
+    test('stops at each end rather than wrapping', async ({ page }) => {
+      await page.locator('.scenes-grid').hover()
+      await page.mouse.wheel(0, 120)
+      await expect(selected(page)).toHaveText('1')
+
+      await card(page, 16).click()
+      await page.locator('.scenes-grid').hover()
+      await page.mouse.wheel(0, -120)
+      await expect(selected(page)).toHaveText('16')
+    })
+
+    test('steps without Edit mode, because it only changes what is shown', async ({ page }) => {
+      await page.locator('.scenes-grid').hover()
+      await page.mouse.wheel(0, -120)
+      await expect(selected(page)).toHaveText('2')
+      // ...and nothing was written
+      expect(await getInvokeCalls(page, 'save_scene')).toHaveLength(0)
     })
   })
 

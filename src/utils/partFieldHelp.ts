@@ -169,6 +169,21 @@ const AMP: Record<string, FieldHelp> = {
   bal: {
     text: 'Position in the stereo field, left to right.',
   },
+  // Only a scene can set these two: the device shows them while a SCENE key is held
+  xvol: {
+    text: 'A scene-only volume for the track, acting before the track effects. It holds one of two settings rather than a level, and the crossfader fades between them in an equal-energy way, so moving between two tracks does not dip in the middle.',
+    values: {
+      MIN: 'Silences the track before its effects, so the effect tails go with it',
+      MAX: 'Passes the signal at whatever VOL is already set to',
+    },
+  },
+  xlv: {
+    text: 'A scene-only level for the track, acting after the track effects. The same two settings as XVOL, and the same equal-energy fade - the difference is only where it acts, so an effect tail carries on through a MIN here.',
+    values: {
+      MIN: 'Silences the track after its effects, leaving the tails audible',
+      MAX: 'Passes the signal at whatever LEVEL is already set to',
+    },
+  },
   amp_setup_amp: {
     text: 'How one amplitude envelope behaves when it lands on top of another. Starting from zero cuts cleanly but can click; starting from the current level is smoother but can swallow the attack.',
     values: ENVELOPE_TRIG_VALUES,

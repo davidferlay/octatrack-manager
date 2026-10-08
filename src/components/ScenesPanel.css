@@ -539,17 +539,25 @@
   border-color: #333;
 }
 
+/* An inline-block button sits on the row's text baseline, which left the cross low
+   against the value box next to it. A block fills the cell, and the cell centres it. */
 .scene-lock-clear {
-  width: 21px;
+  width: 24px;
   padding-left: 6px;
+  vertical-align: middle;
 }
 
+/* Flex rather than block: the glyph has no ascender, so on a baseline it reads low
+   inside its own box even when the box itself is centred against the value beside it. */
 .scene-clear-one {
-  width: 19px;
-  height: 19px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
   padding: 0;
   line-height: 1;
-  font-size: 12px;
+  font-size: 17px;
   background: transparent;
   color: var(--elektron-text-secondary);
   border: 1px solid transparent;

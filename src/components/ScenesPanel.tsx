@@ -8,6 +8,7 @@ import {
   SCENE_XVOL_SPEC, SCENE_XLV_SPEC,
 } from '../utils/partFieldSpecs';
 import { getFxMainLabels, fxShortName } from '../utils/fxLabels';
+import { fieldHelp, helpTitle } from '../utils/partFieldHelp';
 import { useWheelStep } from '../utils/wheelStep';
 import { usePartCommits, PartSaveControls } from './PartSaveControls';
 import './ScenesPanel.css';
@@ -68,6 +69,8 @@ interface Slot {
   spec: FieldSpec;
   index: number;
   value: number | null;
+  /** The Parts editor's name for it, which is how its help is looked up. */
+  field: string;
 }
 
 const AMP_LABELS = ['ATK', 'HOLD', 'REL', 'VOL', 'BAL', 'XVOL'];
@@ -99,9 +102,10 @@ function slotsForTrack(
     fields: (string | null)[],
   ): Slot[] => track[key].flatMap((value, index) => {
     const label = labels[index];
-    const spec = specFor(fields[index]);
-    if (!label || !spec) return [];
-    return [{ page: key, pageName, label, spec, index, value }];
+    const field = fields[index];
+    const spec = specFor(field);
+    if (!label || !spec || !field) return [];
+    return [{ page: key, pageName, label, spec, index, value, field }];
   });
 
   const fxFields = (slot: 'fx1' | 'fx2') => [1, 2, 3, 4, 5, 6].map(n => `${slot}_param${n}`);
@@ -115,7 +119,7 @@ function slotsForTrack(
     ...page('fx2', fxShortName(fx2Type, 'FX2'), getFxMainLabels(fx2Type), fxFields('fx2')),
     {
       page: 'xlv', pageName: 'XLV', label: 'XLV', spec: SCENE_XLV_SPEC,
-      index: 0, value: track.xlv,
+      index: 0, value: track.xlv, field: 'xlv',
     },
   ];
 }
@@ -409,6 +413,13 @@ export function ScenesPanel({
     );
   }, [scene, trackClip, writeScene, showTip]);
 
+  // The row of sixteen is one control, so the wheel runs through it anywhere over the
+  // grid rather than only over a card - there is no "label" here to keep clear
+  const gridWheelRef = useWheelStep(
+    (by: 1 | -1) => onSceneChange(Math.min(15, Math.max(0, selected + by))),
+    null,
+  );
+
   /** Copies what one end's scene holds into the other end's scene. */
   const copyEnd = useCallback((from: 'A' | 'B', to: 'A' | 'B') => {
     if (!data) return;
@@ -534,7 +545,7 @@ export function ScenesPanel({
         </div>
       </div>
 
-      <div className="scenes-grid">
+      <div className="scenes-grid" ref={gridWheelRef}>
         {data.scenes.map(s => {
           const end = endLabel(s.scene_id);
           return (
@@ -692,6 +703,18 @@ export function ScenesPanel({
                       <tr
                         key={`${slot.page}-${slot.index}`}
                         className={slot.value === null ? 'unheld' : ''}
+                        title={helpTitle(slot.label, fieldHelp(
+                          slot.field,
+                          data.machine_types[track.track_id],
+                          {
+                            label: slot.label,
+                            fxType: slot.page === 'fx1'
+                              ? data.fx1_types[track.track_id]
+                              : slot.page === 'fx2'
+                                ? data.fx2_types[track.track_id]
+                                : undefined,
+                          },
+                        ))}
                       >
                         <td className="scene-lock-page">{slot.pageName}</td>
                         <td className="scene-lock-label">{slot.label}</td>
@@ -721,8 +744,11 @@ export function ScenesPanel({
                               className="scene-clear-one"
                               onClick={() => setSlot(track.track_id, slot, null)}
                               title="Take this parameter out of the scene"
+                              aria-label={`Take ${slot.label} out of the scene`}
                             >
-                              x
+                              {/* A multiplication sign, not a lowercase x: the letter
+                                  sits on the baseline and reads low against the value */}
+                              &times;
                             </button>
                           )}
                         </td>

@@ -127,3 +127,8 @@ is shown and set on its own and never touches what a scene holds.
 | SC84 | Loading | Read ahead | Open a project, wait for the banks, then open Scenes | The scenes are already there, with no per-bank wait |
 | SC85 | Track copy | Green marks the destination | Copy a track, then pick another scene | That track's paste button is green; the other tracks' are not |
 | SC86 | Track copy | The count does not move | Note where a track's parameter count sits, then toggle Edit mode | The buttons appear to its left and the count stays put |
+| SC87 | Help | The same help as Parts | Hover a scene row for an AMP or SRC parameter | The same description the Parts page gives for it |
+| SC88 | Help | Named by the loaded effect | Hover a scene row for an FX position | It is described as the effect currently loaded in that block |
+| SC89 | Help | The scene-only pair | Hover XLV and XVOL | Each says what it does and what MIN and MAX mean, and that one acts before the effects and the other after |
+| SC90 | Grid | Wheel through the scenes | Hover the scene grid and turn the wheel | The selection moves one scene at a time, and stops at either end |
+| SC91 | Grid | Wheel outside Edit mode | Turn the wheel over the grid without Edit mode | The selection still moves; nothing is written |

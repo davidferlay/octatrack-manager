@@ -304,3 +304,10 @@ Up is more, down is less, throughout.
 | PE196 | Save | Changes survive a reopen | Change a parameter, leave the Parts tab, come back | The change is still there and the Part is still marked modified |
 | PE197 | Save | Committed values reach the device | Save, eject, open the project on the device | The device shows the edited values in that Part |
 | PE198 | Save | Other Parts untouched | Change one Part, save, compare the other three on the device | They are unchanged |
+| PE199 | Pages | Wheel through the pages | Hover the page tab strip and turn the wheel | The page moves one at a time, ALL through REC |
+| PE200 | Pages | Wheel stops at either end | Turn the wheel past ALL, then past REC | It holds at each end rather than wrapping |
+| PE201 | Pages | A MIDI track has one page fewer | Select a MIDI track and wheel to the end | It stops at CTRL 2; there is no REC page |
+| PE202 | Pages | Anywhere over the strip | Turn the wheel over the strip's padding, not a tab | The page still moves |
+| PE203 | Levels | FX1 offers ten effects | Open FX1 in Edit mode | The delay and the three reverbs are not listed |
+| PE204 | Levels | FX2 offers all fifteen | Open FX2 in Edit mode | The delay and the three reverbs are listed |
+| PE205 | Levels | A block keeps naming what it holds | Open a project whose FX1 holds a reverb | The picker names it rather than reading as another effect |

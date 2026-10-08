@@ -27,8 +27,15 @@ function direction(e: WheelEvent): 1 | -1 | 0 {
  * of parameters has to remain scrollable without editing everything on the way past.
  *
  * Pass null to leave it alone, which is what a read-only field does.
+ *
+ * `within` narrows which part of the element answers. The default is the parameter's
+ * own controls; passing null makes the whole element answer, which is what a region
+ * that is one control - a row of cards to pick from - wants.
  */
-export function useWheelStep(step: ((by: 1 | -1) => void) | null) {
+export function useWheelStep(
+  step: ((by: 1 | -1) => void) | null,
+  within: string | null = '.param-control, .param-value',
+) {
   // Read through a ref so the listener survives every render without being rebound
   const latest = useRef(step);
   latest.current = step;
@@ -43,7 +50,7 @@ export function useWheelStep(step: ((by: 1 | -1) => void) | null) {
       // mostly parameters, a cell-wide target means scrolling the page quietly edits
       // everything the pointer passes over - the label and the gaps have to stay
       // ordinary scrolling surface for the page to be usable at all.
-      if (!target?.closest?.('.param-control, .param-value')) return;
+      if (within && !target?.closest?.(within)) return;
       const by = direction(e);
       if (!by || !latest.current) return;
       e.preventDefault();
@@ -53,7 +60,7 @@ export function useWheelStep(step: ((by: 1 | -1) => void) | null) {
     };
     node.addEventListener('wheel', onWheel, { passive: false });
     return () => node.removeEventListener('wheel', onWheel);
-  }, []);
+  }, [within]);
 }
 
 /**
