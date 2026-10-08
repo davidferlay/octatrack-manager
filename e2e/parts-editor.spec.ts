@@ -565,6 +565,14 @@ test.describe('Parts Editor - Sample slot per track and Part', () => {
     await page.keyboard.press('Escape')
     await expect(modal).toHaveCount(0)
     expect(await page.evaluate(() => document.body.style.overflow)).toBe('')
+
+    // Short enough that the page is certainly taller than the window. Without this the
+    // check rests on the page happening to overflow at the default size, which a few
+    // pixels of padding anywhere above can take away.
+    await page.setViewportSize({ width: 1280, height: 400 })
+    await expect
+      .poll(() => page.evaluate(() => document.body.scrollHeight > window.innerHeight))
+      .toBe(true)
     await page.mouse.wheel(0, 600)
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(before)
   })

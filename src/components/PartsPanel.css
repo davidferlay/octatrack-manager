@@ -138,7 +138,7 @@
 }
 
 .parts-content {
-  padding: 16px;
+  padding: 8px 15px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -152,7 +152,7 @@
 .parts-content.centered:has(.parts-tracks.full-width),
 .parts-content.centered:has(.parts-individual-grid) {
   display: block;
-  padding: 16px 0;
+  padding: 8px 0;
   margin: 0 -1rem;
   width: calc(100% + 2rem);
 }
