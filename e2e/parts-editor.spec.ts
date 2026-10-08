@@ -1667,7 +1667,7 @@ test.describe('Parts Editor - Effect type', () => {
       await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
       await enterEditMode(page)
       const names = await options(page)
-      for (const absent of ['DELAY', 'PLATE REV', 'SPRING REV', 'DARK REV']) {
+      for (const absent of ['DELAY', 'PLATE REVERB', 'SPRING REVERB', 'DARK REVERB']) {
         expect(names, absent).not.toContain(absent)
       }
       expect(names).toHaveLength(11)
@@ -1678,7 +1678,7 @@ test.describe('Parts Editor - Effect type', () => {
       await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX2$/ }).click()
       await enterEditMode(page)
       const names = await options(page)
-      for (const present of ['DELAY', 'PLATE REV', 'SPRING REV', 'DARK REV']) {
+      for (const present of ['DELAY', 'PLATE REVERB', 'SPRING REVERB', 'DARK REVERB']) {
         expect(names, present).toContain(present)
       }
       expect(names).toHaveLength(15)
@@ -1714,7 +1714,8 @@ test.describe('Parts Editor - Effect type', () => {
 
   test('offers every effect in the order the device lists them', async ({ page }) => {
     await enterEditMode(page)
-    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
+    // FX2, because only it offers the whole list - see "what each block offers" above
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX2$/ }).click()
     await expect(fxPicker(page).locator('option')).toHaveText([
       'OFF', 'FILTER', 'EQ', 'DJ EQ', 'PHASER', 'FLANGER', 'CHORUS', 'SPATIALIZER',
       'COMB FILTER', 'COMPRESSOR', 'LO-FI', 'DELAY', 'PLATE REVERB', 'SPRING REVERB',
@@ -1724,7 +1725,8 @@ test.describe('Parts Editor - Effect type', () => {
 
   test('saves the effect against that Part, track and block', async ({ page }) => {
     await enterEditMode(page)
-    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
+    // A reverb, which is FX2's to offer
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX2$/ }).click()
     await fxPicker(page).selectOption('20') // PLATE REVERB
 
     await expect
@@ -1732,21 +1734,21 @@ test.describe('Parts Editor - Effect type', () => {
       .toBeGreaterThan(0)
     const calls = await getInvokeCalls(page, 'save_parts')
     const saved = calls[calls.length - 1].args.partsData[0]
-    expect(saved.fxs[0].fx1_type).toBe(20)
+    expect(saved.fxs[0].fx2_type).toBe(20)
     // The other block and the other tracks are left where they were
-    expect(saved.fxs[0].fx2_type).toBe(8)
-    expect(saved.fxs[1].fx1_type).toBe(4)
+    expect(saved.fxs[0].fx1_type).toBe(4)
+    expect(saved.fxs[1].fx2_type).toBe(8)
   })
 
   test('the parameter names follow the new effect', async ({ page }) => {
     await enterEditMode(page)
-    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
-    // A filter's MAIN page
-    await expect(page.locator('.param-label', { hasText: /^BASE$/ })).toHaveCount(1)
+    // FX2 starts on the delay in the fixture, and the reverbs are its to offer
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX2$/ }).click()
+    await expect(page.locator('.param-label', { hasText: /^FB$/ })).toHaveCount(1)
 
     await fxPicker(page).selectOption('21') // SPRING REVERB
     await expect(page.locator('.param-label', { hasText: /^TIME$/ })).toHaveCount(1)
-    await expect(page.locator('.param-label', { hasText: /^BASE$/ })).toHaveCount(0)
+    await expect(page.locator('.param-label', { hasText: /^FB$/ })).toHaveCount(0)
     // The spring reverb leaves its first row to TIME alone. The blank positions keep
     // their cells, so HP, LP and MIX stay in the columns the device puts them in.
     const cells = page.locator('.params-grid').first().locator('.param-item')
@@ -1758,7 +1760,7 @@ test.describe('Parts Editor - Effect type', () => {
 
   test('the parameter help follows the new effect', async ({ page }) => {
     await enterEditMode(page)
-    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX2$/ }).click()
     await fxPicker(page).selectOption('20') // PLATE REVERB
     const tip = await page.locator('.param-item')
       .filter({ has: page.locator('.param-label', { hasText: /^TIME$/ }) })
@@ -1779,10 +1781,11 @@ test.describe('Parts Editor - Effect type', () => {
       .first().locator('select.param-select')
     await expect(pmtr.locator('option').nth(18)).toHaveText('FLTR BASE')
 
+    // An effect FX1 can take - its reverbs belong to FX2
     await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
-    await fxPicker(page).selectOption('20') // PLATE REVERB
+    await fxPicker(page).selectOption('16') // PHASER
     await page.locator('.parts-page-tabs .parts-tab', { hasText: /^LFO$/ }).click()
-    await expect(pmtr.locator('option').nth(18)).toHaveText('PLTE TIME')
+    await expect(pmtr.locator('option').nth(18)).toHaveText('PHSR CNTR')
   })
 
   /**
@@ -1792,7 +1795,9 @@ test.describe('Parts Editor - Effect type', () => {
    */
   test('resets the twelve parameters to what the device writes', async ({ page }) => {
     await enterEditMode(page)
-    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
+    // FX2, because the reverbs are its to offer. It holds the delay in the fixture,
+    // which has a BASE of its own at a different position
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX2$/ }).click()
     const base = page.locator('.param-item')
       .filter({ has: page.locator('.param-label', { hasText: /^BASE$/ }) })
       .first().locator('input.param-value')
@@ -1800,10 +1805,10 @@ test.describe('Parts Editor - Effect type', () => {
     await base.blur()
 
     const fx = (await savedAfter(page, () => fxPicker(page).selectOption('21'))).fxs[0]
-    expect(fx.fx1_param1).toBe(23) // TIME, not the 77 left by the filter
-    expect(fx.fx1_param4).toBe(20) // HP
-    expect(fx.fx1_param5).toBe(127) // LP
-    expect(fx.fx1_setup1).toBe(1) // TYPE, which the device shows as 2
+    expect(fx.fx2_param1).toBe(23) // TIME, not the 77 left by the delay
+    expect(fx.fx2_param4).toBe(20) // HP
+    expect(fx.fx2_param5).toBe(127) // LP
+    expect(fx.fx2_setup1).toBe(1) // TYPE, which the device shows as 2
   })
 
   /**
@@ -1812,16 +1817,18 @@ test.describe('Parts Editor - Effect type', () => {
    */
   test('steps over the positions the new effect leaves blank', async ({ page }) => {
     await enterEditMode(page)
-    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX1$/ }).click()
-    const wdth = page.locator('.param-item')
-      .filter({ has: page.locator('.param-label', { hasText: /^WDTH$/ }) })
+    // FX2, which holds the delay in the fixture - its FB is the second position, the
+    // one the spring reverb leaves blank
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^FX2$/ }).click()
+    const fb = page.locator('.param-item')
+      .filter({ has: page.locator('.param-label', { hasText: /^FB$/ }) })
       .first().locator('input.param-value')
-    await wdth.fill('99')
-    await wdth.blur()
+    await fb.fill('99')
+    await fb.blur()
 
     // The spring reverb leaves its second and third MAIN positions blank
     const saved = await savedAfter(page, () => fxPicker(page).selectOption('21'))
-    expect(saved.fxs[0].fx1_param2).toBe(99)
+    expect(saved.fxs[0].fx2_param2).toBe(99)
   })
 
   test('leaves a block set to OFF as it was', async ({ page }) => {
@@ -1897,11 +1904,21 @@ test.describe('Parts Editor - Effect type', () => {
 
   test('the ALL page heading changes it too', async ({ page }) => {
     await enterEditMode(page)
+    // A reverb, so FX2's heading - the one block that offers it
     const heading = page.locator('.parts-all-section')
-      .filter({ has: page.locator('.params-label', { hasText: /^FX1 - / }) })
-    await expect(heading.locator('select.fx-type-select')).toHaveValue('4')
+      .filter({ has: page.locator('.params-label', { hasText: /^FX2 - / }) })
+    await expect(heading.locator('select.fx-type-select')).toHaveValue('8')
     await heading.locator('select.fx-type-select').selectOption('22')
     await expect(heading.locator('.param-label', { hasText: /^SHVG$/ })).toHaveCount(1)
+  })
+
+  test('each ALL page heading offers its own block list', async ({ page }) => {
+    await enterEditMode(page)
+    const list = (block: 'FX1' | 'FX2') => page.locator('.parts-all-section')
+      .filter({ has: page.locator('.params-label', { hasText: new RegExp(`^${block} - `) }) })
+      .locator('select.fx-type-select option')
+    await expect(list('FX1')).toHaveCount(11)
+    await expect(list('FX2')).toHaveCount(15)
   })
 })
 
