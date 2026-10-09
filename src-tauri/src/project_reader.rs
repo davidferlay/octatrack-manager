@@ -19092,7 +19092,9 @@ mod tests {
             let text = std::fs::read_to_string(&work).unwrap();
             std::fs::write(&work, text.replace("SCENE_A_MUTE=0\r\n", "")).unwrap();
             assert!(
-                !std::fs::read_to_string(&work).unwrap().contains("SCENE_A_MUTE"),
+                !std::fs::read_to_string(&work)
+                    .unwrap()
+                    .contains("SCENE_A_MUTE"),
                 "the key is gone to start"
             );
 
@@ -19103,7 +19105,11 @@ mod tests {
             assert_eq!(after.matches("SCENE_A_MUTE=1").count(), 1, "added once");
             let states = after.split("[STATES]").nth(1).unwrap();
             assert!(
-                states.split("[/STATES]").next().unwrap().contains("SCENE_A_MUTE=1"),
+                states
+                    .split("[/STATES]")
+                    .next()
+                    .unwrap()
+                    .contains("SCENE_A_MUTE=1"),
                 "and inside the block it belongs to"
             );
         }
