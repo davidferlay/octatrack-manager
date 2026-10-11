@@ -202,6 +202,26 @@ mod tests {
     }
 
     #[test]
+    fn committed_s4_records_nonempty_save_operation() {
+        let meta: Value = serde_json::from_str(
+            &fs::read_to_string(
+                fixture_root()
+                    .join("s4_after_project_save")
+                    .join("capture.meta.json"),
+            )
+            .expect("S4 meta"),
+        )
+        .expect("json");
+        let save = meta["save_operation"]
+            .as_str()
+            .expect("save_operation string");
+        assert!(
+            !save.trim().is_empty(),
+            "S4 must record explicit project save"
+        );
+    }
+
+    #[test]
     fn destination_pattern_paste_typed_deltas_follow_decoded_banks() {
         let s1_work = decode_roundtrip("s1_destination_selected_before_paste", "bank02.work");
         let s2_work = decode_roundtrip("s2_after_pattern_paste", "bank02.work");

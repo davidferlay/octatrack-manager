@@ -23,7 +23,7 @@
   "dest_sentinel_present_b": null,
   "destination_ui_sentinel": null,
   "destination_ui_sentinel_after_reload": null,
-  "save_operation": "",
+  "save_operation": "Explicit project save",
   "copy_confirmation": "",
   "project_reloaded": false,
   "capture_transport": "unknown",
