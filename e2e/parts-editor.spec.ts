@@ -3331,6 +3331,8 @@ test.describe('Scenes', () => {
       await open(page)
       const row = page.locator('.scene-matrix-table tbody tr').first()
       await expect(row.locator('.scene-matrix-cell').nth(1)).toHaveText('-')
+      await expect(row.locator('.scene-matrix-cell').nth(1).locator('input'))
+        .toHaveCount(0)
     })
 
     test('reads a value the way the device does', async ({ page }) => {
@@ -3338,7 +3340,8 @@ test.describe('Scenes', () => {
       const vol = page.locator('.scene-matrix-table tbody tr')
         .filter({ has: page.locator('.scene-row-label', { hasText: /^VOL$/ }) })
       // AMP VOL is centred, so a stored 100 reads as its distance from the middle
-      await expect(vol.locator('.scene-matrix-cell').first()).toHaveText('36')
+      await expect(vol.locator('.scene-matrix-cell').first().locator('input'))
+        .toHaveValue('36')
     })
 
     test('marks the crossfader ends and the chosen scene', async ({ page }) => {
@@ -3347,112 +3350,253 @@ test.describe('Scenes', () => {
       await expect(page.locator('.scene-matrix-head.selected')).toHaveCount(1)
     })
 
-    test('a column heading chooses that scene', async ({ page }) => {
+    test('a heading is just the scene number', async ({ page }) => {
       await open(page)
-      await page.locator('.scene-matrix-head button', { hasText: /^6$/ }).click()
-      await page.locator('.scene-view-tab', { hasText: 'Scene' }).click()
-      await expect(page.locator('.scene-detail-title')).toHaveText('Scene 6')
+      // The colour says which ends they are; an "A" beside the number as well is noise
+      await expect(page.locator('.scene-matrix-head').first()).toHaveText('1')
+      await expect(page.locator('.scene-matrix-head').nth(8)).toHaveText('9')
     })
 
-    test('reads without Edit mode, because it changes nothing', async ({ page }) => {
+    test('the headings are labels, not a second scene picker', async ({ page }) => {
       await open(page)
-      await expect(page.locator('.scene-matrix-table tbody tr').first()).toBeVisible()
+      // The grid above already chooses the scene; two ways to do it is one too many
+      await expect(page.locator('.scene-matrix-head button')).toHaveCount(0)
+    })
+
+    test('follows the grid when another scene is chosen', async ({ page }) => {
+      await open(page)
+      await card(page, 6).click()
+      await expect(page.locator('.scene-matrix-head').nth(5)).toHaveClass(/selected/)
+    })
+
+    test('is read-only outside Edit mode', async ({ page }) => {
+      await open(page)
+      await expect(page.locator('.scene-matrix-cell input.scene-value').first())
+        .not.toHaveClass(/editable/)
       expect(await getInvokeCalls(page, 'save_scene')).toHaveLength(0)
+    })
+
+    test('a value can be changed in place in Edit mode', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await open(page)
+      // AMP VOL, which only scene 1 holds, so its value sits in the first column
+      const row = page.locator('.scene-matrix-table tbody tr')
+        .filter({ has: page.locator('.scene-row-label', { hasText: /^VOL$/ }) })
+      await row.locator('.scene-matrix-cell input.scene-value').first().fill('40')
+
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'save_scene')).length, { timeout: 3000 })
+        .toBe(1)
+      const calls = await getInvokeCalls(page, 'save_scene')
+      expect(calls[0].args.sceneId).toBe(0)
+      expect(calls[0].args.tracks[0].amp[3]).toBe(104)
+    })
+
+    test('writes against the scene whose column it is, not the chosen one', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await open(page)
+      // Scene 3 holds an SRC value; its column is the third
+      const row = page.locator('.scene-matrix-table tbody tr')
+        .filter({ has: page.locator('.scene-row-label', { hasText: /^PTCH$/ }) })
+      await row.locator('.scene-matrix-cell input.scene-value').first().fill('40')
+
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'save_scene')).length, { timeout: 3000 })
+        .toBe(1)
+      const calls = await getInvokeCalls(page, 'save_scene')
+      expect(calls[0].args.sceneId).toBe(2)
+    })
+
+    test('shows every position on request, so an empty one can be filled',
+      async ({ page }) => {
+        await open(page)
+        const held = await page.locator('.scene-matrix-table tbody tr').count()
+
+        await page.locator('.scene-show-all').click()
+
+        await expect
+          .poll(async () => page.locator('.scene-matrix-table tbody tr').count())
+          .toBeGreaterThan(held)
+      })
+
+    test('Show all params is offered only where it lists parameters', async ({ page }) => {
+      await expect(page.locator('.scene-view-row .scene-show-all')).toHaveCount(0)
+      await open(page)
+      await expect(page.locator('.scene-view-row .scene-show-all')).toBeVisible()
+    })
+
+    test('a parameter can be put into another scene from here', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await open(page)
+      const row = page.locator('.scene-matrix-table tbody tr').first()
+      await row.locator('.scene-matrix-cell .scene-add').first().click()
+
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'save_scene')).length, { timeout: 3000 })
+        .toBe(1)
     })
   })
 
-  /** Two scenes side by side, which is what the crossfader travels between. */
+  /**
+   * Two scenes side by side. It opens on the crossfader's own ends, because that is
+   * the comparison the device cannot show: a parameter only moves where they differ.
+   */
   test.describe('comparing two scenes', () => {
     const open = async (page: Page) => {
       await page.locator('.scene-view-tab', { hasText: 'Compare' }).click()
       await expect(page.locator('.scene-compare')).toBeVisible()
     }
+    const sides = (page: Page) => page.locator('.scene-compare-pick')
 
-    test('compares the chosen scene with another', async ({ page }) => {
+    test('opens on the two crossfader ends', async ({ page }) => {
       await open(page)
-      await page.locator('.scene-compare-pick select').selectOption({ value: '2' })
-      const heads = page.locator('.scene-compare-table thead th')
-      await expect(heads.nth(3)).toHaveText('Scene 1')
-      await expect(heads.nth(4)).toHaveText('Scene 3')
+      await expect(sides(page).first()).toHaveValue('0')
+      await expect(sides(page).last()).toHaveValue('8')
+    })
+
+    test('names which end each side is', async ({ page }) => {
+      await open(page)
+      await expect(sides(page).first().locator('option[value="0"]')).toHaveText(/\(A\)/)
+      await expect(sides(page).last().locator('option[value="8"]')).toHaveText(/\(B\)/)
+    })
+
+    test('each side picks its own scene', async ({ page }) => {
+      await open(page)
+      await sides(page).last().selectOption({ value: '2' })
+      await expect(sides(page).last()).toHaveValue('2')
+      await expect(sides(page).first()).toHaveValue('0', { timeout: 2000 })
     })
 
     test('lists what either of them holds, and nothing else', async ({ page }) => {
       await open(page)
-      await page.locator('.scene-compare-pick select').selectOption({ value: '2' })
+      await sides(page).last().selectOption({ value: '2' })
       // Scene 1 holds two, scene 3 holds two, and they are different parameters
       await expect(page.locator('.scene-compare-table tbody tr')).toHaveCount(4)
     })
 
-    test('marks the rows that differ', async ({ page }) => {
+    test('marks the rows that differ by dimming the ones that do not', async ({ page }) => {
       await open(page)
-      await page.locator('.scene-compare-pick select').selectOption({ value: '2' })
+      await sides(page).last().selectOption({ value: '2' })
       await expect(page.locator('.scene-compare-table tbody tr.differs')).toHaveCount(4)
-      await expect(page.locator('.scene-compare-mark').first()).toBeVisible()
+      await expect(page.locator('.scene-compare-table tbody tr.same')).toHaveCount(0)
     })
 
-    test('says how many are in play and how many differ', async ({ page }) => {
+    test('both sides the same scene means nothing differs', async ({ page }) => {
       await open(page)
-      await page.locator('.scene-compare-pick select').selectOption({ value: '2' })
-      await expect(page.locator('.scene-compare .scene-view-caption'))
-        .toContainText('4 parameters in play, 4 that differ')
+      await sides(page).last().selectOption({ value: '0' })
+      await expect(page.locator('.scene-compare-table tbody tr.differs')).toHaveCount(0)
+      await expect(page.locator('.scene-compare-table tbody tr.same')).toHaveCount(2)
     })
 
-    test('says so when both sides are the same scene', async ({ page }) => {
-      await open(page)
-      await page.locator('.scene-compare-pick select').selectOption({ value: '0' })
-      await expect(page.locator('.scene-compare .scene-view-caption'))
-        .toContainText('Both sides are the same scene')
-    })
-
-    // There is no table to show in this case, so it does not go through `open`
     test('says plainly when neither holds anything', async ({ page }) => {
-      await card(page, 2).click()
-      await expect(page.locator('.scene-card.active .scene-number')).toHaveText('2')
-      await page.locator('.scene-view-tab', { hasText: 'Compare' }).click()
-      await page.locator('.scene-compare-pick select').selectOption({ value: '3' })
-      await expect(page.locator('.scene-compare-pick > label')).toHaveText(/scene 2 with/)
-      await expect(page.locator('.scene-empty-message'))
+      await open(page)
+      await sides(page).first().selectOption({ value: '1' })
+      await sides(page).last().selectOption({ value: '3' })
+      await expect(page.locator('.scene-compare .scene-empty-message'))
         .toContainText('Neither scene holds anything')
-      await expect(page.locator('.scene-compare-table')).toHaveCount(0)
+      await expect(page.locator('.scene-compare-table tbody tr')).toHaveCount(0)
+    })
+
+    test('the grid sets the left-hand side', async ({ page }) => {
+      await open(page)
+      await card(page, 3).click()
+      await expect(sides(page).first()).toHaveValue('2')
+    })
+
+    test('follows an end that is moved', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await open(page)
+      await page.locator('.crossfader-end-picker select').last().selectOption('3')
+      await expect(sides(page).last()).toHaveValue('2')
+    })
+
+    test('is read-only outside Edit mode', async ({ page }) => {
+      await open(page)
+      await expect(page.locator('.scene-compare-value input.scene-value').first())
+        .not.toHaveClass(/editable/)
+    })
+
+    test('a value can be changed in place in Edit mode', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await open(page)
+      await page.locator('.scene-compare-value input.scene-value').first().fill('40')
+
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'save_scene')).length, { timeout: 3000 })
+        .toBe(1)
+      expect((await getInvokeCalls(page, 'save_scene'))[0].args.sceneId).toBe(0)
     })
   })
 
-  /** The same comparison, pinned to the two ends: what the fader will actually do. */
-  test.describe('what the crossfader moves', () => {
-    const toggle = (page: Page) => page.locator('.crossfader-map-toggle')
+  /** Pointing a crossfader end at a scene, from the grid itself. */
+  test.describe('assigning an end from the grid', () => {
+    const menu = (page: Page) => page.locator('.context-menu')
 
-    test('is closed to start, so it does not crowd the fader', async ({ page }) => {
-      await expect(toggle(page)).toHaveAttribute('aria-expanded', 'false')
-      await expect(page.locator('.crossfader-map .scene-compare')).toHaveCount(0)
+    test('a right-click offers both ends', async ({ page }) => {
+      await card(page, 4).click({ button: 'right' })
+      await expect(menu(page)).toBeVisible()
+      await expect(menu(page).locator('.context-menu-item')).toHaveCount(3)
+      await expect(menu(page)).toContainText('Scene 4')
     })
 
-    test('opens on the two ends, whichever scene is chosen', async ({ page }) => {
-      await card(page, 6).click()
-      await toggle(page).click()
-      const heads = page.locator('.crossfader-map .scene-compare-table thead th')
-      await expect(heads.nth(3)).toHaveText('A - scene 1')
-      await expect(heads.nth(4)).toHaveText('B - scene 9')
+    test('both are refused outside Edit mode', async ({ page }) => {
+      await card(page, 4).click({ button: 'right' })
+      await expect(menu(page).locator('.context-menu-item').first()).toBeDisabled()
     })
 
-    test('lists what the fader travels between', async ({ page }) => {
-      await toggle(page).click()
-      // Only scene 1 of the two ends holds anything, so its two rows are in play
-      await expect(page.locator('.crossfader-map .scene-compare-table tbody tr'))
-        .toHaveCount(2)
-    })
-
-    test('follows the ends when one is moved', async ({ page }) => {
+    test('points the chosen end at that scene', async ({ page }) => {
       await page.locator('.mode-toggle').click()
-      await toggle(page).click()
-      await page.locator('.crossfader-end-picker select').last().selectOption('2')
-      await expect(page.locator('.crossfader-map .scene-compare-table thead th').nth(4))
-        .toHaveText('B - scene 3')
+      await card(page, 4).click({ button: 'right' })
+      await menu(page).locator('.context-menu-item', { hasText: /Assign to A$/ }).click()
+
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'save_crossfader')).length, { timeout: 3000 })
+        .toBe(1)
+      const calls = await getInvokeCalls(page, 'save_crossfader')
+      expect(calls[0].args).toMatchObject({ sceneA: 3, sceneB: 8 })
     })
 
-    test('closes again', async ({ page }) => {
-      await toggle(page).click()
-      await toggle(page).click()
-      await expect(page.locator('.crossfader-map .scene-compare')).toHaveCount(0)
+    test('leaves the other end where it was', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await card(page, 4).click({ button: 'right' })
+      await menu(page).locator('.context-menu-item', { hasText: /Assign to B$/ }).click()
+
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'save_crossfader')).length, { timeout: 3000 })
+        .toBe(1)
+      const calls = await getInvokeCalls(page, 'save_crossfader')
+      expect(calls[0].args).toMatchObject({ sceneA: 0, sceneB: 3 })
+    })
+
+    test('refuses the end that is already there', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await card(page, 1).click({ button: 'right' })
+      await expect(menu(page).locator('.context-menu-item', { hasText: /Assign to A$/ }))
+        .toBeDisabled()
+      await expect(menu(page).locator('.context-menu-item', { hasText: /Assign to B$/ }))
+        .toBeEnabled()
+    })
+
+    test('offers reading a scene against the A end', async ({ page }) => {
+      await card(page, 3).click({ button: 'right' })
+      await menu(page).locator('.context-menu-item', { hasText: 'Compare with A' }).click()
+
+      await expect(page.locator('.scene-view-tab.active')).toHaveText('Compare')
+      await expect(page.locator('.scene-compare-pick').first()).toHaveValue('0')
+      await expect(page.locator('.scene-compare-pick').last()).toHaveValue('2')
+    })
+
+    test('comparing the A end with itself is refused', async ({ page }) => {
+      await card(page, 1).click({ button: 'right' })
+      await expect(menu(page).locator('.context-menu-item', { hasText: 'Compare with A' }))
+        .toBeDisabled()
+    })
+
+    test('closes on Escape', async ({ page }) => {
+      await card(page, 4).click({ button: 'right' })
+      await expect(menu(page)).toBeVisible()
+      await page.keyboard.press('Escape')
+      await expect(menu(page)).toHaveCount(0)
     })
   })
 
@@ -3531,9 +3675,32 @@ test.describe('Parts Editor - Undo and redo', () => {
       .toBeGreaterThan(before)
   })
 
-  test('redo is offered once something has been taken back', async ({ page }) => {
-    await atkInput(page).fill('33')
+  /**
+   * Makes one edit and waits for the writing to stop.
+   *
+   * Writes are debounced and a blur can queue another, so a test that carried on at
+   * the first one would race a later write - and a write after an undo correctly
+   * drops the redo, which is the very thing being checked.
+   */
+  const writeOnce = async (page: Page, value: string) => {
+    const before = (await getInvokeCalls(page, 'save_parts')).length
+    await atkInput(page).fill(value)
     await atkInput(page).blur()
+    await expect
+      .poll(async () => (await getInvokeCalls(page, 'save_parts')).length, { timeout: 3000 })
+      .toBeGreaterThan(before)
+
+    let settled = -1
+    await expect.poll(async () => {
+      const now = (await getInvokeCalls(page, 'save_parts')).length
+      const same = now === settled
+      settled = now
+      return same
+    }, { timeout: 5000, intervals: [400] }).toBe(true)
+  }
+
+  test('redo is offered once something has been taken back', async ({ page }) => {
+    await writeOnce(page, '33')
     await expect(undo(page)).toBeEnabled()
 
     await undo(page).click()
@@ -3543,54 +3710,60 @@ test.describe('Parts Editor - Undo and redo', () => {
   })
 
   test('a fresh write makes the redo unreachable', async ({ page }) => {
-    await atkInput(page).fill('33')
-    await atkInput(page).blur()
+    await writeOnce(page, '33')
     await expect(undo(page)).toBeEnabled()
     await undo(page).click()
     await expect(redo(page)).toBeEnabled()
 
-    await atkInput(page).fill('44')
-    await atkInput(page).blur()
+    await writeOnce(page, '44')
 
     await expect(redo(page)).toBeDisabled()
   })
 
-  test('walks back through several writes', async ({ page }) => {
-    for (const value of ['11', '22', '33']) {
-      await atkInput(page).fill(value)
-      await atkInput(page).blur()
-    }
+  test('walks back to where it started', async ({ page }) => {
+    for (const value of ['11', '22', '33']) await writeOnce(page, value)
     await expect(undo(page)).toBeEnabled()
 
-    await undo(page).click()
-    await undo(page).click()
-    await undo(page).click()
+    // However many writes the debounce actually made, undo walks back through all
+    for (let step = 0; step < 10 && await undo(page).isEnabled(); step++) {
+      await undo(page).click()
+    }
 
     await expect(undo(page)).toBeDisabled()
     await expect(redo(page)).toBeEnabled()
   })
 
-  test('the Scenes editor offers the same two', async ({ page }) => {
+  test('they live in the project header, not in a panel', async ({ page }) => {
+    await expect(page.locator('.project-header .write-history-controls')).toBeVisible()
+    await expect(page.locator('.parts-edit-controls').getByRole('button', { name: 'Undo' }))
+      .toHaveCount(0)
+  })
+
+  test('one history covers every tab', async ({ page }) => {
+    await atkInput(page).fill('33')
+    await atkInput(page).blur()
+    await expect(undo(page)).toBeEnabled()
+
     await page.getByRole('button', { name: 'Scenes', exact: true }).click()
     await expect(page.locator('.scenes-grid')).toBeVisible()
-    await expect(page.locator('.scenes-panel').getByRole('button', { name: 'Undo' }))
-      .toBeVisible()
+
+    // The same pair, still offering the Part edit made on the other tab
+    await expect(undo(page)).toBeEnabled()
   })
 
   test('a scene edit is undoable too', async ({ page }) => {
     await page.getByRole('button', { name: 'Scenes', exact: true }).click()
     await expect(page.locator('.scenes-grid')).toBeVisible()
-    const sceneUndo = page.locator('.scenes-panel').getByRole('button', { name: 'Undo' })
-    await expect(sceneUndo).toBeDisabled()
+    await expect(undo(page)).toBeDisabled()
 
     await page.locator('input.scene-value').first().fill('40')
 
-    await expect(sceneUndo).toBeEnabled({ timeout: 3000 })
+    await expect(undo(page)).toBeEnabled({ timeout: 3000 })
   })
 
-  test('neither is offered outside Edit mode', async ({ page }) => {
+  test('neither is shown outside Edit mode', async ({ page }) => {
     await page.locator('.mode-toggle').click()
-    await expect(page.locator('.parts-edit-controls')).toHaveClass(/hidden/)
+    await expect(page.locator('.write-history-controls')).toHaveCount(0)
   })
 })
 
@@ -3611,4 +3784,5 @@ test.describe('Parts Editor - Nothing overflows sideways', () => {
     }
   })
 })
+
 

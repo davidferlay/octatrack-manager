@@ -116,12 +116,9 @@ export default function PartsPanel({
       return next;
     }),
     onError: setError,
-    // Undo rewrites the whole bank file, so every Part has to be read again
-    onExternalChange: () => { loadPartsDataRef.current?.(); },
   });
-  const { modifiedPartIds, markModified, adoptBankState, refreshHistory } = commits;
-  // loadPartsData is defined below and changes every render, so it is reached through
-  // a ref rather than being hoisted above the hook that needs it
+  const { modifiedPartIds, markModified, adoptBankState } = commits;
+  // Reached through a ref by the project page, which asks for a re-read after an undo
   const loadPartsDataRef = useRef<(() => void) | null>(null);
 
   // Ref for tracking LFO drawing state
@@ -491,14 +488,13 @@ export default function PartsPanel({
       const partName = partNames[partId] || `Part ${partId + 1}`;
       onWriteStatusChange?.(writeStatus.success(`Part ${partName} saved as *`));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
-      refreshHistory();
       if (options?.slotAssignmentChanged) onSlotAssignmentSaved?.();
     }).catch(err => {
       console.error('Failed to save part:', err);
       onWriteStatusChange?.(writeStatus.error('Save failed'));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
     });
-  }, [projectPath, bankId, partNames, onWriteStatusChange, onSlotAssignmentSaved, refreshHistory]);
+  }, [projectPath, bankId, partNames, onWriteStatusChange, onSlotAssignmentSaved]);
 
   // Render param with rotary knob for All view
   /**

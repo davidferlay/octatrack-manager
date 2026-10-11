@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { invoke } from "@tauri-apps/api/core";
 import type { ProjectMetadata, Bank, PartsDataResponse, SampleSlotUsage } from "../context/ProjectsContext";
 import { BankSelector, ALL_BANKS, formatBankName } from "../components/BankSelector";
+import { useWriteHistory, WriteHistoryControls } from "../components/WriteHistoryControls";
 import { TrackSelector, ALL_AUDIO_TRACKS, ALL_MIDI_TRACKS } from "../components/TrackSelector";
 import { ScenesPanel, ScenesResponse } from "../components/ScenesPanel";
 import { PatternSelector, ALL_PATTERNS } from "../components/PatternSelector";
@@ -573,7 +574,34 @@ export function ProjectDetail() {
       else if (status.state === 'error') setLastStatusMessage('Error');
     }
     setPartsWriteStatus(status);
+    // Any write the app makes can be taken back, so the buttons follow every one of
+    // them rather than each editor having to say so
+    if (status.state === 'success') refreshHistoryRef.current?.();
   }, []);
+  const refreshHistoryRef = useRef<(() => void) | null>(null);
+
+  /**
+   * Everything has to be read again: undo rewrote whole files.
+   *
+   * The panels hold their own copy of what they are editing, and the scenes are read
+   * ahead into a cache, so both are thrown away. Bumping the key remounts the cards,
+   * which is the one way to be sure nothing stale survives anywhere.
+   */
+  const [restoreKey, setRestoreKey] = useState(0);
+  const handleRestored = useCallback(() => {
+    scenesAsked.current = new Set();
+    setScenesCache(new Map());
+    setRestoreKey(key => key + 1);
+    void refreshProjectDataRef.current?.();
+  }, []);
+  const refreshProjectDataRef = useRef<(() => Promise<void>) | null>(null);
+
+  const writeHistory = useWriteHistory({
+    projectPath,
+    onWriteStatusChange: handleWriteStatusChange,
+    onRestored: handleRestored,
+  });
+  refreshHistoryRef.current = writeHistory.refresh;
 
   // Toggle edit mode (backup bank file and project.work on entering edit mode)
   const toggleEditMode = useCallback(async () => {
@@ -702,6 +730,7 @@ export function ProjectDetail() {
       console.error("Failed to refresh project data:", err);
     }
   }, [projectPath]);
+  refreshProjectDataRef.current = refreshProjectData;
 
   // Reload a specific bank (used after copy operations in Tools panel)
   const reloadBank = useCallback(async (bankIndex: number) => {
@@ -1063,6 +1092,11 @@ export function ProjectDetail() {
                 Edit
               </span>
             </div>
+          )}
+          {/* Taking back what the app wrote. Edit mode only: there is nothing to take
+              back while only reading, and the pair would just sit there greyed out. */}
+          {!isLoading && (
+            <WriteHistoryControls history={writeHistory} visible={isEditMode} />
           )}
           {/* Status indicator area - shows either save status or bank warning */}
           <div className="status-indicator-area">
@@ -1628,7 +1662,7 @@ export function ProjectDetail() {
 
                       return (
                         <PartsPanel
-                          key={`bank-parts-${bankIndex}`}
+                          key={`bank-parts-${bankIndex}-${restoreKey}`}
                           projectPath={projectPath || ''}
                           bankId={bank.id}
                           bankName={formatBankName(bank.name, bankIndex)}
@@ -1693,7 +1727,7 @@ export function ProjectDetail() {
                         if (!bank) return null;
                         return (
                           <ScenesPanel
-                            key={`bank-scenes-${bankIndex}`}
+                            key={`bank-scenes-${bankIndex}-${restoreKey}`}
                             projectPath={projectPath || ''}
                             bankId={bank.id}
                             bankName={formatBankName(bank.name, bankIndex)}

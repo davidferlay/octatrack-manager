@@ -313,7 +313,7 @@ Up is more, down is less, throughout.
 | PE205 | Levels | A block keeps naming what it holds | Open a project whose FX1 holds a reverb | The picker names it rather than reading as another effect |
 | PE206 | Layout | No sideways scrollbar | Open each page tab at a normal window width | The window never scrolls horizontally |
 | PE207 | Save | A refused save says so | Make the card read-only, then press Save | The failure is reported, the Part stays marked as holding changes, and the buttons come back |
-| PE208 | Undo | Offered with the write controls | Enter Edit mode | Undo and Redo sit before Reload, Save and Save All |
+| PE208 | Undo | In the project header | Enter Edit mode | Undo and Redo sit beside the Edit toggle, not inside a panel |
 | PE209 | Undo | Nothing to undo at first | Open a project and enter Edit mode | Both are refused, saying there is nothing to undo |
 | PE210 | Undo | A parameter change can be taken back | Change a value, then press Undo | The value returns and the file on the card matches |
 | PE211 | Undo | Redo puts it back | After an Undo, press Redo | The change returns |
@@ -322,3 +322,8 @@ Up is more, down is less, throughout.
 | PE214 | Undo | Save and Reload are undoable too | Press Save, then Undo | The Part's saved copy goes back to what it was |
 | PE215 | Undo | Per project | Edit project A, open project B | B offers no undo of A's writes |
 | PE216 | Undo | Survives nothing silently | Pull the card, then press Undo | The failure is reported rather than claiming it worked |
+| PE217 | Undo | Covers the whole project | Assign a sample slot, change a memory setting, edit a Part | All three are on one history and come back newest first |
+| PE218 | Undo | A slot assignment comes back whole | Assign a sample, then Undo | Both the slot and its trim window go back, so the slot still plays |
+| PE219 | Undo | Hidden outside Edit mode | Leave Edit mode | The pair is not shown at all |
+| PE220 | Undo | Fifty writes deep | Make more than fifty changes, then undo repeatedly | It walks back fifty of them and then stops |
+| PE221 | Undo | A refused button is not a forbidden one | Hover Undo with nothing to undo | The pointer stays a normal arrow |

@@ -142,12 +142,23 @@ export interface AssignmentRow {
   spec: FieldSpec;
   field: string;
   page: PageKey | 'xlv';
+  /** Which of the page's six positions, so a view can write the value back. */
+  index: number;
   /** Sixteen long, null where that scene does not hold this parameter. */
   values: (number | null)[];
 }
 
-/** Every parameter at least one scene of this Part holds, in track and page order. */
-export function sceneAssignments(data: ScenesResponse): AssignmentRow[] {
+/**
+ * Every parameter at least one scene of this Part holds, in track and page order.
+ *
+ * With `includeUnheld` it answers every position a scene could reach for instead,
+ * which is what "Show all params" asks for: putting something into a scene from the
+ * matrix means seeing the rows that are empty everywhere.
+ */
+export function sceneAssignments(
+  data: ScenesResponse,
+  includeUnheld = false,
+): AssignmentRow[] {
   const rows: AssignmentRow[] = [];
   const first = data.scenes[0];
   if (!first) return rows;
@@ -164,7 +175,7 @@ export function sceneAssignments(data: ScenesResponse): AssignmentRow[] {
         return slot.page === 'xlv' ? its.xlv : its[slot.page][slot.index];
       });
       // A row nobody reaches for is not an assignment, and sixteen dashes say nothing
-      if (values.every(value => value === null)) continue;
+      if (!includeUnheld && values.every(value => value === null)) continue;
       rows.push({
         key: `${id}-${slot.page}-${slot.index}`,
         trackId: id,
@@ -173,6 +184,7 @@ export function sceneAssignments(data: ScenesResponse): AssignmentRow[] {
         spec: slot.spec,
         field: slot.field,
         page: slot.page,
+        index: slot.index,
         values,
       });
     }

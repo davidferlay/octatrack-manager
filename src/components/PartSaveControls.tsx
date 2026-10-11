@@ -1,18 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { WriteStatus, writeStatus } from '../types/writeStatus';
-
-/** What the backend says the two history buttons can do, for this project. */
-export interface HistoryState {
-  can_undo: boolean;
-  can_redo: boolean;
-  undo_label: string | null;
-  redo_label: string | null;
-}
-
-const NO_HISTORY: HistoryState = {
-  can_undo: false, can_redo: false, undo_label: null, redo_label: null,
-};
 
 /**
  * The device's own Reload / Save / Save All, and the state behind them.
@@ -42,16 +30,10 @@ export interface PartCommitState {
   markModified: (partIndex: number) => void;
   /** Seeds the state from what the bank file already says, on load. */
   adoptBankState: (editedBitmask: number, savedState: number[]) => void;
-  /** What undo and redo would take back, as the backend sees it. */
-  history: HistoryState;
-  /** Re-reads that, which an editor does after any write of its own. */
-  refreshHistory: () => void;
-  undo: () => Promise<void>;
-  redo: () => Promise<void>;
 }
 
 export function usePartCommits<T>({
-  projectPath, bankId, partNames, onWriteStatusChange, onReloaded, onError, onExternalChange,
+  projectPath, bankId, partNames, onWriteStatusChange, onReloaded, onError,
 }: {
   projectPath: string;
   bankId: string;
@@ -60,29 +42,11 @@ export function usePartCommits<T>({
   /** What the reloaded Part should replace. The shapes differ per editor. */
   onReloaded?: (partIndex: number, part: T) => void;
   onError?: (message: string) => void;
-  /**
-   * The files changed under the editor and everything has to be read again.
-   *
-   * Undo rewrites whole files, so there is nothing useful to patch in place: which
-   * Parts hold edits, what every scene holds and the crossfader ends can all differ.
-   */
-  onExternalChange?: () => void;
 }): PartCommitState {
   const [isCommitting, setIsCommitting] = useState(false);
   const [isReloading, setIsReloading] = useState(false);
   const [modifiedPartIds, setModifiedPartIds] = useState<Set<number>>(new Set());
   const [partsSavedState, setPartsSavedState] = useState<number[]>([0, 0, 0, 0]);
-  const [history, setHistory] = useState<HistoryState>(NO_HISTORY);
-
-  const refreshHistory = useCallback(() => {
-    invoke<HistoryState | null>('write_history_state', { path: projectPath })
-      // A backend that does not answer is one with no history to offer, not a crash
-      .then(state => setHistory(state ?? NO_HISTORY))
-      .catch(() => setHistory(NO_HISTORY));
-  }, [projectPath]);
-
-  // The history belongs to the project, so opening another one starts again
-  useEffect(() => { refreshHistory(); }, [refreshHistory]);
 
   const named = useCallback(
     (index: number) => partNames[index] || `Part ${index + 1}`,
@@ -122,9 +86,8 @@ export function usePartCommits<T>({
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
     } finally {
       busy(false);
-      refreshHistory();
     }
-  }, [onWriteStatusChange, onError, refreshHistory]);
+  }, [onWriteStatusChange, onError]);
 
   const forget = (partIndex: number) => setModifiedPartIds(prev => {
     const next = new Set(prev);
@@ -162,30 +125,9 @@ export function usePartCommits<T>({
     });
   }, [projectPath, bankId, named, run, onReloaded]);
 
-  /**
-   * Takes back the last write, or puts it back.
-   *
-   * The backend restores whole files, so the editor reads everything again rather than
-   * trying to work out what changed.
-   */
-  const stepHistory = useCallback(async (back: boolean) => {
-    const verb = back ? 'Undoing' : 'Redoing';
-    await run(setIsCommitting, `${verb} the last change...`, `${verb.slice(0, -3)}ne`, async () => {
-      const what = await invoke<string | null>(
-        back ? 'undo_write' : 'redo_write', { path: projectPath },
-      );
-      if (what === null) return;
-      onExternalChange?.();
-    });
-  }, [projectPath, run, onExternalChange]);
-
-  const undo = useCallback(() => stepHistory(true), [stepHistory]);
-  const redo = useCallback(() => stepHistory(false), [stepHistory]);
-
   return {
     modifiedPartIds, partsSavedState, isCommitting, isReloading,
     commitPart, commitAllParts, reloadPart, markModified, adoptBankState,
-    history, refreshHistory, undo, redo,
   };
 }
 
@@ -199,7 +141,7 @@ export function PartSaveControls({ state, activePartIndex, partNames, visible }:
 }) {
   const {
     modifiedPartIds, partsSavedState, isCommitting, isReloading,
-    commitPart, commitAllParts, reloadPart, history, undo, redo,
+    commitPart, commitAllParts, reloadPart,
   } = state;
   const busy = isCommitting || isReloading;
   const dirty = modifiedPartIds.has(activePartIndex);
@@ -207,31 +149,6 @@ export function PartSaveControls({ state, activePartIndex, partNames, visible }:
 
   return (
     <div className={`parts-edit-controls ${visible ? 'visible' : 'hidden'}`}>
-      {/* Writes land on the card a moment after each change, so these are the only way
-          back from one that was not meant - the device's Reload Part needs the Part to
-          have been saved there first, and usually it has not. */}
-      <button
-        className="history-button"
-        onClick={undo}
-        disabled={busy || !history.can_undo}
-        title={history.can_undo
-          ? `Undo: ${history.undo_label}`
-          : 'Nothing to undo in this project'}
-        aria-label="Undo"
-      >
-        <i className="fas fa-rotate-left" /> Undo
-      </button>
-      <button
-        className="history-button"
-        onClick={redo}
-        disabled={busy || !history.can_redo}
-        title={history.can_redo
-          ? `Redo: ${history.redo_label}`
-          : 'Nothing to redo in this project'}
-        aria-label="Redo"
-      >
-        <i className="fas fa-rotate-right" /> Redo
-      </button>
       <button
         className="cancel-button"
         onClick={() => reloadPart(activePartIndex)}

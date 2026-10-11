@@ -1474,6 +1474,39 @@ h1 {
 }
 
 /* View/Edit mode toggle */
+/* Taking back what the app wrote. Sits beside the Edit toggle because the history is
+   the project's, not any one editor's: a Part edit, a scene edit and a slot
+   assignment all go on one list in the order they happened. */
+.write-history-controls {
+  display: flex;
+  gap: 4px;
+}
+
+.history-button {
+  width: 30px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 6px;
+  color: #bbb;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.history-button:hover:not(:disabled) {
+  border-color: #5dade2;
+  color: #5dade2;
+}
+
+.history-button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 .mode-toggle {
   display: flex;
   background: #2a2a2a;

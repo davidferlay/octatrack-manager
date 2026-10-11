@@ -205,6 +205,24 @@ fn make_project_undoable(path: &str, label: &str) -> Result<(), String> {
     write_history::record(path, label, &[file])
 }
 
+/// Snapshots the files a sample slot operation writes.
+///
+/// A slot carries its sample in the project file and its trim window in the markers
+/// file, and assigning one writes both. Taking back only half would leave a slot
+/// pointing at one sample with another's trim window, which plays as silence.
+fn make_slots_undoable(path: &str, label: &str) -> Result<(), String> {
+    let dir = std::path::Path::new(path);
+    let mut files = vec![project_reader::project_file_path(path)?];
+    for name in ["markers.work", "markers.strd"] {
+        let candidate = dir.join(name);
+        if candidate.exists() {
+            files.push(candidate);
+            break;
+        }
+    }
+    write_history::record(path, label, &files)
+}
+
 #[tauri::command]
 async fn undo_write(path: String) -> Result<Option<String>, String> {
     tauri::async_runtime::spawn_blocking(move || write_history::undo(&path))
@@ -301,9 +319,12 @@ async fn save_parts(
 
 #[tauri::command]
 async fn save_memory_settings(path: String, settings: MemorySettings) -> Result<f64, String> {
-    tauri::async_runtime::spawn_blocking(move || save_memory_settings_data(&path, settings))
-        .await
-        .unwrap()
+    tauri::async_runtime::spawn_blocking(move || {
+        make_project_undoable(&path, "Change the memory settings")?;
+        save_memory_settings_data(&path, settings)
+    })
+    .await
+    .unwrap()
 }
 
 #[tauri::command]
@@ -313,6 +334,7 @@ async fn assign_samples_to_slots(
     assignments: Vec<SlotAssignment>,
 ) -> Result<AssignSamplesResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        make_slots_undoable(&path, &format!("Assign {} sample slots", assignments.len()))?;
         assign_samples_to_slots_impl(&path, &slot_type, assignments)
     })
     .await
@@ -326,6 +348,7 @@ async fn clear_sample_slots(
     slot_indices: Vec<u16>,
 ) -> Result<AssignSamplesResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        make_slots_undoable(&path, &format!("Clear {} sample slots", slot_indices.len()))?;
         project_reader::clear_sample_slots(&path, &slot_type, slot_indices)
     })
     .await
@@ -339,6 +362,7 @@ async fn clear_sample_keep_attributes(
     slot_indices: Vec<u16>,
 ) -> Result<AssignSamplesResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        make_slots_undoable(&path, &format!("Clear {} samples", slot_indices.len()))?;
         project_reader::clear_sample_keep_attributes(&path, &slot_type, slot_indices)
     })
     .await
@@ -352,6 +376,10 @@ async fn reset_slot_attributes(
     slot_indices: Vec<u16>,
 ) -> Result<AssignSamplesResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        make_slots_undoable(
+            &path,
+            &format!("Reset {} slot attributes", slot_indices.len()),
+        )?;
         project_reader::reset_slot_attributes(&path, &slot_type, slot_indices)
     })
     .await

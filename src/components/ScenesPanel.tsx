@@ -2,13 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { TrackBadge } from './TrackBadge';
 import { WriteStatus, writeStatus } from '../types/writeStatus';
-import {
-  FieldSpec, formatSpecValue, parseSpecValue, clampToSpec, stepInSpec,
-} from '../utils/partFieldSpecs';
+import { FieldSpec, clampToSpec } from '../utils/partFieldSpecs';
 import { fieldHelp, helpTitle } from '../utils/partFieldHelp';
 import {
   Slot, SceneTrackLocks, ScenesResponse, slotsForTrack, emptyTracks, countLocks,
 } from './sceneModel';
+import { SceneValue } from './SceneValue';
 
 export type { ScenesResponse } from './sceneModel';
 import { useWheelStep } from '../utils/wheelStep';
@@ -30,34 +29,6 @@ interface ScenesPanelProps {
   /** Which scene is open. Held by the project page so it survives leaving the tab. */
   selectedScene: number;
   onSceneChange: (sceneId: number) => void;
-}
-
-/** A scene's value for one position: typed, or stepped with the wheel. */
-function SceneValue({ slot, onChange, editable }: {
-  slot: Slot;
-  onChange: (value: number) => void;
-  editable: boolean;
-}) {
-  const value = slot.value as number;
-  const wheelRef = useWheelStep(
-    editable ? (by: 1 | -1) => onChange(stepInSpec(value, by, slot.spec)) : null,
-  );
-  return (
-    <span ref={wheelRef} className="scene-value-wrap">
-      <input
-        type="text"
-        className={`param-value scene-value ${editable ? 'editable' : ''}`}
-        value={formatSpecValue(value, slot.spec)}
-        readOnly={!editable}
-        tabIndex={editable ? 0 : -1}
-        onChange={e => {
-          if (!editable) return;
-          const raw = parseSpecValue(e.target.value, slot.spec);
-          if (raw !== null) onChange(clampToSpec(raw, slot.spec));
-        }}
-      />
-    </span>
-  );
 }
 
 /**
@@ -102,6 +73,7 @@ function EndLabel({ end, muted, editable, onToggle }: {
  * scene holds rather than as a second set of parameter pages.
  */
 /** How long a run of edits settles before the bank is rewritten, as the Parts editor. */
+
 const SAVE_DELAY = 500;
 
 export function ScenesPanel({
@@ -128,11 +100,9 @@ export function ScenesPanel({
     projectPath, bankId, partNames, onWriteStatusChange,
     // Reload puts the saved Part back, so every scene in it has to be read again
     onReloaded: () => { reload(); },
-    // So does undo, which rewrites the whole bank file
-    onExternalChange: () => { reload(); },
     onError: setError,
   });
-  const { markModified, adoptBankState, refreshHistory } = commits;
+  const { markModified, adoptBankState } = commits;
 
   const reload = useCallback(() => {
     invoke<ScenesResponse>('load_scenes', { path: projectPath, bankId, partId })
@@ -186,7 +156,6 @@ export function ScenesPanel({
         .then(() => {
           onWriteStatusChange?.(writeStatus.success(`${what} saved`));
           setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
-          refreshHistory();
         })
         .catch(err => {
           console.error(`Failed to save the ${what.toLowerCase()}:`, err);
@@ -194,7 +163,7 @@ export function ScenesPanel({
           setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
         });
     }, SAVE_DELAY);
-  }, [onWriteStatusChange, refreshHistory]);
+  }, [onWriteStatusChange]);
 
   /**
    * Writes a whole scene.
@@ -228,10 +197,44 @@ export function ScenesPanel({
    */
   /** Which way the Part is being read: one scene, all sixteen, or two side by side. */
   const [view, setView] = useState<'detail' | 'matrix' | 'compare'>('detail');
-  /** The other scene the comparison reads against the selected one. */
-  const [compareWith, setCompareWith] = useState(1);
-  /** Whether the map of what the crossfader will actually do is open. */
-  const [mapOpen, setMapOpen] = useState(false);
+  /**
+   * Where a right-click on the grid opened the menu, and on which scene.
+   *
+   * Assigning an end is the one thing the grid cannot already do by clicking, and it
+   * is what the two cards are for - so it belongs on the cards rather than only in
+   * the drop-downs under the fader.
+   */
+  const [sceneMenu, setSceneMenu] = useState<
+    { x: number; y: number; sceneId: number } | null
+  >(null);
+  const sceneMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!sceneMenu) return;
+    // Only a press outside closes it: a press on the menu itself is the one that is
+    // about to become a click on one of its buttons
+    const onDown = (event: MouseEvent) => {
+      if (!sceneMenuRef.current?.contains(event.target as Node)) setSceneMenu(null);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSceneMenu(null);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [sceneMenu]);
+
+  /**
+   * The two scenes the comparison reads, as scene ids or null for "follow the end".
+   *
+   * It opens on the crossfader's own ends, which is the comparison the device cannot
+   * show. Following them rather than copying them means moving an end re-reads.
+   */
+  const [compareSides, setCompareSides] = useState<{
+    left: number | null; right: number | null;
+  }>({ left: null, right: null });
 
   const [tip, setTip] = useState<string | null>(null);
   const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -386,6 +389,28 @@ export function ScenesPanel({
     writeScene(scene.scene_id, tracks);
   }, [data, scene, writeScene]);
 
+  /**
+   * Changes one parameter of any scene, which is what the matrix and the comparison
+   * edit: they show the whole Part at once, so the scene is part of the address
+   * rather than whichever one happens to be selected.
+   */
+  const setAssignment = useCallback((
+    row: { trackId: number; page: Slot['page']; index: number },
+    sceneId: number,
+    value: number | null,
+  ) => {
+    const target = data?.scenes[sceneId];
+    if (!target) return;
+    const tracks = target.tracks.map(t => {
+      if (t.track_id !== row.trackId) return t;
+      if (row.page === 'xlv') return { ...t, xlv: value };
+      const page = [...t[row.page]];
+      page[row.index] = value;
+      return { ...t, [row.page]: page };
+    });
+    writeScene(sceneId, tracks);
+  }, [data, writeScene]);
+
   const setSlot = useCallback((trackId: number, slot: Slot, value: number | null) => {
     if (!scene) return;
     const tracks = scene.tracks.map(t => {
@@ -437,6 +462,55 @@ export function ScenesPanel({
     </option>
   ));
 
+  const crossfaderRow = (
+        <div className="crossfader">
+          <span className="crossfader-caption">Crossfader</span>
+          <div className={`crossfader-end-picker ${data.scene_a_muted ? 'muted' : ''}`}>
+            <EndLabel
+              end="A"
+              muted={data.scene_a_muted}
+              editable={isEditMode}
+              onToggle={() => setSceneMute('A', !data.scene_a_muted)}
+            />
+            <select
+              className="crossfader-scene"
+              value={data.scene_a}
+              disabled={!isEditMode}
+              onChange={e => setCrossfader(Number(e.target.value), data.scene_b)}
+              title="The scene the crossfader reaches at its left end"
+            >
+              {sceneOptions}
+            </select>
+          </div>
+
+          {/* The travel between the two ends. Nothing moves here - the fader is on the
+              device - so it shows which scenes sit at each end rather than a position. */}
+          <div className="crossfader-track" aria-hidden="true">
+            <span className="crossfader-cap" />
+            <span className="crossfader-line" />
+            <span className="crossfader-cap" />
+          </div>
+
+          <div className={`crossfader-end-picker ${data.scene_b_muted ? 'muted' : ''}`}>
+            <select
+              className="crossfader-scene"
+              value={data.scene_b}
+              disabled={!isEditMode}
+              onChange={e => setCrossfader(data.scene_a, Number(e.target.value))}
+              title="The scene the crossfader reaches at its right end"
+            >
+              {sceneOptions}
+            </select>
+            <EndLabel
+              end="B"
+              muted={data.scene_b_muted}
+              editable={isEditMode}
+              onToggle={() => setSceneMute('B', !data.scene_b_muted)}
+            />
+          </div>
+        </div>
+  );
+
   return (
     <div className={`scenes-panel bank-card ${commits.modifiedPartIds.size > 0 ? 'edit-mode' : ''}`}>
       <div className="bank-card-header">
@@ -478,7 +552,18 @@ export function ScenesPanel({
                 s.locked_count === 0 ? 'empty' : '',
                 end ? 'crossfader-end' : '',
               ].filter(Boolean).join(' ')}
-              onClick={() => onSceneChange(s.scene_id)}
+              onClick={() => {
+                onSceneChange(s.scene_id);
+                // In the comparison the grid picks what is being compared against,
+                // which is the thing being looked at there
+                if (view === 'compare') {
+                  setCompareSides(prev => ({ ...prev, left: s.scene_id }));
+                }
+              }}
+              onContextMenu={event => {
+                event.preventDefault();
+                setSceneMenu({ x: event.clientX, y: event.clientY, sceneId: s.scene_id });
+              }}
               title={[
                 `Scene ${s.scene_id + 1}`,
                 s.locked_count === 0
@@ -498,6 +583,7 @@ export function ScenesPanel({
 
       {/* Three ways of reading the same Part: the scene on its own, every scene at
           once, or two of them against each other. */}
+      <div className="scene-view-row">
       <div className="scene-view-tabs" role="tablist">
         {([
           ['detail', 'Scene', 'What the selected scene holds'],
@@ -517,28 +603,40 @@ export function ScenesPanel({
         ))}
       </div>
 
+      {/* "Show all params" belongs to whichever view is listing parameters */}
       {view === 'matrix' && (
-        <SceneMatrix data={data} selected={selected} onSceneChange={onSceneChange} />
+        <button
+          className={`scene-action scene-show-all ${showAll ? 'on' : ''}`}
+          aria-pressed={showAll}
+          onClick={() => setShowAll(!showAll)}
+          title="List every parameter a scene could hold, not only the ones one does"
+        >
+          Show all params
+        </button>
+      )}
+
+      {crossfaderRow}
+      </div>
+
+      {view === 'matrix' && (
+        <SceneMatrix
+          data={data}
+          selected={selected}
+          editable={!!isEditMode}
+          showAll={showAll}
+          onSet={setAssignment}
+        />
       )}
 
       {view === 'compare' && (
-        <div className="scene-compare-pick">
-          <label htmlFor={`scene-compare-${bankId}`}>Compare scene {selected + 1} with</label>
-          <select
-            id={`scene-compare-${bankId}`}
-            value={compareWith}
-            onChange={e => setCompareWith(Number(e.target.value))}
-          >
-            {sceneOptions}
-          </select>
-          <SceneCompare
-            data={data}
-            left={selected}
-            right={compareWith}
-            leftLabel={`Scene ${selected + 1}`}
-            rightLabel={`Scene ${compareWith + 1}`}
-          />
-        </div>
+        <SceneCompare
+          data={data}
+          left={compareSides.left ?? data.scene_a}
+          right={compareSides.right ?? data.scene_b}
+          onPick={(side, sceneId) => setCompareSides(prev => ({ ...prev, [side]: sceneId }))}
+          editable={!!isEditMode}
+          onSet={setAssignment}
+        />
       )}
 
       {view === 'detail' && (
@@ -738,76 +836,54 @@ export function ScenesPanel({
       </div>
       )}
 
-      <div className="crossfader">
-        <span className="crossfader-caption">Crossfader</span>
-        <div className={`crossfader-end-picker ${data.scene_a_muted ? 'muted' : ''}`}>
-          <EndLabel
-            end="A"
-            muted={data.scene_a_muted}
-            editable={isEditMode}
-            onToggle={() => setSceneMute('A', !data.scene_a_muted)}
-          />
-          <select
-            className="crossfader-scene"
-            value={data.scene_a}
-            disabled={!isEditMode}
-            onChange={e => setCrossfader(Number(e.target.value), data.scene_b)}
-            title="The scene the crossfader reaches at its left end"
-          >
-            {sceneOptions}
-          </select>
-        </div>
-
-        {/* The travel between the two ends. Nothing moves here - the fader is on the
-            device - so it shows which scenes sit at each end rather than a position. */}
-        <div className="crossfader-track" aria-hidden="true">
-          <span className="crossfader-cap" />
-          <span className="crossfader-line" />
-          <span className="crossfader-cap" />
-        </div>
-
-        <div className={`crossfader-end-picker ${data.scene_b_muted ? 'muted' : ''}`}>
-          <select
-            className="crossfader-scene"
-            value={data.scene_b}
-            disabled={!isEditMode}
-            onChange={e => setCrossfader(data.scene_a, Number(e.target.value))}
-            title="The scene the crossfader reaches at its right end"
-          >
-            {sceneOptions}
-          </select>
-          <EndLabel
-            end="B"
-            muted={data.scene_b_muted}
-            editable={isEditMode}
-            onToggle={() => setSceneMute('B', !data.scene_b_muted)}
-          />
-        </div>
-      </div>
-
-      {/* What the fader will actually do, which the per-scene list cannot show: a
-          parameter only moves where the two ends disagree about it. */}
-      <div className="crossfader-map">
-        <button
-          className="crossfader-map-toggle"
-          aria-expanded={mapOpen}
-          onClick={() => setMapOpen(!mapOpen)}
-          title="List every parameter either end holds, and what the fader does to it"
+      {sceneMenu && (
+        <div
+          ref={sceneMenuRef}
+          className="context-menu"
+          style={{ position: 'fixed', left: sceneMenu.x, top: sceneMenu.y }}
+          onClick={event => event.stopPropagation()}
         >
-          <i className={`fas fa-chevron-${mapOpen ? 'down' : 'right'}`} />
-          {' '}What the crossfader moves
-        </button>
-        {mapOpen && (
-          <SceneCompare
-            data={data}
-            left={data.scene_a}
-            right={data.scene_b}
-            leftLabel={`A - scene ${data.scene_a + 1}`}
-            rightLabel={`B - scene ${data.scene_b + 1}`}
-            caption="Moving the fader from end to end travels between these."
-          />
-        )}
-      </div>
+          <div className="context-menu-heading">Scene {sceneMenu.sceneId + 1}</div>
+          {(['A', 'B'] as const).map(end => {
+            const already = (end === 'A' ? data.scene_a : data.scene_b) === sceneMenu.sceneId;
+            return (
+              <button
+                key={end}
+                className="context-menu-item"
+                disabled={!isEditMode || already}
+                onClick={() => {
+                  setCrossfader(
+                    end === 'A' ? sceneMenu.sceneId : data.scene_a,
+                    end === 'B' ? sceneMenu.sceneId : data.scene_b,
+                  );
+                  setSceneMenu(null);
+                }}
+                title={!isEditMode
+                  ? 'Turn on Edit mode to move a crossfader end'
+                  : already
+                    ? `The ${end} end is already here`
+                    : `Point the ${end} end at this scene`}
+              >
+                <i className="fas fa-arrows-left-right" /> Assign to {end}
+              </button>
+            );
+          })}
+          <button
+            className="context-menu-item"
+            disabled={sceneMenu.sceneId === data.scene_a}
+            onClick={() => {
+              setCompareSides({ left: data.scene_a, right: sceneMenu.sceneId });
+              setView('compare');
+              setSceneMenu(null);
+            }}
+            title={sceneMenu.sceneId === data.scene_a
+              ? 'This is the A end'
+              : "Read this scene against the A end's, and see what differs"}
+          >
+            <i className="fas fa-code-compare" /> Compare with A
+          </button>
+        </div>
+      )}
 
       {/* Floating, because it is advice about the move just made rather than a state of
           the panel - leaving it in the row would push the fader about as it came and went. */}

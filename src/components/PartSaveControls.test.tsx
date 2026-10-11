@@ -339,20 +339,16 @@ describe('the buttons', () => {
     reloadPart: vi.fn(),
     markModified: vi.fn(),
     adoptBankState: vi.fn(),
-    history: { can_undo: false, can_redo: false, undo_label: null, redo_label: null },
-    refreshHistory: vi.fn(),
-    undo: vi.fn(),
-    redo: vi.fn(),
     ...over,
   })
 
   const button = (name: 'Reload' | 'Save' | 'Save All') =>
     screen.getByRole('button', { name })
 
-  it('offers the device three, after the two history buttons', () => {
+  it('offers all three, in the device order', () => {
     render(<Buttons state={idle()} />)
     expect(screen.getAllByRole('button').map(b => b.textContent))
-      .toEqual([' Undo', ' Redo', 'Reload', 'Save', 'Save All'])
+      .toEqual(['Reload', 'Save', 'Save All'])
   })
 
   it('refuses everything on a Part with no changes', () => {
@@ -441,7 +437,7 @@ describe('the buttons', () => {
   it('keeps its space outside Edit mode, so the header does not resize', () => {
     const { container } = render(<Buttons state={idle()} visible={false} />)
     expect(container.querySelector('.parts-edit-controls')).toHaveClass('hidden')
-    expect(screen.getAllByRole('button')).toHaveLength(5)
+    expect(screen.getAllByRole('button')).toHaveLength(3)
   })
 
   it('shows itself in Edit mode', () => {

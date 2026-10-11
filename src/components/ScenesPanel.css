@@ -583,39 +583,58 @@
 
 /* ---- Reading the Part rather than one scene ---------------------------------- */
 
-.scene-view-tabs {
+/* One segmented control rather than three loose buttons: these are three ways of
+   reading the same thing, not three destinations. */
+.scene-view-row {
   display: flex;
-  gap: 4px;
-  margin-bottom: 8px;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+/* The fader is the Part's own state, not a view, so it sits beside the tabs rather
+   than under whatever is being read. It keeps its own width and is pushed right. */
+.scene-view-row .crossfader {
+  margin-left: auto;
+  padding: 5px 10px;
+  flex: 0 0 auto;
+}
+
+/* The travel between the ends is decoration; it gives up its width first */
+.scene-view-row .crossfader-track {
+  min-width: 40px;
+}
+
+.scene-view-tabs {
+  display: inline-flex;
+  background: #2a2a2a;
+  border: 1px solid #444;
+  border-radius: 6px;
+  padding: 2px;
+  user-select: none;
 }
 
 .scene-view-tab {
-  padding: 5px 14px;
-  font-size: 13px;
+  padding: 5px 16px;
+  font-size: 12px;
   font-weight: 600;
-  background: #222;
-  border: 1px solid #333;
+  letter-spacing: 0.3px;
+  background: transparent;
+  border: none;
   border-radius: 4px;
-  color: #999;
+  color: var(--elektron-text-secondary);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background 0.15s, color 0.15s;
 }
 
-.scene-view-tab:hover {
-  border-color: #555;
-  color: #ccc;
+.scene-view-tab:hover:not(.active) {
+  color: #ddd;
 }
 
 .scene-view-tab.active {
   background: #4a90e2;
-  border-color: #4a90e2;
   color: #fff;
-}
-
-.scene-view-caption {
-  margin: 0 0 8px;
-  font-size: 12px;
-  color: var(--elektron-text-secondary);
 }
 
 .scene-matrix,
@@ -674,29 +693,13 @@
 
 .scene-matrix-head {
   text-align: center;
-  padding: 0 0 6px;
+  padding: 0 4px 6px;
+  vertical-align: bottom;
 }
 
-.scene-matrix-head button {
-  background: none;
-  border: none;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-  padding: 2px 6px;
-  border-radius: 3px;
-}
-
-.scene-matrix-head button:hover { color: #5dade2; }
-.scene-matrix-head.selected button { background: #4a90e2; color: #fff; }
-.scene-matrix-head.crossfader-end button { color: var(--elektron-orange); }
-.scene-matrix-head.selected.crossfader-end button { color: #fff; }
-
-.scene-matrix-end {
-  display: block;
-  font-size: 9px;
-  line-height: 1;
-}
+.scene-matrix-head.selected { background: #4a90e2; color: #fff; border-radius: 3px 3px 0 0; }
+.scene-matrix-head.crossfader-end { color: var(--elektron-orange); }
+.scene-matrix-head.selected.crossfader-end { color: #fff; }
 
 .scene-matrix-cell {
   text-align: center;
@@ -722,55 +725,72 @@
   opacity: 0.55;
 }
 
-.scene-compare-mark {
-  margin-left: 6px;
-  color: var(--elektron-orange);
-  font-weight: 700;
-  cursor: help;
-}
-
+/* Each side says which scene it reads, and changes it in place. Sized to its text:
+   a full-width select here stretches the whole value column with it. */
 .scene-compare-pick {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.scene-compare-pick > label {
-  font-size: 12px;
-  color: var(--elektron-text-secondary);
-}
-
-.scene-compare-pick > select {
-  align-self: flex-start;
+  width: auto;
+  max-width: 140px;
   background: #222;
-  border: 1px solid #333;
+  border: 1px solid #444;
   border-radius: 4px;
   color: #ddd;
-  padding: 4px 8px;
+  padding: 2px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.scene-compare-pick:hover {
+  border-color: #5dade2;
+}
+
+/* The value cells carry the editor's own input and its dashed "put one in" button,
+   both of which are already sized. Left to themselves the columns stretch to fill the
+   table, which is what made these read as full-width boxes. */
+.scene-matrix-cell,
+.scene-compare-value {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.scene-matrix-cell input.scene-value,
+.scene-matrix-cell .scene-add {
+  width: 52px;
+  height: 22px;
+  line-height: 22px;
+  font-size: 12px;
+}
+
+.scene-compare-value input.scene-value,
+.scene-compare-value .scene-add {
+  width: 64px;
+  height: 24px;
+  line-height: 24px;
   font-size: 13px;
 }
 
-.crossfader-map {
-  margin-top: 10px;
+/* The parameter name takes whatever is left, so the value columns stay put as rows
+   come and go */
+.scene-compare-table .scene-row-label,
+.scene-matrix-table .scene-row-label {
+  width: 100%;
 }
 
-.crossfader-map-toggle {
-  background: none;
-  border: none;
+/* A right-click on a card assigns a crossfader end, which is the one thing the grid
+   could not already do */
+.scenes-grid .context-menu-heading {
+  padding: 6px 12px 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   color: var(--elektron-text-secondary);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 4px 0;
 }
 
-.crossfader-map-toggle:hover { color: #5dade2; }
-
-.crossfader-map-toggle i {
-  font-size: 10px;
-  width: 10px;
-}
-
-.crossfader-map .scene-compare {
-  margin-top: 6px;
+.context-menu-heading {
+  padding: 6px 12px 4px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--elektron-text-secondary);
 }

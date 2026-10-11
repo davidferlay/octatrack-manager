@@ -21,8 +21,9 @@ use std::sync::{Mutex, OnceLock};
 /// How many writes can be taken back, per project.
 ///
 /// Each one holds every byte of the files it touched, and a bank file is 636 KB, so
-/// this is a memory budget as much as a depth: twenty is about 13 MB in the worst case.
-const DEPTH: usize = 20;
+/// this is a memory budget as much as a depth: fifty is about 32 MB in the worst case,
+/// and most entries are the much smaller project file rather than a whole bank.
+const DEPTH: usize = 50;
 
 /// The files one write was about to change, as they were before it.
 #[derive(Clone, Debug)]
@@ -397,11 +398,11 @@ mod tests {
     }
 
     #[test]
-    fn test_only_the_last_twenty_writes_are_kept() {
+    fn test_only_the_last_fifty_writes_are_kept() {
         let project = Project::new();
         let bank = project.write("bank01.work", "0");
 
-        for n in 1..=25 {
+        for n in 1..=55 {
             record(
                 &project.path,
                 &format!("edit {}", n),
@@ -416,7 +417,7 @@ mod tests {
             taken += 1;
         }
         assert_eq!(taken, DEPTH, "the oldest writes fall off the end");
-        // Twenty-five writes with twenty kept means it only goes back to the fifth
+        // Fifty-five writes with fifty kept means it only goes back to the fifth
         assert_eq!(project.read("bank01.work"), "5");
     }
 

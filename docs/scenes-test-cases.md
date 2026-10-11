@@ -151,16 +151,25 @@ is shown and set on its own and never touches what a scene holds.
 | SC109 | Matrix | A dash means untouched | Look at a row in a scene that does not hold it | A dash, not a zero: the Part's own value applies there |
 | SC110 | Matrix | Values read as the device shows them | Compare a matrix cell with the same parameter in the Scene tab | The same reading, not the raw byte |
 | SC111 | Matrix | The ends and the chosen scene are marked | Look at the column headings | The A and B columns are marked, and the chosen scene is highlighted |
-| SC112 | Matrix | A heading chooses that scene | Click a column heading, then the Scene tab | That scene is the one shown |
-| SC113 | Matrix | Read-only | Open the Matrix outside Edit mode | It reads normally and writes nothing |
-| SC114 | Compare | Two scenes side by side | Press Compare and pick another scene | Only the parameters either one holds are listed, with both values |
-| SC115 | Compare | What differs is marked | Look at a row the two disagree on | It is marked; rows they agree on are dimmed |
-| SC116 | Compare | Only one side holds it | Compare a scene against one that does not hold a parameter | That row shows a dash on one side and is marked as held by one only |
-| SC117 | Compare | Counts | Read the line above the table | It says how many parameters are in play and how many differ |
-| SC118 | Compare | Nothing to compare | Compare two scenes that both hold nothing | It says so plainly rather than showing an empty table |
-| SC119 | Fader map | What the crossfader moves | Open "What the crossfader moves" under the fader | Every parameter either end holds, with the A and B values side by side |
-| SC120 | Fader map | Closed by default | Open the Scenes tab | The map is collapsed so it does not crowd the fader |
-| SC121 | Fader map | Follows the ends | Move one end to another scene with the map open | The map re-reads against the new end |
-| SC122 | Fader map | Agreement means no movement | Find a row both ends hold at the same value | It is dimmed: the fader passes over it without doing anything |
-| SC123 | Undo | A scene edit can be taken back | Change a scene value, then press Undo | The value goes back and the scene reads as it did |
-| SC124 | Undo | Scenes and Parts share one history | Change a Part, then a scene, then Undo twice | Both go back, newest first |
+| SC112 | Matrix | Headings are plain numbers | Look at the column headings | Each is the scene number, centred; the two crossfader ends are coloured rather than labelled |
+| SC112b | Matrix | Show all params | Turn on "Show all params" in the Matrix | Every position a scene could hold is listed, including rows no scene holds |
+| SC112c | Matrix | Filling an empty row | With Show all params on, press a dash in Edit mode | That parameter goes into that scene at its default |
+| SC113 | Matrix | Read-only outside Edit mode | Open the Matrix without Edit mode | Values cannot be changed and nothing is written |
+| SC114 | Matrix | Editing in place | In Edit mode, change a value in a matrix cell | That scene's parameter changes, not the selected scene's |
+| SC115 | Matrix | Adding from the matrix | In Edit mode, press the dash in a cell | That parameter goes into that scene at its default |
+| SC116 | Compare | Opens on the crossfader ends | Press Compare | The two sides are the A and B scenes, marked as such |
+| SC117 | Compare | Each side picks its own scene | Change either side's drop-down | Only that side changes |
+| SC118 | Compare | The grid sets the left side | With Compare open, click a scene card | The left side reads that scene |
+| SC119 | Compare | Follows a moved end | Move a crossfader end while Compare is on its defaults | That side re-reads against the new end |
+| SC120 | Compare | Only what either holds | Compare two scenes | Rows neither holds are left out; rows both agree on are dimmed |
+| SC121 | Compare | Same scene both sides | Set both sides to one scene | Every row reads as agreeing, so nothing differs |
+| SC122 | Compare | Nothing to compare | Compare two scenes that both hold nothing | It says so plainly rather than showing an empty table |
+| SC122b | Compare | Editing in place | In Edit mode, change a value on either side | That side's scene changes |
+| SC122c | Ends | Assign from the grid | Right-click a scene card in Edit mode | A menu offers "Assign to A" and "Assign to B" |
+| SC122f | Ends | Compare with A from the grid | Right-click a card and choose "Compare with A" | The Compare tab opens with the A end on one side and that scene on the other |
+| SC122g | Ends | Comparing A with itself | Right-click the A end's own scene | "Compare with A" is refused |
+| SC122h | Layout | The fader sits with the tabs | Open the Scenes tab | The crossfader is on the same row as the view tabs, not below the list |
+| SC122d | Ends | The end already there | Right-click the scene an end already points at | That end's entry is refused |
+| SC122e | Ends | Read-only outside Edit mode | Right-click a card without Edit mode | Both entries are refused |
+| SC123 | Undo | A scene edit can be taken back | Change a scene value, then press Undo in the project header | The value goes back and the scene reads as it did |
+| SC124 | Undo | One history for the project | Change a Part, then a scene, then Undo twice | Both go back, newest first, from the same pair of buttons |
