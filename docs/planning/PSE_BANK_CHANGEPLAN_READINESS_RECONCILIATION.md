@@ -198,7 +198,7 @@ GitHub #183 is **CLOSED**. Production has no Bank Apply runner. `ISSUE_183_STATE
 ```text
 WORK_ID = MO-PSE-BANK-CHANGEPLAN-READINESS-RECONCILIATION-1
 BASE_SHA = 4b33a524bfd9822d15ea77bb42d3e9cd85f10b96
-HEAD_SHA = (branch tip at merge)
+HEAD_SHA = 3e731c7ae740e062d97dec1d4d01e2a1d5e57efd
 PR = https://github.com/kaz4g/masterocta/pull/229
 PR227_EVIDENCE = INCORPORATED
 ARRANGEMENT_MAPPING = PROVEN (MkII R0173 / OS 1.40 only)
