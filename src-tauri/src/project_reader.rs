@@ -2600,6 +2600,19 @@ pub struct ScenesResponse {
     pub scene_b_muted: bool,
 }
 
+/// The project file the device would read: the working copy, or the stored one where
+/// a project has been saved and ejected without one.
+pub(crate) fn project_file_path(project_path: &str) -> Result<PathBuf, String> {
+    let dir = Path::new(project_path);
+    for name in ["project.work", "project.strd"] {
+        let candidate = dir.join(name);
+        if candidate.exists() {
+            return Ok(candidate);
+        }
+    }
+    Err("Project file not found".to_string())
+}
+
 /// Whether each crossfader end is muted, from the project file's [STATES] block.
 ///
 /// A project whose file will not parse still has readable scenes, so this answers "not
@@ -2818,15 +2831,11 @@ pub fn save_scene_mute(project_path: &str, end: &str, muted: bool) -> Result<(),
         "B" => "SCENE_B_MUTE",
         other => return Err(format!("Invalid crossfader end: {}", other)),
     };
-    let dir = Path::new(project_path);
-    let file = if dir.join("project.work").exists() {
-        dir.join("project.work")
-    } else if dir.join("project.strd").exists() {
-        dir.join("project.strd")
-    } else {
-        return Err("Project file not found".to_string());
-    };
-    replace_block_fields_surgical(&file, "STATES", &[(key, u8::from(muted).to_string())])
+    replace_block_fields_surgical(
+        &project_file_path(project_path)?,
+        "STATES",
+        &[(key, u8::from(muted).to_string())],
+    )
 }
 
 /// Writes one scene's locks back to the bank.
@@ -3418,7 +3427,7 @@ fn machine_type_name(byte: u8) -> &'static str {
 }
 
 /// The bank file for a bank letter, preferring the working copy over the saved one.
-fn bank_file_path(project_path: &str, bank_id: &str) -> Result<PathBuf, String> {
+pub(crate) fn bank_file_path(project_path: &str, bank_id: &str) -> Result<PathBuf, String> {
     let bank_letters = [
         "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
     ];
@@ -24309,7 +24318,7 @@ mod tests {
                                 .entry(values)
                                 .or_default()
                                 .insert(project_path.clone());
-                            let rows = seen.entry(kind).or_insert_with(Default::default);
+                            let rows = seen.entry(kind).or_default();
                             for (position, value) in values.iter().enumerate() {
                                 *rows[position].entry(*value).or_insert(0) += 1;
                             }
@@ -24348,7 +24357,7 @@ mod tests {
                 .iter()
                 .map(|(values, projects)| (*values, projects.len()))
                 .collect();
-            distinct.sort_by(|a, b| b.1.cmp(&a.1));
+            distinct.sort_by_key(|(_, projects)| std::cmp::Reverse(*projects));
             println!("  {} distinct readings:", distinct.len());
             for (values, projects) in distinct.iter().take(8) {
                 println!("    {:?}  in {} project(s)", values, projects);

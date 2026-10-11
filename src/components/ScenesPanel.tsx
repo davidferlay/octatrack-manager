@@ -3,47 +3,18 @@ import { invoke } from '@tauri-apps/api/core';
 import { TrackBadge } from './TrackBadge';
 import { WriteStatus, writeStatus } from '../types/writeStatus';
 import {
-  FieldSpec, fieldSpec, formatSpecValue, parseSpecValue, clampToSpec, stepInSpec,
-  machineParamLabels, machineParamFields, AMP_PARAM_FIELDS, LFO_PARAM_FIELDS,
-  SCENE_XVOL_SPEC, SCENE_XLV_SPEC,
+  FieldSpec, formatSpecValue, parseSpecValue, clampToSpec, stepInSpec,
 } from '../utils/partFieldSpecs';
-import { getFxMainLabels, fxShortName } from '../utils/fxLabels';
 import { fieldHelp, helpTitle } from '../utils/partFieldHelp';
+import {
+  Slot, SceneTrackLocks, ScenesResponse, slotsForTrack, emptyTracks, countLocks,
+} from './sceneModel';
+
+export type { ScenesResponse } from './sceneModel';
 import { useWheelStep } from '../utils/wheelStep';
 import { usePartCommits, PartSaveControls } from './PartSaveControls';
+import { SceneMatrix, SceneCompare } from './SceneViews';
 import './ScenesPanel.css';
-
-/** The five parameter pages a scene can hold. The crossfader level sits beside them. */
-type PageKey = 'machine' | 'lfo' | 'amp' | 'fx1' | 'fx2';
-
-interface SceneTrackLocks {
-  track_id: number;
-  machine: (number | null)[];
-  lfo: (number | null)[];
-  amp: (number | null)[];
-  fx1: (number | null)[];
-  fx2: (number | null)[];
-  xlv: number | null;
-}
-
-interface SceneData {
-  scene_id: number;
-  tracks: SceneTrackLocks[];
-  locked_count: number;
-}
-
-export interface ScenesResponse {
-  scenes: SceneData[];
-  scene_a: number;
-  scene_b: number;
-  machine_types: string[];
-  fx1_types: number[];
-  fx2_types: number[];
-  parts_edited_bitmask: number;
-  parts_saved_state: number[];
-  scene_a_muted: boolean;
-  scene_b_muted: boolean;
-}
 
 interface ScenesPanelProps {
   projectPath: string;
@@ -59,85 +30,6 @@ interface ScenesPanelProps {
   /** Which scene is open. Held by the project page so it survives leaving the tab. */
   selectedScene: number;
   onSceneChange: (sceneId: number) => void;
-}
-
-/** One position of one page on one track: what it is, and what the scene holds there. */
-interface Slot {
-  page: PageKey | 'xlv';
-  pageName: string;
-  label: string;
-  spec: FieldSpec;
-  index: number;
-  value: number | null;
-  /** The Parts editor's name for it, which is how its help is looked up. */
-  field: string;
-}
-
-const AMP_LABELS = ['ATK', 'HOLD', 'REL', 'VOL', 'BAL', 'XVOL'];
-const LFO_LABELS = ['SPD1', 'SPD2', 'SPD3', 'DEP1', 'DEP2', 'DEP3'];
-
-/**
- * Every position this track could hold, in page order.
- *
- * Positions the track's own machine or effect does not use are left out entirely: a
- * scene can store a byte there, but the device has nothing to apply it to, so offering
- * one would invite setting something that does nothing.
- */
-function slotsForTrack(
-  track: SceneTrackLocks,
-  machineType: string,
-  fx1Type: number,
-  fx2Type: number,
-): Slot[] {
-  const specFor = (field: string | null): FieldSpec | null => {
-    // XVOL has no Parts spec on purpose - only a scene can set it - so it brings its own
-    if (field === 'xvol') return SCENE_XVOL_SPEC;
-    return field ? fieldSpec(field, machineType) : null;
-  };
-
-  const page = (
-    key: PageKey,
-    pageName: string,
-    labels: (string | null)[],
-    fields: (string | null)[],
-  ): Slot[] => track[key].flatMap((value, index) => {
-    const label = labels[index];
-    const field = fields[index];
-    const spec = specFor(field);
-    if (!label || !spec || !field) return [];
-    return [{ page: key, pageName, label, spec, index, value, field }];
-  });
-
-  const fxFields = (slot: 'fx1' | 'fx2') => [1, 2, 3, 4, 5, 6].map(n => `${slot}_param${n}`);
-
-  return [
-    ...page('machine', 'SRC', machineParamLabels(machineType, true),
-      machineParamFields(machineType)),
-    ...page('amp', 'AMP', AMP_LABELS, [...AMP_PARAM_FIELDS]),
-    ...page('lfo', 'LFO', LFO_LABELS, [...LFO_PARAM_FIELDS]),
-    ...page('fx1', fxShortName(fx1Type, 'FX1'), getFxMainLabels(fx1Type), fxFields('fx1')),
-    ...page('fx2', fxShortName(fx2Type, 'FX2'), getFxMainLabels(fx2Type), fxFields('fx2')),
-    {
-      page: 'xlv', pageName: 'XLV', label: 'XLV', spec: SCENE_XLV_SPEC,
-      index: 0, value: track.xlv, field: 'xlv',
-    },
-  ];
-}
-
-/** The same tracks with nothing held, for emptying a scene. */
-function emptyTracks(tracks: SceneTrackLocks[]): SceneTrackLocks[] {
-  const six = () => [null, null, null, null, null, null];
-  return tracks.map(t => ({
-    track_id: t.track_id,
-    machine: six(), lfo: six(), amp: six(), fx1: six(), fx2: six(), xlv: null,
-  }));
-}
-
-function countLocks(tracks: SceneTrackLocks[]): number {
-  return tracks.reduce((total, t) => total
-    + [t.machine, t.lfo, t.amp, t.fx1, t.fx2]
-      .reduce((n, page) => n + page.filter(v => v !== null).length, 0)
-    + (t.xlv === null ? 0 : 1), 0);
 }
 
 /** A scene's value for one position: typed, or stepped with the wheel. */
@@ -236,9 +128,11 @@ export function ScenesPanel({
     projectPath, bankId, partNames, onWriteStatusChange,
     // Reload puts the saved Part back, so every scene in it has to be read again
     onReloaded: () => { reload(); },
+    // So does undo, which rewrites the whole bank file
+    onExternalChange: () => { reload(); },
     onError: setError,
   });
-  const { markModified, adoptBankState } = commits;
+  const { markModified, adoptBankState, refreshHistory } = commits;
 
   const reload = useCallback(() => {
     invoke<ScenesResponse>('load_scenes', { path: projectPath, bankId, partId })
@@ -292,6 +186,7 @@ export function ScenesPanel({
         .then(() => {
           onWriteStatusChange?.(writeStatus.success(`${what} saved`));
           setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
+          refreshHistory();
         })
         .catch(err => {
           console.error(`Failed to save the ${what.toLowerCase()}:`, err);
@@ -299,7 +194,7 @@ export function ScenesPanel({
           setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
         });
     }, SAVE_DELAY);
-  }, [onWriteStatusChange]);
+  }, [onWriteStatusChange, refreshHistory]);
 
   /**
    * Writes a whole scene.
@@ -331,6 +226,13 @@ export function ScenesPanel({
    * states of the panel, so anywhere inline would push the controls about as they came
    * and went. The CSS fades it out; the timer clears it just after.
    */
+  /** Which way the Part is being read: one scene, all sixteen, or two side by side. */
+  const [view, setView] = useState<'detail' | 'matrix' | 'compare'>('detail');
+  /** The other scene the comparison reads against the selected one. */
+  const [compareWith, setCompareWith] = useState(1);
+  /** Whether the map of what the crossfader will actually do is open. */
+  const [mapOpen, setMapOpen] = useState(false);
+
   const [tip, setTip] = useState<string | null>(null);
   const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showTip = useCallback((message: string) => {
@@ -430,6 +332,25 @@ export function ScenesPanel({
     onSceneChange(target);
     showTip(`Scene ${source + 1} copied into scene ${target + 1}, the ${to} end`);
   }, [data, writeScene, showTip, onSceneChange]);
+
+  /**
+   * Exchanges what the two ends' scenes hold.
+   *
+   * The ends keep pointing where they point: what changes is the scenes themselves, so
+   * a fader move that built towards one sound now builds towards the other. Both
+   * scenes are read before either is written, or the second write would copy back what
+   * the first one just put there.
+   */
+  const swapEnds = useCallback(() => {
+    if (!data) return;
+    const { scene_a: a, scene_b: b } = data;
+    if (a === b) return;
+    const atA = data.scenes[a].tracks;
+    const atB = data.scenes[b].tracks;
+    writeScene(a, atB);
+    writeScene(b, atA);
+    showTip(`Scenes ${a + 1} and ${b + 1} swapped, so the A and B ends trade places`);
+  }, [data, writeScene, showTip]);
 
   /**
    * Gives every value the selected scene holds a new one, at random.
@@ -575,6 +496,52 @@ export function ScenesPanel({
         })}
       </div>
 
+      {/* Three ways of reading the same Part: the scene on its own, every scene at
+          once, or two of them against each other. */}
+      <div className="scene-view-tabs" role="tablist">
+        {([
+          ['detail', 'Scene', 'What the selected scene holds'],
+          ['matrix', 'Matrix', 'Every parameter any scene of this Part holds, against all sixteen'],
+          ['compare', 'Compare', 'Two scenes side by side, and what differs between them'],
+        ] as const).map(([key, label, hint]) => (
+          <button
+            key={key}
+            role="tab"
+            aria-selected={view === key}
+            className={`scene-view-tab ${view === key ? 'active' : ''}`}
+            onClick={() => setView(key)}
+            title={hint}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {view === 'matrix' && (
+        <SceneMatrix data={data} selected={selected} onSceneChange={onSceneChange} />
+      )}
+
+      {view === 'compare' && (
+        <div className="scene-compare-pick">
+          <label htmlFor={`scene-compare-${bankId}`}>Compare scene {selected + 1} with</label>
+          <select
+            id={`scene-compare-${bankId}`}
+            value={compareWith}
+            onChange={e => setCompareWith(Number(e.target.value))}
+          >
+            {sceneOptions}
+          </select>
+          <SceneCompare
+            data={data}
+            left={selected}
+            right={compareWith}
+            leftLabel={`Scene ${selected + 1}`}
+            rightLabel={`Scene ${compareWith + 1}`}
+          />
+        </div>
+      )}
+
+      {view === 'detail' && (
       <div className="scene-detail">
         <div className="scene-detail-head">
           <span className="scene-detail-title">Scene {selected + 1}</span>
@@ -635,6 +602,14 @@ export function ScenesPanel({
                   title="Put what the B end's scene holds into the A end's scene, replacing it"
                 >
                   Copy B to A
+                </button>
+                <button
+                  className="scene-action"
+                  disabled={data.scene_a === data.scene_b}
+                  onClick={swapEnds}
+                  title="Exchange what the two ends' scenes hold, so the fader builds towards the other one"
+                >
+                  Swap A/B
                 </button>
               </>
             )}
@@ -761,6 +736,7 @@ export function ScenesPanel({
           </div>
         )}
       </div>
+      )}
 
       <div className="crossfader">
         <span className="crossfader-caption">Crossfader</span>
@@ -807,6 +783,30 @@ export function ScenesPanel({
             onToggle={() => setSceneMute('B', !data.scene_b_muted)}
           />
         </div>
+      </div>
+
+      {/* What the fader will actually do, which the per-scene list cannot show: a
+          parameter only moves where the two ends disagree about it. */}
+      <div className="crossfader-map">
+        <button
+          className="crossfader-map-toggle"
+          aria-expanded={mapOpen}
+          onClick={() => setMapOpen(!mapOpen)}
+          title="List every parameter either end holds, and what the fader does to it"
+        >
+          <i className={`fas fa-chevron-${mapOpen ? 'down' : 'right'}`} />
+          {' '}What the crossfader moves
+        </button>
+        {mapOpen && (
+          <SceneCompare
+            data={data}
+            left={data.scene_a}
+            right={data.scene_b}
+            leftLabel={`A - scene ${data.scene_a + 1}`}
+            rightLabel={`B - scene ${data.scene_b + 1}`}
+            caption="Moving the fader from end to end travels between these."
+          />
+        )}
       </div>
 
       {/* Floating, because it is advice about the move just made rather than a state of

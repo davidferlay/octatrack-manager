@@ -161,12 +161,22 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
           }
     }
 
+    // Stands in for the backend's per-project undo stack: every write that can be
+    // taken back adds one, as the real one does.
+    const history = { undone: 0, redone: 0 }
     const invokeCalls: { cmd: string; args: any }[] = []
     ;(window as any).__invokeCalls = invokeCalls
 
     ;(window as any).__TAURI_INTERNALS__ = {
       invoke: async (cmd: string, args?: any) => {
         invokeCalls.push({ cmd, args })
+        if ([
+          'save_parts', 'save_scene', 'save_crossfader', 'save_scene_mute',
+          'commit_part', 'commit_all_parts', 'reload_part',
+        ].includes(cmd)) {
+          history.undone += 1
+          history.redone = 0
+        }
         switch (cmd) {
           case 'load_project_metadata':
             return {
@@ -235,7 +245,30 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
           case 'commit_part':
           case 'commit_all_parts':
           case 'backup_project_files':
+          case 'forget_write_history':
             return null
+
+          // The undo stack the backend keeps per project. The mock keeps a count so a
+          // test can see the buttons follow it without a real file behind them.
+          case 'write_history_state':
+            return {
+              can_undo: history.undone > 0,
+              can_redo: history.redone > 0,
+              undo_label: history.undone > 0 ? `write ${history.undone}` : null,
+              redo_label: history.redone > 0 ? `write ${history.undone + 1}` : null,
+            }
+          case 'undo_write': {
+            if (history.undone === 0) return null
+            history.undone -= 1
+            history.redone += 1
+            return `write ${history.undone + 1}`
+          }
+          case 'redo_write': {
+            if (history.redone === 0) return null
+            history.redone -= 1
+            history.undone += 1
+            return `write ${history.undone}`
+          }
 
           case 'get_system_resources':
             return { cpu_cores: 4, available_memory_mb: 8000, recommended_concurrency: 4 }
@@ -3225,11 +3258,339 @@ test.describe('Scenes', () => {
     })
   })
 
+  /**
+   * Exchanging what the two ends hold, rather than where they point. The ends stay
+   * put, so a fader move that built towards one sound now builds towards the other.
+   */
+  test.describe('swapping the two ends', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+    })
+
+    const swap = (page: Page) =>
+      page.locator('.scene-action', { hasText: 'Swap A/B' })
+
+    test('is offered with the other scene actions', async ({ page }) => {
+      await expect(swap(page)).toBeVisible()
+    })
+
+    test('is refused when both ends are the same scene', async ({ page }) => {
+      await page.locator('.crossfader-end-picker select').first().selectOption('8')
+      await expect(swap(page)).toBeDisabled()
+    })
+
+    test('writes each end scene with what the other held', async ({ page }) => {
+      // The fixture puts something in scenes 1, 3 and 6; the ends are 1 and 9
+      const before = (await getInvokeCalls(page, 'save_scene')).length
+      await swap(page).click()
+
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'save_scene')).length, { timeout: 3000 })
+        .toBe(before + 2)
+      const calls = await getInvokeCalls(page, 'save_scene')
+      const written = calls.slice(-2)
+      expect(written.map(c => c.args.sceneId).sort()).toEqual([0, 8])
+      // Scene 1 held an AMP VOL of 100; after the swap the B end scene carries it
+      const toB = written.find(c => c.args.sceneId === 8)
+      expect(toB!.args.tracks[0].amp[3]).toBe(100)
+      const toA = written.find(c => c.args.sceneId === 0)
+      expect(toA!.args.tracks[0].amp[3]).toBeNull()
+    })
+
+    test('says what it did', async ({ page }) => {
+      await swap(page).click()
+      await expect(page.locator('.toast-notification.tip'))
+        .toContainText('Scenes 1 and 9 swapped')
+    })
+  })
+
+  /** Every parameter any scene holds, against all sixteen scenes. */
+  test.describe('the scene matrix', () => {
+    const open = async (page: Page) => {
+      await page.locator('.scene-view-tab', { hasText: 'Matrix' }).click()
+      await expect(page.locator('.scene-matrix')).toBeVisible()
+    }
+
+    test('is offered beside the other ways of reading the Part', async ({ page }) => {
+      await expect(page.locator('.scene-view-tab')).toHaveCount(3)
+      await expect(page.locator('.scene-view-tab.active')).toHaveText('Scene')
+    })
+
+    test('gives every scene a column', async ({ page }) => {
+      await open(page)
+      await expect(page.locator('.scene-matrix-head')).toHaveCount(16)
+    })
+
+    test('lists only the parameters some scene reaches for', async ({ page }) => {
+      await open(page)
+      // The fixture holds AMP VOL and XLV in scene 1, two in scene 3, two in scene 6
+      await expect(page.locator('.scene-matrix-table tbody tr')).toHaveCount(6)
+    })
+
+    test('shows a dash where a scene does not hold one', async ({ page }) => {
+      await open(page)
+      const row = page.locator('.scene-matrix-table tbody tr').first()
+      await expect(row.locator('.scene-matrix-cell').nth(1)).toHaveText('-')
+    })
+
+    test('reads a value the way the device does', async ({ page }) => {
+      await open(page)
+      const vol = page.locator('.scene-matrix-table tbody tr')
+        .filter({ has: page.locator('.scene-row-label', { hasText: /^VOL$/ }) })
+      // AMP VOL is centred, so a stored 100 reads as its distance from the middle
+      await expect(vol.locator('.scene-matrix-cell').first()).toHaveText('36')
+    })
+
+    test('marks the crossfader ends and the chosen scene', async ({ page }) => {
+      await open(page)
+      await expect(page.locator('.scene-matrix-head.crossfader-end')).toHaveCount(2)
+      await expect(page.locator('.scene-matrix-head.selected')).toHaveCount(1)
+    })
+
+    test('a column heading chooses that scene', async ({ page }) => {
+      await open(page)
+      await page.locator('.scene-matrix-head button', { hasText: /^6$/ }).click()
+      await page.locator('.scene-view-tab', { hasText: 'Scene' }).click()
+      await expect(page.locator('.scene-detail-title')).toHaveText('Scene 6')
+    })
+
+    test('reads without Edit mode, because it changes nothing', async ({ page }) => {
+      await open(page)
+      await expect(page.locator('.scene-matrix-table tbody tr').first()).toBeVisible()
+      expect(await getInvokeCalls(page, 'save_scene')).toHaveLength(0)
+    })
+  })
+
+  /** Two scenes side by side, which is what the crossfader travels between. */
+  test.describe('comparing two scenes', () => {
+    const open = async (page: Page) => {
+      await page.locator('.scene-view-tab', { hasText: 'Compare' }).click()
+      await expect(page.locator('.scene-compare')).toBeVisible()
+    }
+
+    test('compares the chosen scene with another', async ({ page }) => {
+      await open(page)
+      await page.locator('.scene-compare-pick select').selectOption({ value: '2' })
+      const heads = page.locator('.scene-compare-table thead th')
+      await expect(heads.nth(3)).toHaveText('Scene 1')
+      await expect(heads.nth(4)).toHaveText('Scene 3')
+    })
+
+    test('lists what either of them holds, and nothing else', async ({ page }) => {
+      await open(page)
+      await page.locator('.scene-compare-pick select').selectOption({ value: '2' })
+      // Scene 1 holds two, scene 3 holds two, and they are different parameters
+      await expect(page.locator('.scene-compare-table tbody tr')).toHaveCount(4)
+    })
+
+    test('marks the rows that differ', async ({ page }) => {
+      await open(page)
+      await page.locator('.scene-compare-pick select').selectOption({ value: '2' })
+      await expect(page.locator('.scene-compare-table tbody tr.differs')).toHaveCount(4)
+      await expect(page.locator('.scene-compare-mark').first()).toBeVisible()
+    })
+
+    test('says how many are in play and how many differ', async ({ page }) => {
+      await open(page)
+      await page.locator('.scene-compare-pick select').selectOption({ value: '2' })
+      await expect(page.locator('.scene-compare .scene-view-caption'))
+        .toContainText('4 parameters in play, 4 that differ')
+    })
+
+    test('says so when both sides are the same scene', async ({ page }) => {
+      await open(page)
+      await page.locator('.scene-compare-pick select').selectOption({ value: '0' })
+      await expect(page.locator('.scene-compare .scene-view-caption'))
+        .toContainText('Both sides are the same scene')
+    })
+
+    // There is no table to show in this case, so it does not go through `open`
+    test('says plainly when neither holds anything', async ({ page }) => {
+      await card(page, 2).click()
+      await expect(page.locator('.scene-card.active .scene-number')).toHaveText('2')
+      await page.locator('.scene-view-tab', { hasText: 'Compare' }).click()
+      await page.locator('.scene-compare-pick select').selectOption({ value: '3' })
+      await expect(page.locator('.scene-compare-pick > label')).toHaveText(/scene 2 with/)
+      await expect(page.locator('.scene-empty-message'))
+        .toContainText('Neither scene holds anything')
+      await expect(page.locator('.scene-compare-table')).toHaveCount(0)
+    })
+  })
+
+  /** The same comparison, pinned to the two ends: what the fader will actually do. */
+  test.describe('what the crossfader moves', () => {
+    const toggle = (page: Page) => page.locator('.crossfader-map-toggle')
+
+    test('is closed to start, so it does not crowd the fader', async ({ page }) => {
+      await expect(toggle(page)).toHaveAttribute('aria-expanded', 'false')
+      await expect(page.locator('.crossfader-map .scene-compare')).toHaveCount(0)
+    })
+
+    test('opens on the two ends, whichever scene is chosen', async ({ page }) => {
+      await card(page, 6).click()
+      await toggle(page).click()
+      const heads = page.locator('.crossfader-map .scene-compare-table thead th')
+      await expect(heads.nth(3)).toHaveText('A - scene 1')
+      await expect(heads.nth(4)).toHaveText('B - scene 9')
+    })
+
+    test('lists what the fader travels between', async ({ page }) => {
+      await toggle(page).click()
+      // Only scene 1 of the two ends holds anything, so its two rows are in play
+      await expect(page.locator('.crossfader-map .scene-compare-table tbody tr'))
+        .toHaveCount(2)
+    })
+
+    test('follows the ends when one is moved', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await toggle(page).click()
+      await page.locator('.crossfader-end-picker select').last().selectOption('2')
+      await expect(page.locator('.crossfader-map .scene-compare-table thead th').nth(4))
+        .toHaveText('B - scene 3')
+    })
+
+    test('closes again', async ({ page }) => {
+      await toggle(page).click()
+      await toggle(page).click()
+      await expect(page.locator('.crossfader-map .scene-compare')).toHaveCount(0)
+    })
+  })
+
   test('selecting a scene does not reload anything', async ({ page }) => {
     const before = (await getInvokeCalls(page, 'load_scenes')).length
     await card(page, 6).click()
     await expect(page.locator('.scene-detail-title')).toHaveText('Scene 6')
     expect(await getInvokeCalls(page, 'load_scenes')).toHaveLength(before)
+  })
+})
+
+/**
+ * Taking a write back.
+ *
+ * Every edit lands on the card a moment after it is made, so these are the only way
+ * back from one that was not meant: the device's own Reload Part needs the Part to
+ * have been saved there first, and usually it has not been.
+ */
+test.describe('Parts Editor - Undo and redo', () => {
+  const undo = (page: Page) => page.getByRole('button', { name: 'Undo' })
+  const redo = (page: Page) => page.getByRole('button', { name: 'Redo' })
+
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await openPartsTab(page)
+    await enterEditMode(page)
+  })
+
+  test('are offered with the other write controls', async ({ page }) => {
+    await expect(undo(page)).toBeVisible()
+    await expect(redo(page)).toBeVisible()
+  })
+
+  test('both refuse before anything has been written', async ({ page }) => {
+    await expect(undo(page)).toBeDisabled()
+    await expect(redo(page)).toBeDisabled()
+    await expect(undo(page)).toHaveAttribute('title', 'Nothing to undo in this project')
+  })
+
+  test('undo is offered once something has been written', async ({ page }) => {
+    await atkInput(page).fill('33')
+    await atkInput(page).blur()
+    await expect(undo(page)).toBeEnabled()
+  })
+
+  test('says what it would take back', async ({ page }) => {
+    await atkInput(page).fill('33')
+    await atkInput(page).blur()
+    await expect(undo(page)).toHaveAttribute('title', /^Undo: /)
+  })
+
+  test('asks the backend to take the write back', async ({ page }) => {
+    await atkInput(page).fill('33')
+    await atkInput(page).blur()
+    await expect(undo(page)).toBeEnabled()
+
+    await undo(page).click()
+
+    await expect
+      .poll(async () => (await getInvokeCalls(page, 'undo_write')).length)
+      .toBe(1)
+    const calls = await getInvokeCalls(page, 'undo_write')
+    expect(calls[0].args).toEqual({ path: '/test/project' })
+  })
+
+  test('reads the bank again afterwards, since the file changed underneath', async ({ page }) => {
+    await atkInput(page).fill('33')
+    await atkInput(page).blur()
+    await expect(undo(page)).toBeEnabled()
+    const before = (await getInvokeCalls(page, 'load_parts_data')).length
+
+    await undo(page).click()
+
+    await expect
+      .poll(async () => (await getInvokeCalls(page, 'load_parts_data')).length)
+      .toBeGreaterThan(before)
+  })
+
+  test('redo is offered once something has been taken back', async ({ page }) => {
+    await atkInput(page).fill('33')
+    await atkInput(page).blur()
+    await expect(undo(page)).toBeEnabled()
+
+    await undo(page).click()
+
+    await expect(redo(page)).toBeEnabled()
+    await expect(redo(page)).toHaveAttribute('title', /^Redo: /)
+  })
+
+  test('a fresh write makes the redo unreachable', async ({ page }) => {
+    await atkInput(page).fill('33')
+    await atkInput(page).blur()
+    await expect(undo(page)).toBeEnabled()
+    await undo(page).click()
+    await expect(redo(page)).toBeEnabled()
+
+    await atkInput(page).fill('44')
+    await atkInput(page).blur()
+
+    await expect(redo(page)).toBeDisabled()
+  })
+
+  test('walks back through several writes', async ({ page }) => {
+    for (const value of ['11', '22', '33']) {
+      await atkInput(page).fill(value)
+      await atkInput(page).blur()
+    }
+    await expect(undo(page)).toBeEnabled()
+
+    await undo(page).click()
+    await undo(page).click()
+    await undo(page).click()
+
+    await expect(undo(page)).toBeDisabled()
+    await expect(redo(page)).toBeEnabled()
+  })
+
+  test('the Scenes editor offers the same two', async ({ page }) => {
+    await page.getByRole('button', { name: 'Scenes', exact: true }).click()
+    await expect(page.locator('.scenes-grid')).toBeVisible()
+    await expect(page.locator('.scenes-panel').getByRole('button', { name: 'Undo' }))
+      .toBeVisible()
+  })
+
+  test('a scene edit is undoable too', async ({ page }) => {
+    await page.getByRole('button', { name: 'Scenes', exact: true }).click()
+    await expect(page.locator('.scenes-grid')).toBeVisible()
+    const sceneUndo = page.locator('.scenes-panel').getByRole('button', { name: 'Undo' })
+    await expect(sceneUndo).toBeDisabled()
+
+    await page.locator('input.scene-value').first().fill('40')
+
+    await expect(sceneUndo).toBeEnabled({ timeout: 3000 })
+  })
+
+  test('neither is offered outside Edit mode', async ({ page }) => {
+    await page.locator('.mode-toggle').click()
+    await expect(page.locator('.parts-edit-controls')).toHaveClass(/hidden/)
   })
 })
 
@@ -3250,3 +3611,4 @@ test.describe('Parts Editor - Nothing overflows sideways', () => {
     }
   })
 })
+

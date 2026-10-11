@@ -143,3 +143,24 @@ is shown and set on its own and never touches what a scene holds.
 | SC100 | Saving | A refused write says so | Make the card read-only, then change a scene value | The failure is reported, and the Part stays marked as holding changes |
 | SC101 | Mute | A freshly copied project | Copy a project folder that has no project.work, open it, and look at the ends | The mutes read as the device left them in the stored project file |
 | SC102 | Mute | A project file without the keys | Open a project whose file carries no SCENE_A_MUTE line, mute an end | The mute takes, and the key is added to the project's state rather than lost |
+| SC104 | Swap | Swap A/B is offered | Enter Edit mode with the ends on different scenes | "Swap A/B" sits beside the two copy actions |
+| SC105 | Swap | Refused on one scene | Put both ends on the same scene | Swap is refused: there is nothing to exchange |
+| SC106 | Swap | The two scenes trade contents | Press Swap A/B | Each end's scene now holds what the other held; the ends still point where they pointed |
+| SC107 | Swap | The device agrees | Swap, save, open the project on the device | Moving the fader builds towards the other sound |
+| SC108 | Matrix | Reading the whole Part | Press the Matrix tab | One row per parameter any scene holds, with a column per scene |
+| SC109 | Matrix | A dash means untouched | Look at a row in a scene that does not hold it | A dash, not a zero: the Part's own value applies there |
+| SC110 | Matrix | Values read as the device shows them | Compare a matrix cell with the same parameter in the Scene tab | The same reading, not the raw byte |
+| SC111 | Matrix | The ends and the chosen scene are marked | Look at the column headings | The A and B columns are marked, and the chosen scene is highlighted |
+| SC112 | Matrix | A heading chooses that scene | Click a column heading, then the Scene tab | That scene is the one shown |
+| SC113 | Matrix | Read-only | Open the Matrix outside Edit mode | It reads normally and writes nothing |
+| SC114 | Compare | Two scenes side by side | Press Compare and pick another scene | Only the parameters either one holds are listed, with both values |
+| SC115 | Compare | What differs is marked | Look at a row the two disagree on | It is marked; rows they agree on are dimmed |
+| SC116 | Compare | Only one side holds it | Compare a scene against one that does not hold a parameter | That row shows a dash on one side and is marked as held by one only |
+| SC117 | Compare | Counts | Read the line above the table | It says how many parameters are in play and how many differ |
+| SC118 | Compare | Nothing to compare | Compare two scenes that both hold nothing | It says so plainly rather than showing an empty table |
+| SC119 | Fader map | What the crossfader moves | Open "What the crossfader moves" under the fader | Every parameter either end holds, with the A and B values side by side |
+| SC120 | Fader map | Closed by default | Open the Scenes tab | The map is collapsed so it does not crowd the fader |
+| SC121 | Fader map | Follows the ends | Move one end to another scene with the map open | The map re-reads against the new end |
+| SC122 | Fader map | Agreement means no movement | Find a row both ends hold at the same value | It is dimmed: the fader passes over it without doing anything |
+| SC123 | Undo | A scene edit can be taken back | Change a scene value, then press Undo | The value goes back and the scene reads as it did |
+| SC124 | Undo | Scenes and Parts share one history | Change a Part, then a scene, then Undo twice | Both go back, newest first |

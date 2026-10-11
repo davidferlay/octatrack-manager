@@ -835,6 +835,40 @@
   pointer-events: none;
 }
 
+/* The two history buttons sit before the device's own three and read as a quieter
+   pair: they undo what the app wrote, where Reload and Save speak for the device. */
+.history-button {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: transparent;
+  border: 1px solid #555;
+  color: #bbb;
+}
+
+.history-button:hover:not(:disabled) {
+  border-color: #5dade2;
+  color: #5dade2;
+}
+
+.history-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.history-button i {
+  margin-right: 4px;
+  font-size: 11px;
+}
+
+/* A rule before the edit controls, so the two groups read as separate things */
+.history-button + .history-button {
+  margin-right: 8px;
+}
+
 .edit-button,
 .save-button,
 .cancel-button {

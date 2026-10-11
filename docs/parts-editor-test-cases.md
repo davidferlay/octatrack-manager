@@ -313,3 +313,12 @@ Up is more, down is less, throughout.
 | PE205 | Levels | A block keeps naming what it holds | Open a project whose FX1 holds a reverb | The picker names it rather than reading as another effect |
 | PE206 | Layout | No sideways scrollbar | Open each page tab at a normal window width | The window never scrolls horizontally |
 | PE207 | Save | A refused save says so | Make the card read-only, then press Save | The failure is reported, the Part stays marked as holding changes, and the buttons come back |
+| PE208 | Undo | Offered with the write controls | Enter Edit mode | Undo and Redo sit before Reload, Save and Save All |
+| PE209 | Undo | Nothing to undo at first | Open a project and enter Edit mode | Both are refused, saying there is nothing to undo |
+| PE210 | Undo | A parameter change can be taken back | Change a value, then press Undo | The value returns and the file on the card matches |
+| PE211 | Undo | Redo puts it back | After an Undo, press Redo | The change returns |
+| PE212 | Undo | A fresh change drops the redo | Undo, then change something else | Redo is refused: that branch is gone |
+| PE213 | Undo | Several writes in order | Make three changes, then Undo three times | They come back newest first, then Undo is refused |
+| PE214 | Undo | Save and Reload are undoable too | Press Save, then Undo | The Part's saved copy goes back to what it was |
+| PE215 | Undo | Per project | Edit project A, open project B | B offers no undo of A's writes |
+| PE216 | Undo | Survives nothing silently | Pull the card, then press Undo | The failure is reported rather than claiming it worked |

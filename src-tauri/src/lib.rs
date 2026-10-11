@@ -6,6 +6,7 @@ mod device_detection;
 pub mod project_manager;
 mod project_reader;
 mod purge;
+mod write_history;
 
 use audio_pool::{
     cancel_transfer, collect_audio_files_recursive, copy_audio_files_or_use_existing,
@@ -183,6 +184,53 @@ async fn load_scenes(path: String, bank_id: String, part_id: u8) -> Result<Scene
         .unwrap()
 }
 
+/// Snapshots a bank before a write, so the write can be taken back.
+///
+/// Both copies travel together: the device keeps `.work` as what it is playing and
+/// `.strd` as what was last saved to the card, and a half-undone bank would be a bank
+/// whose two copies disagree about a write that no longer happened.
+fn make_bank_undoable(path: &str, bank_id: &str, label: &str) -> Result<(), String> {
+    let work = project_reader::bank_file_path(path, bank_id)?;
+    let stored = work.with_extension("strd");
+    let mut files = vec![work];
+    if stored.exists() {
+        files.push(stored);
+    }
+    write_history::record(path, label, &files)
+}
+
+/// Snapshots the project file before a write, for the settings that live there.
+fn make_project_undoable(path: &str, label: &str) -> Result<(), String> {
+    let file = project_reader::project_file_path(path)?;
+    write_history::record(path, label, &[file])
+}
+
+#[tauri::command]
+async fn undo_write(path: String) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || write_history::undo(&path))
+        .await
+        .unwrap()
+}
+
+#[tauri::command]
+async fn redo_write(path: String) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || write_history::redo(&path))
+        .await
+        .unwrap()
+}
+
+#[tauri::command]
+fn write_history_state(path: String) -> write_history::HistoryState {
+    write_history::state(&path)
+}
+
+/// Drops a project's history when its files have changed underneath us - a Tools
+/// operation or a refresh - because the snapshots no longer describe what is there.
+#[tauri::command]
+fn forget_write_history(path: String) {
+    write_history::forget(&path)
+}
+
 #[tauri::command]
 async fn save_scene(
     path: String,
@@ -192,6 +240,7 @@ async fn save_scene(
     tracks: Vec<SceneTrackLocks>,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
+        make_bank_undoable(&path, &bank_id, &format!("Change scene {}", scene_id + 1))?;
         project_reader::save_scene(&path, &bank_id, part_id, scene_id, tracks)
     })
     .await
@@ -207,6 +256,7 @@ async fn save_crossfader(
     scene_b: u8,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
+        make_bank_undoable(&path, &bank_id, "Move a crossfader end")?;
         project_reader::save_crossfader(&path, &bank_id, part_id, scene_a, scene_b)
     })
     .await
@@ -226,6 +276,8 @@ async fn load_bank_scenes(
 #[tauri::command]
 async fn save_scene_mute(path: String, end: String, muted: bool) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let what = if muted { "Mute" } else { "Unmute" };
+        make_project_undoable(&path, &format!("{} the {} end", what, end))?;
         project_reader::save_scene_mute(&path, &end, muted)
     })
     .await
@@ -239,9 +291,12 @@ async fn save_parts(
     parts_data: Vec<PartData>,
 ) -> Result<(), String> {
     // Run on a blocking thread pool to avoid blocking the main event loop
-    tauri::async_runtime::spawn_blocking(move || save_parts_data(&path, &bank_id, parts_data))
-        .await
-        .unwrap()
+    tauri::async_runtime::spawn_blocking(move || {
+        make_bank_undoable(&path, &bank_id, "Change a part")?;
+        save_parts_data(&path, &bank_id, parts_data)
+    })
+    .await
+    .unwrap()
 }
 
 #[tauri::command]
@@ -306,25 +361,34 @@ async fn reset_slot_attributes(
 #[tauri::command]
 async fn commit_part(path: String, bank_id: String, part_id: u8) -> Result<(), String> {
     // Commit a part: copy parts.unsaved to parts.saved (like Octatrack's "SAVE" command)
-    tauri::async_runtime::spawn_blocking(move || commit_part_data(&path, &bank_id, part_id))
-        .await
-        .unwrap()
+    tauri::async_runtime::spawn_blocking(move || {
+        make_bank_undoable(&path, &bank_id, &format!("Save part {}", part_id + 1))?;
+        commit_part_data(&path, &bank_id, part_id)
+    })
+    .await
+    .unwrap()
 }
 
 #[tauri::command]
 async fn commit_all_parts(path: String, bank_id: String) -> Result<(), String> {
     // Commit all parts: copy all parts.unsaved to parts.saved (like Octatrack's "SAVE ALL" command)
-    tauri::async_runtime::spawn_blocking(move || commit_all_parts_data(&path, &bank_id))
-        .await
-        .unwrap()
+    tauri::async_runtime::spawn_blocking(move || {
+        make_bank_undoable(&path, &bank_id, "Save all parts")?;
+        commit_all_parts_data(&path, &bank_id)
+    })
+    .await
+    .unwrap()
 }
 
 #[tauri::command]
 async fn reload_part(path: String, bank_id: String, part_id: u8) -> Result<PartData, String> {
     // Reload a part: copy parts.saved back to parts.unsaved (like Octatrack's "RELOAD" command)
-    tauri::async_runtime::spawn_blocking(move || reload_part_data(&path, &bank_id, part_id))
-        .await
-        .unwrap()
+    tauri::async_runtime::spawn_blocking(move || {
+        make_bank_undoable(&path, &bank_id, &format!("Reload part {}", part_id + 1))?;
+        reload_part_data(&path, &bank_id, part_id)
+    })
+    .await
+    .unwrap()
 }
 
 #[tauri::command]
@@ -1547,6 +1611,10 @@ pub fn run() {
             save_crossfader,
             save_scene_mute,
             load_bank_scenes,
+            undo_write,
+            redo_write,
+            write_history_state,
+            forget_write_history,
             save_parts,
             save_memory_settings,
             commit_part,

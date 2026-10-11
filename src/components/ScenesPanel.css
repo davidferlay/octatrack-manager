@@ -580,3 +580,197 @@
   color: #f44336;
   border-color: #f44336;
 }
+
+/* ---- Reading the Part rather than one scene ---------------------------------- */
+
+.scene-view-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.scene-view-tab {
+  padding: 5px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #222;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #999;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.scene-view-tab:hover {
+  border-color: #555;
+  color: #ccc;
+}
+
+.scene-view-tab.active {
+  background: #4a90e2;
+  border-color: #4a90e2;
+  color: #fff;
+}
+
+.scene-view-caption {
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--elektron-text-secondary);
+}
+
+.scene-matrix,
+.scene-compare {
+  background: #1e1e1e;
+  border: 1px solid #333;
+  border-radius: 4px;
+  padding: 12px;
+}
+
+/* The sixteen columns do not fit a narrow window, and the row heads have to stay
+   readable while they are scrolled past */
+.scene-matrix-scroll {
+  overflow-x: auto;
+}
+
+.scene-matrix-table,
+.scene-compare-table {
+  border-collapse: collapse;
+  font-size: 13px;
+  width: 100%;
+}
+
+.scene-matrix-table th,
+.scene-compare-table th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--elektron-text-secondary);
+  font-weight: 600;
+  text-align: left;
+  padding: 0 8px 6px 0;
+  border-bottom: 1px solid #333;
+}
+
+.scene-matrix-table td,
+.scene-compare-table td {
+  padding: 3px 8px 3px 0;
+  border-bottom: 1px solid #262626;
+}
+
+.scene-row-track { width: 1%; white-space: nowrap; }
+
+.scene-row-page {
+  color: var(--elektron-text-secondary);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+}
+
+.scene-row-label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.scene-matrix-head {
+  text-align: center;
+  padding: 0 0 6px;
+}
+
+.scene-matrix-head button {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.scene-matrix-head button:hover { color: #5dade2; }
+.scene-matrix-head.selected button { background: #4a90e2; color: #fff; }
+.scene-matrix-head.crossfader-end button { color: var(--elektron-orange); }
+.scene-matrix-head.selected.crossfader-end button { color: #fff; }
+
+.scene-matrix-end {
+  display: block;
+  font-size: 9px;
+  line-height: 1;
+}
+
+.scene-matrix-cell {
+  text-align: center;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+  color: #5dade2;
+  white-space: nowrap;
+}
+
+.scene-matrix-cell.unheld { color: #444; }
+.scene-matrix-cell.selected { background: #243447; }
+
+.scene-compare-value {
+  font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+  color: #5dade2;
+  white-space: nowrap;
+}
+
+.scene-compare-value.unheld { color: #444; }
+
+/* A row both ends agree on is one the fader passes over without doing anything */
+.scene-compare-table tr.same .scene-row-label,
+.scene-compare-table tr.same .scene-compare-value {
+  opacity: 0.55;
+}
+
+.scene-compare-mark {
+  margin-left: 6px;
+  color: var(--elektron-orange);
+  font-weight: 700;
+  cursor: help;
+}
+
+.scene-compare-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scene-compare-pick > label {
+  font-size: 12px;
+  color: var(--elektron-text-secondary);
+}
+
+.scene-compare-pick > select {
+  align-self: flex-start;
+  background: #222;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #ddd;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.crossfader-map {
+  margin-top: 10px;
+}
+
+.crossfader-map-toggle {
+  background: none;
+  border: none;
+  color: var(--elektron-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.crossfader-map-toggle:hover { color: #5dade2; }
+
+.crossfader-map-toggle i {
+  font-size: 10px;
+  width: 10px;
+}
+
+.crossfader-map .scene-compare {
+  margin-top: 6px;
+}
