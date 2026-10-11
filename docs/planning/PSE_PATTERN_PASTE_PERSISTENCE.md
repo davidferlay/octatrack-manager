@@ -49,6 +49,34 @@ Bank C and Bank D compared files did not change across the six stages. Capture t
 
 `device_generated` stays false until the operator confirms the capture sequence, OS, and the S2 sentinel, and the manifest is rebuilt. File bytes alone are not reclassified. An unrecorded `capture_transport` stays `unknown`: that blocks generalizing Working/SavedCheckpoint semantics and keeps `#217` open. It does not block promoting this one observed sequence. While sequence provenance is unproven and compared files are already on disk, status is `STOP_FOR_OPERATOR_CONFIRMATION` and `DEVICE_EVIDENCE_PROMOTION = BLOCKED`.
 
+### Promotion gate hardening after #227 (2026-10-11)
+
+S4 must contain a non-empty string `save_operation` recording the explicit
+project-save operation. Missing, null, blank, or non-string values reject S4
+and block promotion with `DEVICE_CAPTURE = REJECTED` and
+`RESULT = STOP_WITH_FINDINGS`. Stage labels, `operator_note`, and `.strd`
+changes are not substitutes; the harness does not infer or backfill metadata.
+The field remains free text: no undocumented menu spelling is imposed.
+Only S4 requires this record; other stages may retain their empty field.
+
+Working `[STATES]` `BANK` and `PATTERN` must each occur exactly once and be
+zero-based indices in `0..15`, consistent with the existing `BankIndex` and
+`PatternIndex` domain. Out-of-domain values reject the capture.
+
+Impact on the six committed #227 captures: all manifests still verify, all
+selection values are in range, and S0–S3/S5 remain `PRESENT`. S4 has an empty
+`save_operation`, so `DEVICE_EVIDENCE_PROMOTION` is now `BLOCKED` despite the
+recorded sequence. No device bytes, metadata, or manifests are changed.
+Previously documented raw differences remain observations; the pure
+`classifyPatternPaste` helper does not grant promotion and is not a substitute
+for `persistenceStatus`/`analyzePatternPaste`. An actual operator record is
+required before a separately reviewed metadata correction could restore
+promotion. This change does not perform that correction.
+
+`COPY_SAVED_CHECKPOINT_SEMANTICS = UNKNOWN`, the open readiness gaps, and
+`BANK_CHANGEPLAN_READINESS = NOT_READY` remain unchanged. No Bank Apply or
+ChangePlan is enabled.
+
 ## Commands
 
 ```bash
