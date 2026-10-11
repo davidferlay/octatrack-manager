@@ -25,14 +25,96 @@ import {
   RETIRED_TRANSITIONS,
   analyzePatternPaste,
   buildManifest,
+  buildPatternPasteDatasetFromFixture,
   assertPlannedCaptureName,
   classifyPatternPaste,
   metaTemplate,
   patternPasteSuccessGate,
+  parsePersistenceStatesSection,
   persistenceStatus,
   verifyManifest,
   writeManifest,
 } from "./pse-pattern-paste-persistence.mjs";
+
+test("persistence selection parser accepts exactly the 0..15 domain", () => {
+  for (const bank of [0, 15]) {
+    for (const pattern of [0, 15]) {
+      assert.deepEqual(parsePersistenceStatesSection(projectText(bank, pattern)), { ok: true, bank, pattern });
+    }
+  }
+  for (const value of [-1, 16, 255, 256, "1.5", "NaN", "999999999999999999999999"]) {
+    assert.deepEqual(parsePersistenceStatesSection(projectText(value, 0)), { ok: false, bank: null, pattern: null });
+    assert.deepEqual(parsePersistenceStatesSection(projectText(0, value)), { ok: false, bank: null, pattern: null });
+  }
+});
+
+test("complete evidence with an explicit S4 save operation remains promotable", () => {
+  const root = materializeReadyCapture();
+  try {
+    for (const planned of PLANNED_CAPTURES) writeManifest(planned.name, root);
+    const before = snapshotTree(root);
+    const status = persistenceStatus(root);
+    assert.equal(status.device_evidence_promotion, "ALLOWED");
+    assert.equal(status.device_capture, "PASS");
+    assert.equal(status.copy_saved_checkpoint_semantics, "UNKNOWN");
+    assert.equal(status.bank_changeplan_readiness, "NOT_READY");
+    assert.equal(snapshotTree(root), before);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("missing, blank or non-string S4 save proof blocks promotion despite valid manifests", () => {
+  const root = materializeReadyCapture();
+  try {
+    const metaPath = path.join(root, "s4_after_project_save", "capture.meta.json");
+    const meta = JSON.parse(readFileSync(metaPath, "utf8"));
+    // A stage label, operator note and changed saved bytes cannot replace this field.
+    meta.operator_note = "Explicit project save after the pattern paste and control-bank switch.";
+    for (const value of [undefined, null, "", " \t\n ", true, 1, {}, []]) {
+      if (value === undefined) delete meta.save_operation;
+      else meta.save_operation = value;
+      writeFileSync(metaPath, `${JSON.stringify(meta, null, 2)}\n`);
+      for (const planned of PLANNED_CAPTURES) writeManifest(planned.name, root);
+      const before = snapshotTree(root);
+      assert.equal(verifyManifest("s4_after_project_save", root).ok, true);
+      const status = persistenceStatus(root);
+      const row = status.captures.find((entry) => entry.stage_id === "S4");
+      assert.equal(row.capture_status, "REJECTED");
+      assert.match(row.error, /S4.*save_operation/);
+      assert.equal(status.device_evidence_promotion, "BLOCKED");
+      assert.equal(status.device_capture, "REJECTED");
+      assert.equal(status.result, "STOP_WITH_FINDINGS");
+      assert.equal(status.captures.filter((entry) => entry.capture_status === "PRESENT").length, 5);
+      assert.equal(snapshotTree(root), before);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("out-of-domain BANK or PATTERN blocks promotion with a valid manifest", () => {
+  const root = materializeReadyCapture();
+  try {
+    const file = path.join(root, "s3_after_control_switch", "project.work");
+    for (const [bank, pattern] of [[16, 0], [255, 0], [0, 16], [0, 255]]) {
+      writeFileSync(file, projectText(bank, pattern));
+      for (const planned of PLANNED_CAPTURES) writeManifest(planned.name, root);
+      const before = snapshotTree(root);
+      const status = persistenceStatus(root);
+      assert.equal(verifyManifest("s3_after_control_switch", root).ok, true);
+      assert.equal(status.captures.find((row) => row.stage_id === "S3").capture_status, "REJECTED");
+      assert.equal(status.device_evidence_promotion, "BLOCKED");
+      assert.equal(status.result, "STOP_WITH_FINDINGS");
+      assert.equal(snapshotTree(root), before);
+    }
+    writeFileSync(file, projectText(15, 15));
+    writeManifest("s3_after_control_switch", root);
+    assert.equal(persistenceStatus(root).device_evidence_promotion, "ALLOWED");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("planned stages are baseline, destination-before-paste, paste, control, save, reload", () => {
   assert.deepEqual(PLANNED_CAPTURES.map((entry) => entry.stage_semantics), [
@@ -125,53 +207,56 @@ test("unknown transport does not generalize checkpoint semantics", () => {
   assert.equal(judged.operation_kind, OPERATION_KIND);
 });
 
-test("template fixture is not promoted and analyze does not rewrite bytes", () => {
+test("committed evidence keeps bytes and manifests but cannot promote without S4 save proof", () => {
   const before = snapshotTree(FIXTURE_ROOT);
   const status = persistenceStatus(FIXTURE_ROOT);
   const analyzed = analyzePatternPaste(FIXTURE_ROOT);
   assert.equal(status.persistence_harness, "READY");
   assert.equal(status.scope_correction, "PASS");
   assert.equal(status.copy_saved_checkpoint_semantics, "UNKNOWN");
+  assert.equal(status.capture_sequence_proven, "YES");
+  assert.equal(status.device_evidence_promotion, "BLOCKED");
+  assert.equal(status.device_capture, "REJECTED");
+  assert.equal(status.result, "STOP_WITH_FINDINGS");
+  assert.equal(status.captures.filter((row) => row.capture_status === "PRESENT").length, 5);
+  const s4 = status.captures.find((row) => row.stage_id === "S4");
+  assert.match(s4.error, /S4.*save_operation/);
   assert.equal(analyzed.fixture_no_write, "PASS");
-  const hasBytes = MATRIX_PRESENT(FIXTURE_ROOT);
-  const promoted = status.capture_sequence_proven === "YES";
-  if (!promoted) {
-    assert.equal(status.capture_sequence_proven, "NO");
-    assert.equal(status.device_evidence_promotion, "BLOCKED");
-    assert.equal(status.result, hasBytes ? "STOP_FOR_OPERATOR_CONFIRMATION" : "WAITING_FOR_REAL_DEVICE");
-  } else {
-    assert.equal(status.device_evidence_promotion, "ALLOWED");
-    assert.equal(status.device_capture, "PASS");
-    assert.equal(status.pattern_paste_effect_confirmed_on_device, "YES");
-    assert.equal(status.dest_work_first_changed_at, "CONTROL_SWITCH");
-    assert.equal(status.dest_strd_first_changed_at, "PROJECT_SAVE");
-    assert.equal(status.dest_work_changed_on_pattern_paste, "NO");
-    assert.equal(status.dest_strd_changed_on_pattern_paste, "NO");
-    assert.equal(
-      status.cross_bank_pattern_paste_persistence,
-      "OBSERVED_WORK_FLUSH_ON_CONTROL_SWITCH_STRD_ON_PROJECT_SAVE",
-    );
-    assert.equal(status.working_checkpoint_separation_observed, "YES");
-    assert.equal(status.pattern_paste_survives_project_reload, "UNKNOWN");
-    assert.equal(status.capture_transport_limitation, "UNKNOWN");
-    assert.equal(status.copy_saved_checkpoint_semantics, "UNKNOWN");
-    assert.equal(status.issue_217, "OPEN");
-    assert.equal(status.issue_221, "OPEN");
-    assert.equal(status.bank_changeplan_readiness, "NOT_READY");
-    assert.equal(JSON.stringify(status).includes("CLOSE_REVIEW"), false);
-    assert.equal(status.project_work_active_bank_write_lag_observed, "YES");
-    assert.equal(status.project_bank_selection_first_persisted_at, "DESTINATION_SELECT_BEFORE_PASTE");
-    assert.equal(status.control_bank_selection_persisted_at, "PROJECT_SAVE");
-    assert.deepEqual(status.project_bank_sequence, { S0: 0, S1: 1, S2: 1, S3: 1, S4: 3, S5: 3 });
-    assert.deepEqual(status.project_pattern_sequence, { S0: 0, S1: 0, S2: 0, S3: 0, S4: 0, S5: 0 });
-  }
+  assert.equal(analyzed.device_evidence_promotion, "BLOCKED");
   for (const planned of PLANNED_CAPTURES) {
+    assert.equal(verifyManifest(planned.name, FIXTURE_ROOT).ok, true);
     const meta = JSON.parse(readFileSync(path.join(FIXTURE_ROOT, planned.name, "capture.meta.json"), "utf8"));
     assert.equal(meta.schema, META_SCHEMA);
     assert.equal(meta.operation_kind, OPERATION_KIND);
-    assert.equal(meta.device_generated, promoted);
-    assert.equal(meta.capture_sequence_proven, promoted ? true : null);
+    assert.equal(meta.device_generated, true);
+    assert.equal(meta.capture_sequence_proven, true);
   }
+  // Raw observation classification is not the promotion API. Preserve its evidence
+  // without filling save_operation or rewriting device bytes/metadata/manifests.
+  const judged = classifyPatternPaste(buildPatternPasteDatasetFromFixture(FIXTURE_ROOT));
+  assert.equal(judged.pattern_paste_effect_confirmed_on_device, "YES");
+  assert.equal(judged.dest_work_first_changed_at, "CONTROL_SWITCH");
+  assert.equal(judged.dest_strd_first_changed_at, "PROJECT_SAVE");
+  assert.equal(judged.dest_work_changed_on_pattern_paste, "NO");
+  assert.equal(judged.dest_strd_changed_on_pattern_paste, "NO");
+  assert.equal(
+    judged.cross_bank_pattern_paste_persistence,
+    "OBSERVED_WORK_FLUSH_ON_CONTROL_SWITCH_STRD_ON_PROJECT_SAVE",
+  );
+  assert.equal(judged.working_checkpoint_separation_observed, "YES");
+  assert.equal(judged.pattern_paste_survives_project_reload, "UNKNOWN");
+  assert.equal(judged.capture_transport_limitation, "UNKNOWN");
+  assert.equal(judged.copy_saved_checkpoint_semantics, "UNKNOWN");
+  assert.equal(judged.issue_217, "OPEN");
+  assert.equal(judged.issue_221, "OPEN");
+  assert.equal(judged.bank_changeplan_readiness, "NOT_READY");
+  assert.equal(JSON.stringify(status).includes("CLOSE_REVIEW"), false);
+  assert.equal(judged.project_work_active_bank_write_lag_observed, "YES");
+  assert.equal(judged.project_bank_selection_first_persisted_at, "DESTINATION_SELECT_BEFORE_PASTE");
+  assert.equal(judged.control_bank_selection_persisted_at, "PROJECT_SAVE");
+  assert.deepEqual(judged.project_bank_sequence, { S0: 0, S1: 1, S2: 1, S3: 1, S4: 3, S5: 3 });
+  assert.deepEqual(judged.project_pattern_sequence, { S0: 0, S1: 0, S2: 0, S3: 0, S4: 0, S5: 0 });
+  assert.equal(Object.hasOwn(judged, "device_evidence_promotion"), false);
   assert.equal(snapshotTree(FIXTURE_ROOT), before);
 });
 
@@ -403,6 +488,7 @@ function syntheticStages(options) {
         : null,
       destination_ui_sentinel_after_reload: planned.stage_id === "S5" ? reloadSentinel : null,
       project_reloaded: planned.stage_id === "S5",
+      save_operation: planned.stage_id === "S4" ? "Project menu > Save Project" : "",
     };
     return {
       capture_name: planned.name,

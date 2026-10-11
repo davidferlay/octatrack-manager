@@ -171,7 +171,7 @@ export function parsePersistenceStatesSection(text) {
       pattern = Number(patternMatch[1]);
     }
   }
-  if (!closed || bankCount !== 1 || patternCount !== 1 || bank > 255 || pattern > 255) {
+  if (!closed || bankCount !== 1 || patternCount !== 1 || bank > 15 || pattern > 15) {
     return { ok: false, bank: null, pattern: null };
   }
   return { ok: true, bank, pattern };
@@ -303,6 +303,11 @@ function provenanceReady(meta, planned, captureDir) {
     throw new Error("capture provenance is incomplete");
   }
   if (meta.prior_transition !== planned.prior_transition) throw new Error("capture provenance is incomplete");
+  // Require the structured operator record; neither labels nor byte deltas prove a save.
+  if (planned.stage_id === "S4"
+    && (typeof meta.save_operation !== "string" || meta.save_operation.trim() === "")) {
+    throw new Error("S4 must record a non-empty save_operation");
+  }
   if (RETIRED_TRANSITIONS.includes(meta.prior_transition)) {
     throw new Error("Retired capture ordering is rejected");
   }
@@ -360,7 +365,7 @@ function provenanceReady(meta, planned, captureDir) {
     throw new Error("project.work exceeds 1 MiB");
   }
   const states = parsePersistenceStatesSection(readFileSync(projectPath, "latin1"));
-  if (!states.ok) throw new Error("project.work [STATES] must contain one BANK and one PATTERN");
+  if (!states.ok) throw new Error("project.work [STATES] must contain one BANK and one PATTERN in 0..15");
   return true;
 }
 
