@@ -29,7 +29,7 @@ These must not be conflated. `BANK_CHANGEPLAN_READINESS` in older docs means **e
 
 | Source | Role |
 | --- | --- |
-| [#204](https://github.com/kaz4g/masterocta/issues/204) CLOSED | `P_ARR_TEST`: UI Arrangement 1/2/8 → raw 0/1/7 → `arr01`/`arr02`/`arr08` (MkII `R0173` / OS `1.40` only). `ReadinessGap::ArrangementFileSlot` resolved in `ReadinessEvidence::current_main()`. |
+| [#204](https://github.com/kaz4g/masterocta/issues/204) CLOSED | `P_ARR_TEST`: UI Arrangement 1/2/8 → raw 0/1/7 → `arr01`/`arr02`/`arr08` (MkII `R0173` / OS `1.40` only). Other firmware (including OS `1.40B`) stays `ProjectArrangementSelection::Unrecognized`. `ReadinessGap::ArrangementFileSlot` is closed globally in `ReadinessEvidence::current_main()`; planners must not treat that as proven mapping on unrecognized targets. |
 | [#210](https://github.com/kaz4g/masterocta/issues/210) CLOSED | Flex recorder buffer: `RecorderBufferId` accepts `129..=136` only; not a separate ChangePlan readiness gap. |
 | [#219](https://github.com/kaz4g/masterocta/issues/219) CLOSED | Multi-bank fixture evidence; Working/SavedCheckpoint operation rule still open. |
 | [#227](https://github.com/kaz4g/masterocta/pull/227) MERGED | Cross-bank Pattern Paste on `P_BANK_PERSIST`: work flush on control switch, strd on project save; **not** Bank Copy semantics. |
@@ -45,7 +45,7 @@ These must not be conflated. `BANK_CHANGEPLAN_READINESS` in older docs means **e
 | Item | Classification | Notes |
 | --- | --- | --- |
 | Arrangement file-slot mapping | **RESOLVED** (OS-scoped) | #204; gap closed in code for proven OS. Other versions stay `Unrecognized`. |
-| Recorder raw-range (129..=136) | **RESOLVED** | #210; domain + reader tests. Endpoints 128/135/136 unobserved on device ≠ invalid. |
+| Recorder raw-range (129..=136) | **RESOLVED** | #210; `RecorderBufferId::new` accepts `129..=136` only; raw **128** is **rejected** (`Unrecognized(128)` in the read model). Flex slots **135** and **136** were not observed on every device capture but remain in the accepted domain range. |
 | Bank role-pair presence / swap symmetry | **RESOLVED** (precondition) | Pure contract in `bank_state_documents`; does not authorize write. |
 | Malformed / unsupported document handling | **RESOLVED** (fail-closed) | Trusted read model and envelope validation stop the plan. |
 
@@ -55,7 +55,7 @@ One row per claimed blocker. Categories: **A** RESOLVED · **B** OPEN_AND_BLOCKS
 
 | Blocker | Category | Blocks implementation planner? | Blocks executable plan / Apply? |
 | --- | --- | --- | --- |
-| #204 Arrangement file slot (listed as open blocker) | E | No (resolved in code) | No for R0173/1.40 |
+| #204 Arrangement file slot (listed as open blocker) | E | No (global gap closed; per-target still `Unrecognized` off R0173/1.40) | Yes off proven OS — plan must not claim arr slot mapping |
 | #210 Recorder buffer (listed as ChangePlan blocker) | E / A | No | No (unmodeled via Scene/Recorder gap if needed) |
 | Arranger `pattern_id` numbering | D | No — report `UnmodeledDependency::Arrangements` + `ReadinessGap::ArrangerPatternReferences` | Yes — cannot list affected Arranger rows |
 | Bank internal identity (#221) | F | No — filename identity + gap output | Yes — byte rewrite semantics unknown |
@@ -189,16 +189,21 @@ If implementation were blocked, the single highest-priority evidence unit would 
 
 GitHub #183 is **CLOSED**. Production has no Bank Apply runner. `ISSUE_183_STATE_MISMATCH = YES` (documentation / project-management mismatch, not proof Apply exists).
 
+## Arrangement mapping scope (global gap vs target firmware)
+
+`ReadinessEvidence::current_main()` closes `ArrangementFileSlot` once for all builds. That reflects reviewed #204 evidence, not “every supported project firmware has a mapped arrangement slot.” When Working `project.work` compatibility is not MkII `R0173` / OS `1.40`, or `[STATES] ARRANGEMENT` stays `Unrecognized`, a ChangePlan must treat arrangement file-slot mapping as **unproven for that target** even though the global readiness gap is closed. Executable plans and Apply must fail closed on those targets until OS-scoped evidence exists or a per-target gap is added in a future contract revision.
+
 ## Machine-readable final report
 
 ```text
 WORK_ID = MO-PSE-BANK-CHANGEPLAN-READINESS-RECONCILIATION-1
 BASE_SHA = 4b33a524bfd9822d15ea77bb42d3e9cd85f10b96
-HEAD_SHA = 8d6b3898ba0038110f76c47b01019d614de4e816
+HEAD_SHA = (branch tip at merge)
 PR = https://github.com/kaz4g/masterocta/pull/229
 PR227_EVIDENCE = INCORPORATED
-ARRANGEMENT_MAPPING = RESOLVED
-RECORDER_RAW_RANGE = RESOLVED
+ARRANGEMENT_MAPPING = PROVEN (MkII R0173 / OS 1.40 only)
+ARRANGEMENT_MAPPING_OTHER_FIRMWARE = UNRECOGNIZED (per-target; global ReadinessGap closed)
+RECORDER_RAW_RANGE = RESOLVED (129..=136; raw 128 rejected)
 ARRANGER_PATTERN_ID_STATUS = NON_BLOCKING_FOR_BANK_CHANGEPLAN
 WORKING_SAVEDCHECKPOINT_STATUS = OPEN (#217)
 BANK_INTERNAL_IDENTITY = UNKNOWN
