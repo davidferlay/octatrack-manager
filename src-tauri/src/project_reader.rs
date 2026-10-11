@@ -24193,6 +24193,271 @@ mod tests {
         assert_eq!(reread.reserved_recorder_length, 50);
     }
 
+    /// Which of an effect's six MAIN positions the device actually writes.
+    ///
+    /// A position an effect does not use is never written, so it keeps whatever the
+    /// slot held before. A position it does use carries that effect's own value.
+    /// Reading every track of every bank of every real project therefore shows the
+    /// shape: a used position takes many values across a corpus, an unused one takes
+    /// whatever happened to be left there.
+    #[test]
+    #[ignore] // Reads the user's own project corpus, which is not in the repo
+    fn probe_which_fx_main_positions_the_device_writes() {
+        use std::collections::BTreeMap;
+
+        let roots = [
+            "/home/dferlay/OneDrive/OctatrackManager",
+            "/home/dferlay/Downloads/ATOOLSTEST",
+        ];
+
+        // The four the two label tables disagree about, plus two controls they agree
+        // on: the filter and the delay both use all six positions.
+        let wanted: BTreeMap<u8, &str> = [
+            (13u8, "DJ EQ"),
+            (19, "COMB FILTER"),
+            (21, "SPRING REVERB"),
+            (28, "LO-FI"),
+            (4, "FILTER (control: all six used)"),
+            (8, "DELAY (control: all six used)"),
+        ]
+        .into_iter()
+        .collect();
+
+        fn projects(root: &Path, found: &mut Vec<std::path::PathBuf>) {
+            let Ok(entries) = std::fs::read_dir(root) else {
+                return;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_dir() {
+                    continue;
+                }
+                let name = path.file_name().unwrap_or_default().to_string_lossy();
+                // The app's own timestamped backups are near-identical copies of the
+                // project beside them, and a field matrix is generated rather than
+                // played - either would count one configuration hundreds of times
+                if name == "backups" || name.contains("FIELD_MATRIX") {
+                    continue;
+                }
+                if path.join("project.work").exists() {
+                    found.push(path.clone());
+                }
+                // Keep descending either way: a set folder can hold a project of its
+                // own beside the projects inside it
+                projects(&path, found);
+            }
+        }
+
+        let mut found = Vec::new();
+        for root in roots {
+            projects(Path::new(root), &mut found);
+        }
+        found.sort();
+        found.dedup();
+        assert!(!found.is_empty(), "no projects found");
+
+        // effect -> position -> value -> how many slots hold it
+        let mut seen: BTreeMap<u8, [BTreeMap<u8, usize>; 6]> = BTreeMap::new();
+        // effect -> the six values as one reading -> which projects show it, so one
+        // configuration copied across banks counts once
+        let mut shapes: BTreeMap<u8, BTreeMap<[u8; 6], std::collections::BTreeSet<String>>> =
+            BTreeMap::new();
+        let mut slots = 0usize;
+        let letters = [
+            "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
+        ];
+
+        for project in &found {
+            let project_path = project.to_string_lossy().to_string();
+            for bank in letters {
+                let Ok(parts) = read_parts_data(&project_path, bank) else {
+                    continue;
+                };
+                for part in &parts.parts {
+                    for fx in &part.fxs {
+                        for (kind, values) in [
+                            (
+                                fx.fx1_type,
+                                [
+                                    fx.fx1_param1,
+                                    fx.fx1_param2,
+                                    fx.fx1_param3,
+                                    fx.fx1_param4,
+                                    fx.fx1_param5,
+                                    fx.fx1_param6,
+                                ],
+                            ),
+                            (
+                                fx.fx2_type,
+                                [
+                                    fx.fx2_param1,
+                                    fx.fx2_param2,
+                                    fx.fx2_param3,
+                                    fx.fx2_param4,
+                                    fx.fx2_param5,
+                                    fx.fx2_param6,
+                                ],
+                            ),
+                        ] {
+                            if !wanted.contains_key(&kind) {
+                                continue;
+                            }
+                            slots += 1;
+                            shapes
+                                .entry(kind)
+                                .or_default()
+                                .entry(values)
+                                .or_default()
+                                .insert(project_path.clone());
+                            let rows = seen.entry(kind).or_insert_with(Default::default);
+                            for (position, value) in values.iter().enumerate() {
+                                *rows[position].entry(*value).or_insert(0) += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        println!(
+            "\n{} projects, {} loaded effect slots of interest\n",
+            found.len(),
+            slots
+        );
+
+        for (kind, rows) in &seen {
+            let total: usize = rows[0].values().sum();
+            println!("=== {} (id {}) - {} slots", wanted[kind], kind, total);
+            for (position, values) in rows.iter().enumerate() {
+                let mut top: Vec<(u8, usize)> = values.iter().map(|(v, n)| (*v, *n)).collect();
+                top.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+                let commonest = top
+                    .iter()
+                    .take(4)
+                    .map(|(v, n)| format!("{}x{}", v, n))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                println!(
+                    "  P{}  distinct {:>3}   top: {}",
+                    position + 1,
+                    values.len(),
+                    commonest
+                );
+            }
+            let mut distinct: Vec<([u8; 6], usize)> = shapes[kind]
+                .iter()
+                .map(|(values, projects)| (*values, projects.len()))
+                .collect();
+            distinct.sort_by(|a, b| b.1.cmp(&a.1));
+            println!("  {} distinct readings:", distinct.len());
+            for (values, projects) in distinct.iter().take(8) {
+                println!("    {:?}  in {} project(s)", values, projects);
+            }
+            println!();
+        }
+    }
+
+    /// Reads the two hardware validation projects and diffs their effect bytes.
+    ///
+    /// The first holds the effects as the device wrote them on assignment; the second
+    /// holds the same effects after every knob that shows a label was turned. The
+    /// positions that moved are therefore exactly the knobs that exist, which needs no
+    /// assumption about how a shown value maps to a stored byte.
+    #[test]
+    #[ignore] // Reads hardware-made projects that are not in the repo
+    fn probe_hardware_fx_position_diff() {
+        let base = "/home/dferlay/Downloads/ATOOLSTEST/OKTEST";
+        let before = format!("{}/FXPOS_S1", base);
+        let after = format!("{}/FXPOS_S2", base);
+        let letters = [
+            "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
+        ];
+
+        for bank in letters {
+            let (Ok(first), Ok(second)) = (
+                read_parts_data(&before, bank),
+                read_parts_data(&after, bank),
+            ) else {
+                continue;
+            };
+
+            for part in 0..4usize {
+                for track in 0..8usize {
+                    let a = &first.parts[part].fxs[track];
+                    let b = &second.parts[part].fxs[track];
+
+                    for (slot, kind_a, kind_b, va, vb) in [
+                        (
+                            "FX1",
+                            a.fx1_type,
+                            b.fx1_type,
+                            [
+                                a.fx1_param1,
+                                a.fx1_param2,
+                                a.fx1_param3,
+                                a.fx1_param4,
+                                a.fx1_param5,
+                                a.fx1_param6,
+                            ],
+                            [
+                                b.fx1_param1,
+                                b.fx1_param2,
+                                b.fx1_param3,
+                                b.fx1_param4,
+                                b.fx1_param5,
+                                b.fx1_param6,
+                            ],
+                        ),
+                        (
+                            "FX2",
+                            a.fx2_type,
+                            b.fx2_type,
+                            [
+                                a.fx2_param1,
+                                a.fx2_param2,
+                                a.fx2_param3,
+                                a.fx2_param4,
+                                a.fx2_param5,
+                                a.fx2_param6,
+                            ],
+                            [
+                                b.fx2_param1,
+                                b.fx2_param2,
+                                b.fx2_param3,
+                                b.fx2_param4,
+                                b.fx2_param5,
+                                b.fx2_param6,
+                            ],
+                        ),
+                    ] {
+                        if kind_a == 0 && kind_b == 0 {
+                            continue;
+                        }
+                        let moved: Vec<usize> = (0..6).filter(|i| va[*i] != vb[*i]).collect();
+                        if kind_a == kind_b && moved.is_empty() {
+                            continue;
+                        }
+                        println!(
+                            "bank {} part {} T{} {}  effect {} -> {}",
+                            bank,
+                            part + 1,
+                            track + 1,
+                            slot,
+                            kind_a,
+                            kind_b
+                        );
+                        println!("    before {:?}", va);
+                        println!("    after  {:?}", vb);
+                        println!(
+                            "    moved  {:?}",
+                            moved.iter().map(|i| i + 1).collect::<Vec<_>>()
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     #[test]
     #[ignore] // Requires OT CF card mounted
     fn verify_ot_hardware_memory_settings() {

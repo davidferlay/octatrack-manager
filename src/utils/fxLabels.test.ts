@@ -23,14 +23,25 @@ describe('effect parameter layouts', () => {
     }
   })
 
+  /**
+   * Read off the screenshots in the manual's Appendix B, where the page is drawn as
+   * two rows of three and an unused knob is simply blank. Compacting the gap away
+   * would shift every later label onto the wrong knob, so each one is pinned here
+   * with the page it came from.
+   *
+   * Confirmed on the hardware as well: an effect was loaded, saved, then every knob
+   * showing a label was turned and it was saved again. In all four the positions
+   * whose stored bytes moved are exactly the ones named here, and the blanks did not
+   * move - while a filter and a delay, which use all six, moved all six.
+   */
   it('leaves the main-page gap where the device leaves it', () => {
-    // DJ EQ: LS F and HS F sit in the first and third columns, not the first and second
+    // B.4, p125: LS F | blank | HS F  over  LOWG | MIDG | HI G
     expect(getFxMainLabels(13)).toEqual(['LS F', '', 'HS F', 'LOWG', 'MIDG', 'HI G'])
-    // Comb filter: a gap before MIX, which is therefore the sixth parameter
+    // B.9, p130: PTCH | TUNE | LP  over  FB | blank | MIX
     expect(getFxMainLabels(19)).toEqual(['PTCH', 'TUNE', 'LP', 'FB', '', 'MIX'])
-    // Spring reverb: TIME alone on the first row
+    // B.14, p135: TIME | blank | blank  over  HP | LP | MIX
     expect(getFxMainLabels(21)).toEqual(['TIME', '', '', 'HP', 'LP', 'MIX'])
-    // Lo-fi: DIST and AMF in the first and third columns
+    // B.11, p132: DIST | blank | AMF  over  SRR | BRR | AMD
     expect(getFxMainLabels(28)).toEqual(['DIST', '', 'AMF', 'SRR', 'BRR', 'AMD'])
   })
 
