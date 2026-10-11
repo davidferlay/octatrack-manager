@@ -137,7 +137,7 @@ These can ship as an explicit unread or unmapped label. They do not stop a read-
 | Scene and Recorder | Control plane §6: an unmodeled dependency closes the plan as a failure. The read model lists them. A plan that always fails is not a reviewable plan for the three operations. |
 | Working / SavedCheckpoint operation rule | The read model keeps the two documents apart. Copy/Move/Swap still has no rule for which of `.work` and `.strd` move, and what happens to `[STATES] BANK`. |
 
-`PROJECT_STATE_READ = PARTIAL` is one of these ChangePlan gaps. It is not a Read Model Done miss.
+**Note (2026-10-11):** [`PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md`](./PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md) re-evaluates §7C after #204 / #227. Arrangement file slot is no longer an open readiness gap on `main`. `PROJECT_STATE_READ = COMPLETE` in the Judgment block below supersedes the historical `PARTIAL` line here for current `main`. A fail-closed read-only ChangePlan planner may proceed (`BANK_CHANGEPLAN_IMPLEMENTATION = READY`); executable Copy/Move/Swap plans remain `NOT_READY`.
 
 ## 8. #190 Arranger
 
@@ -182,7 +182,9 @@ Apply stays behind ChangePlan, and behind the control plane's later phase. Publi
 
 On this product line the next candidate is #180, Project Structure Viewer (`PSE-1`).
 
-Do not start #181 until `BANK_CHANGEPLAN_READINESS = READY`.
+Historical gate: this audit said not to start #181 until `BANK_CHANGEPLAN_READINESS = READY` (execution sense).
+
+**Update (2026-10-11):** Reconciliation after #227 separates **implementation** readiness (`READY` → `MO-PSE-BANK-CHANGEPLAN-CORE-1`) from **execution** readiness (`BANK_CHANGEPLAN_READINESS = NOT_READY`). See [`PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md`](./PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md).
 
 This repository's M7 primary in `DEVELOPMENT_STATUS.md` is a different line. This audit does not make #180 the M7 next step.
 
