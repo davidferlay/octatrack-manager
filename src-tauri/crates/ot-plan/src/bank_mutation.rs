@@ -1671,6 +1671,22 @@ mod tests {
         assert!(open.contains(&ReadinessGap::BankChangePlan));
         assert_eq!(ReadinessGap::BankChangePlan.tracking(), "#181");
         assert_eq!(ReadinessGap::ArrangementFileSlot.tracking(), "#204");
+
+        let expected_open = [
+            ReadinessGap::BankChangePlan,
+            ReadinessGap::ArrangerPatternReferences,
+            ReadinessGap::BankInternalIdentity,
+            ReadinessGap::SceneAndRecorderDependencies,
+            ReadinessGap::WorkingSavedCheckpointRule,
+            ReadinessGap::ApplyAuthorization,
+        ];
+        for gap in expected_open {
+            assert!(
+                open.contains(&gap),
+                "expected {gap:?} to remain open on current_main()"
+            );
+        }
+        assert_eq!(open.len(), expected_open.len());
     }
 
     #[test]

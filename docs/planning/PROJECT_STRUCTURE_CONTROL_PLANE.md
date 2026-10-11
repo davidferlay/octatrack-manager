@@ -5,6 +5,7 @@
 - Updated: 2026-09-30
 - Canonical milestone numbers: [`MILESTONE_INDEX.md`](./MILESTONE_INDEX.md)（この文書は M5–M11 を増やさない）
 - Current execution status: [`DEVELOPMENT_STATUS.md`](./DEVELOPMENT_STATUS.md)
+- Bank ChangePlan readiness (post-#227 reconciliation): [`PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md`](./PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md)
 - Domain vocabulary: [`../domain/OCTATRACK_STATE_AND_SAMPLE_SEMANTICS.md`](../domain/OCTATRACK_STATE_AND_SAMPLE_SEMANTICS.md)
 - Write boundary: [`../NEXT_GENERATION_ARCHITECTURE.md`](../NEXT_GENERATION_ARCHITECTURE.md)
 

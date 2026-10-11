@@ -36,7 +36,7 @@ GitHub [#183](https://github.com/kaz4g/masterocta/issues/183) `[PSE] Bank Fixtur
 
 Domain: [`project_structure.rs`](../../src-tauri/crates/ot-domain/src/project_structure.rs) documents that Working `project.work` is not filled from `project.strd`.
 
-Working `project.work` `[STATES]` (PSE): `BANK` and `PATTERN` map to zero-based `BankIndex` / `PatternIndex`. `ARRANGEMENT` stays unmapped ([#204](https://github.com/kaz4g/masterocta/issues/204)). BMS whitelist still rejects `project.work` as a change target until an explicit contract schema bump ([#182](PSE_BANK_MUTATION_SAFETY_CONTRACT.md) §5, §16-3).
+Working `project.work` `[STATES]` (PSE): `BANK` and `PATTERN` map to zero-based `BankIndex` / `PatternIndex`. `ARRANGEMENT` maps to `arr01`–`arr08` for MkII `R0173` / OS `1.40` only ([#204](https://github.com/kaz4g/masterocta/issues/204) CLOSED; other OS versions stay `Unrecognized`). BMS whitelist still rejects `project.work` as a change target until an explicit contract schema bump ([#182](PSE_BANK_MUTATION_SAFETY_CONTRACT.md) §5, §16-3).
 
 ### Working vs SavedCheckpoint (evidence class)
 
@@ -174,14 +174,18 @@ No changes to `BankMutationEnvelope`, `ReadinessEvidence::current_main`, or BMS 
 | bank01.work/strd decode and byte inequality | `tests/bank_state_doc_semantics.rs` |
 | PSE reader no fallback | `project_structure_reader.rs` (existing) |
 
-## Remaining #181 blockers (unchanged by this work unit)
+## Resolved prerequisites (not remaining #181 blockers)
 
-- #204 Arrangement file slot
-- Arranger `pattern_id` evidence
-- Bank internal identity bytes
-- Scene / Recorder dependencies
-- #210 Recorder buffer evidence (where referenced)
-- Owner items BMS §16-1–§16-3
+- [#204](https://github.com/kaz4g/masterocta/issues/204) Arrangement file slot — `ReadinessGap::ArrangementFileSlot` resolved on `main` for MkII `R0173` / OS `1.40`; see [`PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md`](./PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md).
+- [#210](https://github.com/kaz4g/masterocta/issues/210) Recorder buffer raw range — `RecorderBufferId` `129..=136`; not a ChangePlan blocker (Scene/Recorder unmodeled gap covers plan safety).
+
+## Remaining #181 blockers (reconciled after #227)
+
+- Arranger `pattern_id` evidence (fail-closed unmodeled; does not block read-only planner — see reconciliation doc)
+- Bank internal identity bytes ([#221](https://github.com/kaz4g/masterocta/issues/221))
+- Scene / Recorder dependencies (fail-closed unmodeled)
+- Working / SavedCheckpoint operation rule ([#217](https://github.com/kaz4g/masterocta/issues/217)); `COPY_SAVED_CHECKPOINT_SEMANTICS = UNKNOWN` after #227 Pattern Paste evidence
+- Active bank retarget and Move vacated source (BMS §16-1–§16-3 owner items)
 
 ## Safety
 

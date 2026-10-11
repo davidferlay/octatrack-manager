@@ -29,7 +29,7 @@ APPLY_READINESS        = NOT_READY
 
 ## 1. 依存と現在の判定
 
-`ReadinessEvidence::current_main()` は下の 7 項目をすべて未解決として返す。1 つでも未解決なら、他の検査がすべて通っても Apply entry permit は発行されない（テスト `current_main_withholds_the_permit_even_for_a_clean_plan`、`a_single_open_gap_withholds_the_permit`）。
+`ReadinessEvidence::current_main()` は 7 項目中 **`ArrangementFileSlot` のみ解決済み**（#204、`P_ARR_TEST` on MkII `R0173` / OS `1.40`）。残り 6 gap が open の間、他の検査がすべて通っても Apply entry permit は発行されない（テスト `current_main_withholds_the_permit_even_for_a_clean_plan`、`a_single_open_gap_withholds_the_permit`）。実装可能な read-only ChangePlan 計画器と実行可能計画の区別は [`PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md`](./PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md) を参照。
 
 | `ReadinessGap` | 未解決の理由 | 追跡 |
 | --- | --- | --- |
