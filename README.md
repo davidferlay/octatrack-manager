@@ -40,7 +40,7 @@
 
 Octatrack Manager is currently a **work in progress**. New functionalities are being added regularly to expand its capabilities.
 
-We are constantly working to improve the application and add more power-user features. Your feedback and bug reports are essential to make the project better.
+Your feedback and bug reports are essential to make the project better.
 
 
 ## Documentation
@@ -64,7 +64,7 @@ For detailed instructions, troubleshooting, and feature explanations, please vis
 
 ## Contributing & Feedback
 
-Feedback from the community is invaluable. Please share your experiences, bug reports, and ideas:
+Feedback from the community matters more than you think. Please share your experiences, bug reports and ideas:
 
 - **Elektronauts:** [Project Manager for Octatrack Thread](https://www.elektronauts.com/t/project-manager-for-octatrack/233672)
 
