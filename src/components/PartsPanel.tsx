@@ -45,6 +45,8 @@ interface PartsPanelProps {
    * knob turn would rescan the Set for nothing.
    */
   onSlotAssignmentSaved?: () => void;
+  /** Bumped when the bank was rewritten underneath us, so it is read again. */
+  reloadKey?: number;
   /**
    * A track was switched to a different machine.
    *
@@ -93,6 +95,7 @@ export default function PartsPanel({
   onMachineTypeChanged,
   onPoolChanged,
   sampleSlots,
+  reloadKey,
 }: PartsPanelProps) {
   const [partsData, setPartsData] = useState<PartData[]>([]);
   // Open Sample Slot picker: which track of which Part it is assigning, and its pool
@@ -163,9 +166,12 @@ export default function PartsPanel({
   // Always use partsData directly - we edit in place and auto-save
   const activePartsData = partsData;
 
+  // reloadKey changes when the files were rewritten underneath us, by an undo. The
+  // Part is read again in place: remounting would re-read too, but it would also
+  // throw away which page tab is open, which has nothing to do with the write.
   useEffect(() => {
     loadPartsData();
-  }, [projectPath, bankId]);
+  }, [projectPath, bankId, reloadKey]);
 
   // Keep partsDataRef in sync with partsData state
   useEffect(() => {

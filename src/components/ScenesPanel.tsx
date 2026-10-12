@@ -26,6 +26,8 @@ interface ScenesPanelProps {
   onWriteStatusChange?: (status: WriteStatus) => void;
   /** Already read by the project page, so the tab opens on data rather than a spinner. */
   preloaded?: ScenesResponse;
+  /** Bumped when the bank was rewritten underneath us, so it is read again. */
+  reloadKey?: number;
   /** Which scene is open. Held by the project page so it survives leaving the tab. */
   selectedScene: number;
   onSceneChange: (sceneId: number) => void;
@@ -78,7 +80,7 @@ const SAVE_DELAY = 500;
 
 export function ScenesPanel({
   projectPath, bankId, bankName, partId, partNames, isEditMode = false,
-  onPartChange, onWriteStatusChange, preloaded, selectedScene, onSceneChange,
+  onPartChange, onWriteStatusChange, preloaded, reloadKey, selectedScene, onSceneChange,
 }: ScenesPanelProps) {
   const [data, setData] = useState<ScenesResponse | null>(preloaded ?? null);
   const [error, setError] = useState<string | null>(null);
@@ -133,7 +135,9 @@ export function ScenesPanel({
       })
       .catch(err => { if (current) setError(String(err)); });
     return () => { current = false; };
-  }, [projectPath, bankId, partId, adoptBankState, preloaded]);
+    // reloadKey changes when an undo rewrote the files: the scenes are read again in
+    // place, so which view is open and which scene is chosen are left alone
+  }, [projectPath, bankId, partId, adoptBankState, preloaded, reloadKey]);
 
   useEffect(() => () => {
     for (const timer of Object.values(saveTimers.current)) clearTimeout(timer);

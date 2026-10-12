@@ -584,8 +584,9 @@ export function ProjectDetail() {
    * Everything has to be read again: undo rewrote whole files.
    *
    * The panels hold their own copy of what they are editing, and the scenes are read
-   * ahead into a cache, so both are thrown away. Bumping the key remounts the cards,
-   * which is the one way to be sure nothing stale survives anywhere.
+   * ahead into a cache, so both are thrown away and the panels read again.
+   * They are asked rather than remounted: remounting would also throw away which page
+   * tab and which view are open, and an undo has nothing to do with those.
    */
   const [restoreKey, setRestoreKey] = useState(0);
   const handleRestored = useCallback(() => {
@@ -1662,10 +1663,11 @@ export function ProjectDetail() {
 
                       return (
                         <PartsPanel
-                          key={`bank-parts-${bankIndex}-${restoreKey}`}
+                          key={`bank-parts-${bankIndex}`}
                           projectPath={projectPath || ''}
                           bankId={bank.id}
                           bankName={formatBankName(bank.name, bankIndex)}
+                          reloadKey={restoreKey}
                           partNames={partNames}
                           selectedTrack={trackForParts}
                           initialActivePart={initialPart}
@@ -1727,7 +1729,7 @@ export function ProjectDetail() {
                         if (!bank) return null;
                         return (
                           <ScenesPanel
-                            key={`bank-scenes-${bankIndex}-${restoreKey}`}
+                            key={`bank-scenes-${bankIndex}`}
                             projectPath={projectPath || ''}
                             bankId={bank.id}
                             bankName={formatBankName(bank.name, bankIndex)}
@@ -1737,6 +1739,7 @@ export function ProjectDetail() {
                             onPartChange={setSharedPartsActivePartIndex}
                             onWriteStatusChange={handleWriteStatusChange}
                             preloaded={scenesCache.get(bank.id)?.[activePart]}
+                            reloadKey={restoreKey}
                             selectedScene={selectedSceneIndex}
                             onSceneChange={chooseScene}
                           />

@@ -190,3 +190,4 @@ is shown and set on its own and never touches what a scene holds.
 | SC132 | Actions | Every operation says what it did | Use Copy, Paste, Clear or Randomize | A floating badge names what happened, as copying a path on the project list does |
 | SC133 | Actions | The badge fades | Wait after an operation | It goes on its own rather than staying put |
 | SC134 | Matrix | The chosen column is marked edge to edge | Choose a scene and look at its column | The heading's blue spans the column, flush with the cells below it |
+| SC135 | Undo | It leaves your place alone | Open the Matrix on a chosen scene, make a change, then Undo | The Matrix is still open on the same scene, with the same options set |

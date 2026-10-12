@@ -327,3 +327,4 @@ Up is more, down is less, throughout.
 | PE219 | Undo | Hidden outside Edit mode | Leave Edit mode | The pair is not shown at all |
 | PE220 | Undo | Fifty writes deep | Make more than fifty changes, then undo repeatedly | It walks back fifty of them and then stops |
 | PE221 | Undo | A refused button is not a forbidden one | Hover Undo with nothing to undo | The pointer stays a normal arrow |
+| PE222 | Undo | It leaves your place alone | Open a page tab, make a change, then Undo | The same page tab is still open |

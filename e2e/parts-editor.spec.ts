@@ -4208,6 +4208,41 @@ test.describe('Parts Editor - Undo and redo', () => {
     await expect(undo(page)).toBeEnabled({ timeout: 3000 })
   })
 
+  /**
+   * An undo rewrites the files, so everything has to be read again - but which page
+   * tab or view is open has nothing to do with the write, and losing it means finding
+   * your place again after every undo.
+   */
+  test('it leaves the Parts page tab where it was', async ({ page }) => {
+    // The write is made on the page that has an ATK, then the tab is moved off it
+    await writeOnce(page, '33')
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: /^LFO$/ }).click()
+    await expect(page.locator('.parts-page-tabs .parts-tab.active')).toHaveText('LFO')
+
+    await expect(undo(page)).toBeEnabled()
+    await undo(page).click()
+
+    await expect(page.locator('.parts-page-tabs .parts-tab.active')).toHaveText('LFO')
+  })
+
+  test('it leaves the Scenes view and scene where they were', async ({ page }) => {
+    await page.getByRole('button', { name: 'Scenes', exact: true }).click()
+    await expect(page.locator('.scenes-grid')).toBeVisible()
+    await page.locator('.scene-card').nth(5).click()
+    await page.locator('.scene-view-tab', { hasText: 'Matrix' }).click()
+    // Show all params is the panel's own state, so it is the thing a remount loses
+    await page.locator('.scene-show-all').click()
+    await expect(page.locator('.scene-show-all')).toHaveAttribute('aria-pressed', 'true')
+
+    await page.locator('input.scene-value').first().fill('40')
+    await expect(undo(page)).toBeEnabled({ timeout: 3000 })
+    await undo(page).click()
+
+    await expect(page.locator('.scene-view-tab.active')).toHaveText('Matrix')
+    await expect(page.locator('.scene-show-all')).toHaveAttribute('aria-pressed', 'true')
+    await expect(page.locator('.scene-matrix-head.selected')).toHaveText('6')
+  })
+
   test('neither is shown outside Edit mode', async ({ page }) => {
     await page.locator('.mode-toggle').click()
     await expect(page.locator('.write-history-controls')).toHaveCount(0)
