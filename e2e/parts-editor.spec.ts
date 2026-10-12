@@ -3353,7 +3353,8 @@ test.describe('Scenes', () => {
       // The colour is the whole marking now that the letters are gone, so it is pinned
       await expect(page.locator('.scene-matrix-head.crossfader-end:not(.selected)'))
         .toHaveCSS('color', 'rgb(255, 102, 0)')
-      await expect(page.locator('.scene-matrix-head.selected'))
+      // The marking sits on the button, which is what fills the heading cell
+      await expect(page.locator('.scene-matrix-head.selected button'))
         .toHaveCSS('background-color', 'rgb(74, 144, 226)')
     })
 
@@ -3394,10 +3395,22 @@ test.describe('Scenes', () => {
       await expect(page.locator('.scene-matrix-head').nth(8)).toHaveText('9')
     })
 
-    test('the headings are labels, not a second scene picker', async ({ page }) => {
+    test('a heading chooses that scene', async ({ page }) => {
       await open(page)
-      // The grid above already chooses the scene; two ways to do it is one too many
-      await expect(page.locator('.scene-matrix-head button')).toHaveCount(0)
+      await page.locator('.scene-matrix-head button', { hasText: /^6$/ }).click()
+      await expect(page.locator('.scene-matrix-head').nth(5)).toHaveClass(/selected/)
+      await page.locator('.scene-view-tab', { hasText: 'Scene' }).click()
+      await expect(page.locator('.scene-detail-title')).toHaveText('Scene 6')
+    })
+
+    test('the headings step with the wheel, as the grid does', async ({ page }) => {
+      await open(page)
+      const heads = page.locator('.scene-matrix-head')
+      await heads.first().hover()
+      await page.mouse.wheel(0, -120)
+      await expect(heads.nth(1)).toHaveClass(/selected/)
+      await page.mouse.wheel(0, 120)
+      await expect(heads.nth(0)).toHaveClass(/selected/)
     })
 
     test('follows the grid when another scene is chosen', async ({ page }) => {
@@ -3466,6 +3479,33 @@ test.describe('Scenes', () => {
       expect(await named()).toEqual(onScene)
       await page.locator('.scene-view-tab', { hasText: 'Compare' }).click()
       expect(await named()).toEqual(onScene)
+    })
+
+    /** The same cross the scene list gives a row, on whichever cell is under the pointer. */
+    test('a value can be taken out of its scene from here', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await open(page)
+      const row = page.locator('.scene-matrix-table tbody tr')
+        .filter({ has: page.locator('.scene-row-label', { hasText: /^VOL$/ }) })
+      const cell = row.locator('.scene-matrix-cell').first()
+      // The cross only takes the pointer once the cell has it, as in use
+      await cell.hover()
+      await cell.locator('.scene-clear-one').click()
+
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'save_scene')).length, { timeout: 3000 })
+        .toBe(1)
+      const calls = await getInvokeCalls(page, 'save_scene')
+      expect(calls[0].args.sceneId).toBe(0)
+      expect(calls[0].args.tracks[0].amp[3]).toBeNull()
+    })
+
+    test('the cross is out of the way until the cell is pointed at', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await open(page)
+      // Sixteen columns of crosses would be the only thing on screen
+      await expect(page.locator('.scene-matrix-cell .scene-clear-one').first())
+        .toHaveCSS('opacity', '0')
     })
 
     test('a parameter can be put into another scene from here', async ({ page }) => {
@@ -3547,6 +3587,57 @@ test.describe('Scenes', () => {
       await open(page)
       await sides(page).last().selectOption({ value: '5' })
       await expect(page.locator('.scene-compare .scene-track-count')).toHaveText('4')
+    })
+
+    /** The operation a comparison asks for: make one side match the other. */
+    test('a track can be copied from one side to the other', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await open(page)
+      await sides(page).last().selectOption({ value: '5' })
+      const card = page.locator('.scene-compare .scene-track').first()
+
+      await card.getByRole('button', { name: 'Copy track 1 rightwards' }).click()
+
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'save_scene')).length, { timeout: 3000 })
+        .toBe(1)
+      const calls = await getInvokeCalls(page, 'save_scene')
+      // Scene 1's track 1 lands in scene 6, AMP VOL and all
+      expect(calls[0].args.sceneId).toBe(5)
+      expect(calls[0].args.tracks[0].amp[3]).toBe(100)
+    })
+
+    test('copying the other way puts the right side into the left', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await open(page)
+      await sides(page).last().selectOption({ value: '5' })
+      const card = page.locator('.scene-compare .scene-track').first()
+
+      await card.getByRole('button', { name: 'Copy track 1 leftwards' }).click()
+
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'save_scene')).length, { timeout: 3000 })
+        .toBe(1)
+      const calls = await getInvokeCalls(page, 'save_scene')
+      expect(calls[0].args.sceneId).toBe(0)
+      expect(calls[0].args.tracks[0].amp[3]).toBe(80)
+    })
+
+    test('neither is offered outside Edit mode', async ({ page }) => {
+      await open(page)
+      await expect(page.locator('.scene-compare .scene-track-actions')).toHaveCount(0)
+    })
+
+    test('shows every position on request, as the matrix does', async ({ page }) => {
+      await open(page)
+      await sides(page).last().selectOption({ value: '5' })
+      const held = await page.locator('.scene-compare-table tbody tr').count()
+
+      await page.locator('.scene-show-all').click()
+
+      await expect
+        .poll(async () => page.locator('.scene-compare-table tbody tr').count())
+        .toBeGreaterThan(held)
     })
 
     test('lists what either of them holds, and nothing else', async ({ page }) => {
@@ -3741,7 +3832,8 @@ test.describe('Scenes', () => {
     test('a right-click offers both ends', async ({ page }) => {
       await card(page, 4).click({ button: 'right' })
       await expect(menu(page)).toBeVisible()
-      await expect(menu(page).locator('.context-menu-item')).toHaveCount(3)
+      // Assign to A, assign to B, then compare with A, B or the chosen scene
+      await expect(menu(page).locator('.context-menu-item')).toHaveCount(5)
       await expect(menu(page)).toContainText('Scene 4')
     })
 
@@ -3781,6 +3873,23 @@ test.describe('Scenes', () => {
         .toBeDisabled()
       await expect(menu(page).locator('.context-menu-item', { hasText: /Assign to B$/ }))
         .toBeEnabled()
+    })
+
+    test('offers reading a scene against B and against the chosen one', async ({ page }) => {
+      await card(page, 5).click()
+      await card(page, 3).click({ button: 'right' })
+      await menu(page).locator('.context-menu-item', { hasText: 'Compare with B' }).click()
+      await expect(page.locator('.scene-compare-pick').first()).toHaveValue('8')
+      await expect(page.locator('.scene-compare-pick').last()).toHaveValue('2')
+
+      await page.locator('.scene-view-tab', { hasText: 'Scene' }).click()
+      await card(page, 3).click({ button: 'right' })
+      await menu(page).locator('.context-menu-item', { hasText: 'Compare with selected' })
+        .click()
+      // A right-click opens the menu without choosing the card, so the chosen scene is
+      // still the one clicked earlier
+      await expect(page.locator('.scene-compare-pick').first()).toHaveValue('4')
+      await expect(page.locator('.scene-compare-pick').last()).toHaveValue('2')
     })
 
     test('offers reading a scene against the A end', async ({ page }) => {
@@ -3856,7 +3965,7 @@ test.describe('Scenes', () => {
 
     test('the travel between the ends is worth some width', async ({ page }) => {
       await expect(page.locator('.scenes-panel .bank-card-header .crossfader-track'))
-        .toHaveCSS('min-width', '140px')
+        .toHaveCSS('min-width', '190px')
     })
 
     test('the view row is the tabs and the operations', async ({ page }) => {
@@ -4064,6 +4173,7 @@ test.describe('Parts Editor - Nothing overflows sideways', () => {
     }
   })
 })
+
 
 
 

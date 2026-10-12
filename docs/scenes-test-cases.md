@@ -170,7 +170,7 @@ is shown and set on its own and never touches what a scene holds.
 | SC122 | Compare | Nothing to compare | Compare two scenes that both hold nothing | It says so plainly rather than showing an empty table |
 | SC122b | Compare | Editing in place | In Edit mode, change a value on either side | That side's scene changes |
 | SC122c | Ends | Assign from the grid | Right-click a scene card in Edit mode | A menu offers "Assign to A" and "Assign to B" |
-| SC122f | Ends | Compare with A from the grid | Right-click a card and choose "Compare with A" | The Compare tab opens with the A end on one side and that scene on the other |
+| SC122f | Ends | Compare from the grid | Right-click a card and choose Compare with A, B or selected | The Compare tab opens with that scene against the one chosen |
 | SC122g | Ends | Comparing A with itself | Right-click the A end's own scene | "Compare with A" is refused |
 | SC122h | Layout | The fader sits with the tabs | Open the Scenes tab | The crossfader is on the same row as the view tabs, not below the list |
 | SC122i | Layout | The same operations in every view | Enter Edit mode and step through Scene, Matrix and Compare | Copy, Paste, Clear, Randomize, the three end actions and Show all params are the same in all three |
@@ -180,3 +180,10 @@ is shown and set on its own and never touches what a scene holds.
 | SC122e | Ends | Read-only outside Edit mode | Right-click a card without Edit mode | Both entries are refused |
 | SC123 | Undo | A scene edit can be taken back | Change a scene value, then press Undo in the project header | The value goes back and the scene reads as it did |
 | SC124 | Undo | One history for the project | Change a Part, then a scene, then Undo twice | Both go back, newest first, from the same pair of buttons |
+| SC125 | Matrix | A heading chooses its scene | Click a column heading | That scene becomes the chosen one, as clicking a card does |
+| SC126 | Matrix | Headings step with the wheel | Hover the heading row and turn the wheel | The chosen scene moves one at a time, as over the grid |
+| SC127 | Matrix | Taking a value out | In Edit mode, point at a cell and press its cross | That parameter leaves that scene |
+| SC128 | Matrix | The cross stays out of the way | Look at the matrix without pointing at a cell | No crosses are shown; sixteen columns of them would be all there is |
+| SC129 | Compare | Show all params | Turn it on while comparing | Every position either side could hold is listed, so an empty one can be filled |
+| SC130 | Compare | Make one side match the other | In Edit mode, press a card's arrow | That track's whole scene state is copied to the other side |
+| SC131 | Compare | Not offered on one scene | Set both sides to the same scene | The arrows are not shown: there is nothing to copy between |

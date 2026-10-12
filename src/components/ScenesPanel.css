@@ -649,8 +649,8 @@
 
 /* The travel between the two ends is what the fader is: worth the width */
 .scenes-panel .bank-card-header .crossfader-track {
-  min-width: 140px;
-  flex: 0 1 140px;
+  min-width: 190px;
+  flex: 0 1 190px;
 }
 
 .scene-view-tabs {
@@ -742,6 +742,23 @@
   text-align: center;
   padding: 0 3px 6px;
   vertical-align: bottom;
+  font-size: 13px;
+}
+
+.scene-matrix-table th.scene-matrix-head button {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  padding: 2px 6px;
+  border-radius: 3px 3px 0 0;
+  cursor: pointer;
+  width: 100%;
+}
+
+.scene-matrix-table th.scene-matrix-head button:hover {
+  color: #ffffff;
 }
 
 .scene-matrix-table td.scene-matrix-cell {
@@ -749,11 +766,16 @@
   padding-right: 3px;
 }
 
-.scene-matrix-head.selected { background: #4a90e2; color: #fff; border-radius: 3px 3px 0 0; }
-.scene-matrix-head.selected,
+.scene-matrix-table th.scene-matrix-head.selected { padding-top: 6px; }
+/* Named against the table too: the plain heading-button rule above is one class
+   heavier, so a bare `.selected button` loses to it whatever the order. */
+.scene-matrix-table th.scene-matrix-head.selected button {
+  background: #4a90e2;
+  color: #fff;
+}
 .scene-matrix-cell.selected { box-shadow: inset 0 0 0 1px rgba(74, 144, 226, 0.35); }
-.scene-matrix-head.crossfader-end { color: var(--elektron-orange); }
-.scene-matrix-head.selected.crossfader-end { color: #fff; }
+.scene-matrix-table th.scene-matrix-head.crossfader-end { color: var(--elektron-orange); }
+.scene-matrix-table th.scene-matrix-head.selected.crossfader-end { color: #fff; }
 
 .scene-matrix-cell {
   text-align: center;
@@ -845,10 +867,10 @@
 
 .scene-matrix-cell input.scene-value,
 .scene-matrix-cell .scene-add {
-  width: 52px;
-  height: 22px;
-  line-height: 22px;
-  font-size: 12px;
+  width: 56px;
+  height: 24px;
+  line-height: 24px;
+  font-size: 13px;
 }
 
 .scene-compare-value input.scene-value,
@@ -869,8 +891,12 @@
 /* Only the matrix needs the slack absorbed: it has sixteen value columns and fills
    the width anyway. The comparison has two, and pushing them to the far right leaves
    a stretch of nothing between a parameter and its values. */
+.scene-matrix-table .scene-row-track,
+.scene-matrix-table .scene-row-page,
 .scene-matrix-table .scene-row-label {
-  width: 100%;
+  width: 1%;
+  white-space: nowrap;
+  padding-right: 10px;
 }
 
 /* The two scenes being read, centred above the cards rather than inside them. It is
@@ -927,12 +953,12 @@
 
 /* How far the fader moves this parameter, in what the device shows */
 .scene-compare-travel {
-  width: 1%;
+  width: 48px;
   white-space: nowrap;
-  text-align: right;
-  padding-left: 6px;
+  text-align: center;
+  padding-left: 10px;
   font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -955,4 +981,28 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--elektron-text-secondary);
+}
+
+/* A value and the cross that takes it out of the scene. The cross only shows under the
+   pointer: these views put a great many cells on screen at once, and a cross on every
+   one of them would be the only thing anybody saw. */
+.scene-cell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.scene-cell .scene-clear-one {
+  position: absolute;
+  right: -5px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: opacity 0.12s;
+  pointer-events: none;
+}
+
+.scene-cell:hover .scene-clear-one {
+  opacity: 1;
+  pointer-events: auto;
 }

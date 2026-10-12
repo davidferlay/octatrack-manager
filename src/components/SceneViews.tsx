@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useWheelStep } from '../utils/wheelStep';
 import { TrackBadge } from './TrackBadge';
 import { formatSpecValue } from '../utils/partFieldSpecs';
 import { fieldHelp, helpTitle } from '../utils/partFieldHelp';
@@ -37,6 +38,44 @@ function NotHeld({ editable, onAdd }: { editable: boolean; onAdd: () => void }) 
   );
 }
 
+/**
+ * One scene's value for one parameter, with the same two operations the scene list
+ * gives it: a dash to put it in, and a cross to take it out again.
+ *
+ * The cross only appears under the pointer: these views show a great many cells at
+ * once, and a cross on every one of them would be all anybody saw.
+ */
+function Cell({ row, scene, editable, onSet }: {
+  row: AssignmentRow;
+  scene: number;
+  editable: boolean;
+  onSet: SetAssignment;
+}) {
+  const value = row.values[scene];
+  if (value === null) {
+    return <NotHeld editable={editable} onAdd={() => onSet(row, scene, row.spec.default)} />;
+  }
+  return (
+    <span className="scene-cell">
+      <SceneValue
+        slot={{ spec: row.spec, value }}
+        editable={editable}
+        onChange={next => onSet(row, scene, next)}
+      />
+      {editable && (
+        <button
+          className="scene-clear-one"
+          onClick={() => onSet(row, scene, null)}
+          title={`Take ${row.label} out of scene ${scene + 1}`}
+          aria-label={`Take ${row.label} out of scene ${scene + 1}`}
+        >
+          &times;
+        </button>
+      )}
+    </span>
+  );
+}
+
 /** The tooltip the Parts page would give this parameter, so naming stays consistent. */
 function rowTitle(row: AssignmentRow, data: ScenesResponse): string | undefined {
   return helpTitle(row.label, fieldHelp(row.field, data.machine_types[row.trackId], {
@@ -72,7 +111,7 @@ export type SetAssignment = (
  * The scene is chosen in the grid above, as everywhere else, so the headings here are
  * plain labels rather than a second set of buttons that do the same thing.
  */
-export function SceneMatrix({ data, selected, editable, showAll, onSet }: {
+export function SceneMatrix({ data, selected, editable, showAll, onSet, onSceneChange }: {
   data: ScenesResponse;
   selected: number;
   /** Values can be changed in place, as they can in the scene list. */
@@ -80,7 +119,13 @@ export function SceneMatrix({ data, selected, editable, showAll, onSet }: {
   /** Every position a scene could reach for, not only the ones some scene holds. */
   showAll: boolean;
   onSet: SetAssignment;
+  onSceneChange: (sceneId: number) => void;
 }) {
+  // The headings choose a scene and step with the wheel, as the grid above does
+  const headWheelRef = useWheelStep(
+    (by: 1 | -1) => onSceneChange(Math.min(15, Math.max(0, selected + by))),
+    null,
+  );
   const rows = useMemo(() => sceneAssignments(data, showAll), [data, showAll]);
 
   if (rows.length === 0) {
@@ -102,7 +147,7 @@ export function SceneMatrix({ data, selected, editable, showAll, onSet }: {
       <div className="scene-matrix-scroll">
         <table className="scene-matrix-table">
           <thead>
-            <tr>
+            <tr ref={headWheelRef}>
               <th className="scene-row-track">Track</th>
               <th className="scene-row-page">Page</th>
               <th className="scene-row-label">Parameter</th>
@@ -116,11 +161,15 @@ export function SceneMatrix({ data, selected, editable, showAll, onSet }: {
                       scene.scene_id === selected ? 'selected' : '',
                       end ? 'crossfader-end' : '',
                     ].filter(Boolean).join(' ')}
-                    title={end
-                      ? `Scene ${scene.scene_id + 1}, the ${end} end of the crossfader`
-                      : `Scene ${scene.scene_id + 1}`}
                   >
-                    {scene.scene_id + 1}
+                    <button
+                      onClick={() => onSceneChange(scene.scene_id)}
+                      title={end
+                        ? `Scene ${scene.scene_id + 1}, the ${end} end of the crossfader`
+                        : `Scene ${scene.scene_id + 1}`}
+                    >
+                      {scene.scene_id + 1}
+                    </button>
                   </th>
                 );
               })}
@@ -139,18 +188,7 @@ export function SceneMatrix({ data, selected, editable, showAll, onSet }: {
                       scene === selected ? 'selected' : '',
                     ].filter(Boolean).join(' ')}
                   >
-                    {value === null ? (
-                      <NotHeld
-                        editable={editable}
-                        onAdd={() => onSet(row, scene, row.spec.default)}
-                      />
-                    ) : (
-                      <SceneValue
-                        slot={{ spec: row.spec, value }}
-                        editable={editable}
-                        onChange={next => onSet(row, scene, next)}
-                      />
-                    )}
+                    <Cell row={row} scene={scene} editable={editable} onSet={onSet} />
                   </td>
                 ))}
               </tr>
@@ -174,18 +212,25 @@ export function SceneMatrix({ data, selected, editable, showAll, onSet }: {
  * device cannot show you: a parameter only moves where the two ends disagree about
  * it, and a row they agree on is one the fader passes over doing nothing.
  */
-export function SceneCompare({ data, left, right, onPick, editable, onSet }: {
+export function SceneCompare({
+  data, left, right, onPick, editable, showAll, onSet, onCopyTrack,
+}: {
   data: ScenesResponse;
   left: number;
   right: number;
   onPick: (side: 'left' | 'right', sceneId: number) => void;
   editable: boolean;
+  /** Every position either side could reach for, not only the ones they hold. */
+  showAll: boolean;
   onSet: SetAssignment;
+  /** Puts one track's whole scene state from one side into the other. */
+  onCopyTrack: (trackId: number, from: number, to: number) => void;
 }) {
   const rows = useMemo(
-    () => sceneAssignments(data)
-      .filter(row => row.values[left] !== null || row.values[right] !== null),
-    [data, left, right],
+    () => sceneAssignments(data, showAll)
+      .filter(row => showAll
+        || row.values[left] !== null || row.values[right] !== null),
+    [data, left, right, showAll],
   );
 
   /** The rows of each track that has any, in track order. */
@@ -243,19 +288,6 @@ export function SceneCompare({ data, left, right, onPick, editable, onSet }: {
     return <span className={by > 0 ? 'rising' : 'falling'}>{by > 0 ? `+${by}` : by}</span>;
   };
 
-  const cell = (row: AssignmentRow, scene: number) => {
-    const value = row.values[scene];
-    return value === null
-      ? <NotHeld editable={editable} onAdd={() => onSet(row, scene, row.spec.default)} />
-      : (
-        <SceneValue
-          slot={{ spec: row.spec, value }}
-          editable={editable}
-          onChange={next => onSet(row, scene, next)}
-        />
-      );
-  };
-
   return (
     <div className="scene-compare">
       <div className="scene-compare-sides">
@@ -276,6 +308,27 @@ export function SceneCompare({ data, left, right, onPick, editable, onSet }: {
               <div className="scene-track-head">
                 <TrackBadge trackId={trackId} />
                 <span className="scene-track-machine">{data.machine_types[trackId]}</span>
+                {editable && left !== right && (
+                  // The operation a comparison asks for: make one side match the other
+                  <span className="scene-track-actions">
+                    <button
+                      className="scene-track-action"
+                      onClick={() => onCopyTrack(trackId, left, right)}
+                      title={`Put this track's settings from scene ${left + 1} into scene ${right + 1}`}
+                      aria-label={`Copy track ${trackId + 1} rightwards`}
+                    >
+                      <i className="fas fa-arrow-right" />
+                    </button>
+                    <button
+                      className="scene-track-action"
+                      onClick={() => onCopyTrack(trackId, right, left)}
+                      title={`Put this track's settings from scene ${right + 1} into scene ${left + 1}`}
+                      aria-label={`Copy track ${trackId + 1} leftwards`}
+                    >
+                      <i className="fas fa-arrow-left" />
+                    </button>
+                  </span>
+                )}
                 <span className="scene-track-count">
                   {its.filter(row => row.values[left] !== row.values[right]).length}
                 </span>
@@ -290,8 +343,12 @@ export function SceneCompare({ data, left, right, onPick, editable, onSet }: {
                     >
                       <td className="scene-row-page">{row.pageName}</td>
                       <td className="scene-row-label">{row.label}</td>
-                      <td className="scene-compare-value">{cell(row, left)}</td>
-                      <td className="scene-compare-value">{cell(row, right)}</td>
+                      <td className="scene-compare-value">
+                        <Cell row={row} scene={left} editable={editable} onSet={onSet} />
+                      </td>
+                      <td className="scene-compare-value">
+                        <Cell row={row} scene={right} editable={editable} onSet={onSet} />
+                      </td>
                       <td className="scene-compare-travel">{travel(row)}</td>
                     </tr>
                   ))}

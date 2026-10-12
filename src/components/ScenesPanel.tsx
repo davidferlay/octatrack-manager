@@ -411,6 +411,17 @@ export function ScenesPanel({
     writeScene(sceneId, tracks);
   }, [data, writeScene]);
 
+  /** Puts one track's whole scene state from one scene into another. */
+  const copyTrackBetween = useCallback((trackId: number, from: number, to: number) => {
+    const source = data?.scenes[from];
+    const target = data?.scenes[to];
+    if (!source || !target || from === to) return;
+    const taken = source.tracks.find(t => t.track_id === trackId);
+    if (!taken) return;
+    writeScene(to, target.tracks.map(t => (t.track_id === trackId ? { ...taken } : t)));
+    showTip(`T${trackId + 1} scene params copied from scene ${from + 1} to scene ${to + 1}`);
+  }, [data, writeScene, showTip]);
+
   const setSlot = useCallback((trackId: number, slot: Slot, value: number | null) => {
     if (!scene) return;
     const tracks = scene.tracks.map(t => {
@@ -689,6 +700,7 @@ export function ScenesPanel({
           editable={!!isEditMode}
           showAll={showAll}
           onSet={setAssignment}
+          onSceneChange={onSceneChange}
         />
       )}
 
@@ -699,7 +711,9 @@ export function ScenesPanel({
           right={compareSides.right ?? data.scene_b}
           onPick={(side, sceneId) => setCompareSides(prev => ({ ...prev, [side]: sceneId }))}
           editable={!!isEditMode}
+          showAll={showAll}
           onSet={setAssignment}
+          onCopyTrack={copyTrackBetween}
         />
       )}
 
@@ -859,20 +873,28 @@ export function ScenesPanel({
               </button>
             );
           })}
-          <button
-            className="context-menu-item"
-            disabled={sceneMenu.sceneId === data.scene_a}
-            onClick={() => {
-              setCompareSides({ left: data.scene_a, right: sceneMenu.sceneId });
-              setView('compare');
-              setSceneMenu(null);
-            }}
-            title={sceneMenu.sceneId === data.scene_a
-              ? 'This is the A end'
-              : "Read this scene against the A end's, and see what differs"}
-          >
-            <i className="fas fa-code-compare" /> Compare with A
-          </button>
+          {/* Reading it against something: the two ends, or whatever is open */}
+          {([
+            ['A', data.scene_a, 'the A end'],
+            ['B', data.scene_b, 'the B end'],
+            ['selected', selected, `scene ${selected + 1}`],
+          ] as const).map(([name, against, describe]) => (
+            <button
+              key={name}
+              className="context-menu-item"
+              disabled={sceneMenu.sceneId === against}
+              onClick={() => {
+                setCompareSides({ left: against, right: sceneMenu.sceneId });
+                setView('compare');
+                setSceneMenu(null);
+              }}
+              title={sceneMenu.sceneId === against
+                ? `This is ${describe}`
+                : `Read this scene against ${describe}, and see what differs`}
+            >
+              <i className="fas fa-code-compare" /> Compare with {name}
+            </button>
+          ))}
         </div>
       )}
 
