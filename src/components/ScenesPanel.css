@@ -593,7 +593,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 1px;
   padding: 6px 8px;
   background: #1a1a1a;
   border: 1px solid #333;
@@ -880,10 +880,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 14px;
+  gap: 10px;
   width: fit-content;
   margin: 0 auto 12px;
-  padding: 6px 16px;
+  padding: 5px 12px;
   background: #1a1a1a;
   border: 1px solid #333;
   border-radius: 6px;
@@ -904,9 +904,10 @@
 }
 
 /* Both sides reserve the same width, so the word between them lands on the middle of
-   the pill rather than wherever two differently-long scene names leave it */
+   the pill rather than wherever two differently-long scene names leave it. Just past
+   the longest label there is - "Scene 16 (A/B)", when both ends sit on one scene. */
 .scene-compare-sides .scene-compare-heading {
-  min-width: 150px;
+  min-width: 124px;
 }
 
 .scene-compare-sides .scene-compare-heading:first-child {

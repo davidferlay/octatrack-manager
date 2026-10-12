@@ -3642,6 +3642,35 @@ test.describe('Scenes', () => {
         .toHaveCSS('color', 'rgb(204, 204, 204)')
     })
 
+    /**
+     * Each side reserves the same width so the word between them holds the middle,
+     * but only just past the longest label there is - "Scene 16 (A/B)", when both
+     * ends sit on one scene. Reserve more and the frame is mostly empty.
+     */
+    test('the two sides reserve no more width than they need', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      const ends = page.locator('.crossfader-end-picker select')
+      await ends.first().selectOption('15')
+      await ends.last().selectOption('15')
+      await open(page)
+
+      const room = await page.evaluate(() => {
+        const side = document.querySelector(
+          '.scene-compare-sides .scene-compare-heading') as HTMLElement
+        const reserved = side.getBoundingClientRect().width
+        const was = side.style.minWidth
+        side.style.minWidth = '0'
+        const needed = side.getBoundingClientRect().width
+        side.style.minWidth = was
+        return { reserved, needed }
+      })
+
+      expect(room.reserved, 'the longest label must fit')
+        .toBeGreaterThanOrEqual(room.needed)
+      expect(room.reserved - room.needed, 'reserving far more than the label needs')
+        .toBeLessThanOrEqual(20)
+    })
+
     test('the side pickers read as headings, not form fields', async ({ page }) => {
       await open(page)
       const pick = page.locator('.scene-compare-pick').first()
@@ -4035,6 +4064,7 @@ test.describe('Parts Editor - Nothing overflows sideways', () => {
     }
   })
 })
+
 
 
 
