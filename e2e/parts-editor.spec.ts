@@ -132,7 +132,9 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
           const held: Record<number, Record<string, unknown>> = {
             0: { amp: [null, null, null, 100, null, null], xlv: 64 },
             2: { machine: [70, null, null, null, null, null], fx1: [null, 30, null, null, null, null] },
-            5: { lfo: [null, null, null, 12, null, null], amp: [null, null, null, null, null, 9] },
+            // Scene 6 reaches for the same AMP VOL as scene 1, at a different value,
+              // so a comparison has a parameter that actually moves
+              5: { lfo: [null, null, null, 12, null, null], amp: [null, null, null, 80, null, 9] },
           }
           const six = () => [null, null, null, null, null, null]
           return {
@@ -3508,6 +3510,45 @@ test.describe('Scenes', () => {
       await expect(sides(page).first()).toHaveValue('0', { timeout: 2000 })
     })
 
+    /**
+     * One card per track, as the scene list itself is laid out.
+     *
+     * A Part reaches for a few parameters on several tracks, so one long table is a
+     * narrow ribbon beside a screen of nothing and a great deal of scrolling.
+     */
+    test('is laid out as a card per track', async ({ page }) => {
+      await open(page)
+      await sides(page).last().selectOption({ value: '5' })
+      const cards = page.locator('.scene-compare .scene-track')
+      await expect(cards).toHaveCount(1)
+      await expect(cards.first().locator('.track-badge')).toHaveText('T1')
+      await expect(cards.first().locator('.scene-compare-table tbody tr'))
+        .toHaveCount(4)
+    })
+
+    test('says how far the fader moves each one', async ({ page }) => {
+      await open(page)
+      await sides(page).last().selectOption({ value: '5' })
+      // Scene 1 holds AMP VOL at 100 and scene 6 at 80; centred, those read 36 and 16
+      const travel = page.locator('.scene-compare-travel .falling')
+      await expect(travel).toHaveCount(1)
+      await expect(travel).toHaveText('-20')
+    })
+
+    test('says nothing where only one side holds it', async ({ page }) => {
+      await open(page)
+      await sides(page).last().selectOption({ value: '5' })
+      const rows = page.locator('.scene-compare-table tbody tr')
+      // Three of the four are held by one side only, so there is no travel to give
+      await expect(rows.locator('.scene-compare-travel span')).toHaveCount(1)
+    })
+
+    test('counts what actually moves on each track', async ({ page }) => {
+      await open(page)
+      await sides(page).last().selectOption({ value: '5' })
+      await expect(page.locator('.scene-compare .scene-track-count')).toHaveText('4')
+    })
+
     test('lists what either of them holds, and nothing else', async ({ page }) => {
       await open(page)
       await sides(page).last().selectOption({ value: '2' })
@@ -3558,56 +3599,49 @@ test.describe('Scenes', () => {
     })
 
     /**
-     * The heading picks the scene and the cells show its values, so they have to read
-     * as one column. Left to itself the select is wider than the values, which leaves
-     * each value adrift in a column twice its width.
+     * The two sides read as headings rather than as form fields: uppercase, grey, with
+     * a caret marking them as clickable. The value boxes in the cards are then the only
+     * framed things on the tab.
      */
-    test('the heading and its values are one column wide', async ({ page }) => {
-      // The widest label the heading ever carries: an end on a two-digit scene
+    test('the side pickers read as headings, not form fields', async ({ page }) => {
+      await open(page)
+      const pick = page.locator('.scene-compare-pick').first()
+      await expect(pick).toHaveCSS('font-size', '11px')
+      await expect(pick).toHaveCSS('text-transform', 'uppercase')
+      await expect(pick).toHaveCSS('border-top-width', '0px')
+      await expect(pick).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+      // The caret belongs to the wrapper, so it follows the colour on hover
+      await expect(page.locator('.scene-compare-heading').first()).toBeVisible()
+    })
+
+    test('the scene name is not clipped', async ({ page }) => {
+      // The widest label a side ever carries: an end on a two-digit scene
       await page.locator('.mode-toggle').click()
       await page.locator('.crossfader-end-picker select').last().selectOption('15')
       await open(page)
-
-      const widths = await page.evaluate(() => {
-        const select = document.querySelector('.scene-compare-pick') as HTMLSelectElement
-        const value = document.querySelector(
-          '.scene-compare-value input.scene-value',
-        ) as HTMLElement
-        const w = (el: HTMLElement) => Math.round(el.getBoundingClientRect().width)
-        return {
-          picker: w(select),
-          value: w(value),
-          clipped: select.scrollWidth > select.clientWidth + 1,
-        }
-      })
-
-      expect(widths.picker).toBe(widths.value)
 
       /*
        * Measured against the text, not the select's scrollWidth: a select reports
        * nothing useful there, which is how a clipped "Scene 16 (E" got through once.
        */
       const fit = await page.evaluate(() => {
-        const select = document.querySelector('.scene-compare-pick') as HTMLSelectElement
+        const select = document.querySelectorAll(
+          '.scene-compare-pick')[1] as HTMLSelectElement
         const style = getComputedStyle(select)
         const ruler = document.createElement('span')
-        ruler.style.cssText =
-          `position:absolute;visibility:hidden;white-space:pre;font:${style.font}`
+        ruler.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;'
+          + `font:${style.font};text-transform:${style.textTransform};`
+          + `letter-spacing:${style.letterSpacing}`
         ruler.textContent = select.options[select.selectedIndex].textContent || ''
         document.body.append(ruler)
         const needed = ruler.getBoundingClientRect().width
         ruler.remove()
-        return {
-          needed,
-          available: select.clientWidth
-            - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
-          // The native arrow eats the width the label needs, and its popup comes up
-          // white against this theme, so every select in the app drops it
-          appearance: style.appearance,
-        }
+        // The native arrow eats the width the label needs, and its popup comes up
+        // white against this theme, so every select in the app drops it
+        return { needed, shown: select.getBoundingClientRect().width,
+          appearance: style.appearance }
       })
-      expect(fit.needed, 'the scene name must fit the heading')
-        .toBeLessThan(fit.available)
+      expect(fit.shown, 'the scene name must fit').toBeGreaterThanOrEqual(fit.needed - 1)
       expect(fit.appearance).toBe('none')
     })
 
@@ -3885,6 +3919,8 @@ test.describe('Parts Editor - Nothing overflows sideways', () => {
     }
   })
 })
+
+
 
 
 

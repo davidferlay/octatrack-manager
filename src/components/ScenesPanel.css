@@ -658,12 +658,7 @@
 }
 
 .scene-matrix,
-.scene-compare {
-  background: #1e1e1e;
-  border: 1px solid #333;
-  border-radius: 4px;
-  padding: 12px;
-}
+
 
 /* The sixteen columns do not fit a narrow window, and the row heads have to stay
    readable while they are scrolled past */
@@ -673,6 +668,7 @@
 
 .scene-matrix-table,
 .scene-compare-table {
+  width: 100%;
   border-collapse: collapse;
   font-size: 13px;
   width: 100%;
@@ -758,26 +754,44 @@
 
 /* Each side says which scene it reads, and changes it in place. Sized to its text:
    a full-width select here stretches the whole value column with it. */
-/* Fills its column, which the value below it also does, so the two line up as one
-   column rather than a wide heading with a small box adrift under it.
-   `appearance: none` as every other select in the app does: the native arrow takes
-   width the label needs, and the native popup comes up white against this theme. */
+/* The side pickers read as table headings, not as form fields: the same uppercase
+   grey as TRACK and PARAMETER beside them, with a caret marking them as clickable.
+   The value boxes below are then the only framed things in the column. */
+.scene-compare-heading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--elektron-text-secondary);
+  transition: color 0.15s;
+}
+
+.scene-compare-heading::after {
+  content: '\25BE';
+  font-size: 9px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.scene-compare-heading:hover,
+.scene-compare-heading:focus-within {
+  color: #5dade2;
+}
+
 .scene-compare-pick {
   -webkit-appearance: none;
   -moz-appearance: none;
   appearance: none;
-  width: 100%;
-  height: 24px;
-  background: #333;
-  border: 1px solid #555;
-  border-radius: 3px;
-  color: #fff;
-  padding: 0 6px;
+  width: auto;
+  background: transparent;
+  border: none;
+  color: inherit;
+  padding: 0;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  text-transform: none;
-  letter-spacing: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   text-align: center;
   text-align-last: center;
   cursor: pointer;
@@ -791,13 +805,7 @@
   text-align: left;
 }
 
-.scene-compare-pick:hover {
-  border-color: #5dade2;
-}
 
-.scene-compare-pick:focus {
-  border-color: #5dade2;
-}
 
 /* The value cells carry the editor's own input and its dashed "put one in" button,
    both of which are already sized. Left to themselves the columns stretch to fill the
@@ -818,17 +826,17 @@
 
 .scene-compare-value input.scene-value,
 .scene-compare-value .scene-add {
-  width: 100%;
+  width: 54px;
   height: 24px;
   line-height: 24px;
   font-size: 13px;
 }
 
-/* As wide as the longest name the heading carries - "Scene 16 (B)" - with room to
-   spare, since a font that renders a little wider would clip it */
 .scene-compare-table .scene-compare-value {
-  width: 124px;
-  min-width: 124px;
+  width: 1%;
+  padding-left: 3px;
+  padding-right: 3px;
+  text-align: center;
 }
 
 /* Only the matrix needs the slack absorbed: it has sixteen value columns and fills
@@ -838,25 +846,34 @@
   width: 100%;
 }
 
-/* The comparison has two value columns where the matrix has sixteen, so the table
-   has width to spare. A block-level table does not shrink-wrap, and the spare width
-   lands in whichever columns are unconstrained - which flung the values to the far
-   right. Every real column is sized to its content and a last empty one takes the
-   rest. */
-.scene-compare-table .scene-row-page,
-.scene-compare-table .scene-row-label {
+/* The two scenes being read, above the cards rather than inside them */
+.scene-compare-sides {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.scene-compare-versus {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--elektron-text-dim);
+}
+
+/* How far the fader moves this parameter, in what the device shows */
+.scene-compare-travel {
   width: 1%;
   white-space: nowrap;
+  text-align: right;
+  padding-left: 6px;
+  font-family: 'SF Mono', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+  font-size: 11px;
+  font-weight: 700;
 }
 
-.scene-compare-table .scene-row-label {
-  padding-right: 24px;
-}
-
-.scene-compare-filler {
-  width: auto;
-  border-bottom: 1px solid #262626;
-}
+.scene-compare-travel .rising { color: #4ade80; }
+.scene-compare-travel .falling { color: #f87171; }
 
 /* A right-click on a card assigns a crossfader end, which is the one thing the grid
    could not already do */

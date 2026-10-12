@@ -157,7 +157,11 @@ is shown and set on its own and never touches what a scene holds.
 | SC113 | Matrix | Read-only outside Edit mode | Open the Matrix without Edit mode | Values cannot be changed and nothing is written |
 | SC114 | Matrix | Editing in place | In Edit mode, change a value in a matrix cell | That scene's parameter changes, not the selected scene's |
 | SC115 | Matrix | Adding from the matrix | In Edit mode, press the dash in a cell | That parameter goes into that scene at its default |
-| SC116 | Compare | Opens on the crossfader ends | Press Compare | The two sides are the A and B scenes, marked as such |
+| SC116 | Compare | Opens on the crossfader ends | Press Compare | The two sides are the A and B scenes, marked as such, chosen above the cards |
+| SC116b | Compare | A card per track | Compare two scenes that touch several tracks | One card per track, laid out across the width like the scene list, not one long table |
+| SC116c | Compare | How far the fader moves it | Find a parameter both sides hold at different values | The difference is shown, green when it rises and red when it falls |
+| SC116d | Compare | Nothing to move | Find a parameter only one side holds | No difference is given: there is nothing to travel between |
+| SC116e | Compare | Each card counts what moves | Look at a card's heading | It counts the parameters that differ between the two sides |
 | SC117 | Compare | Each side picks its own scene | Change either side's drop-down | Only that side changes |
 | SC118 | Compare | The grid sets the left side | With Compare open, click a scene card | The left side reads that scene |
 | SC119 | Compare | Follows a moved end | Move a crossfader end while Compare is on its defaults | That side re-reads against the new end |

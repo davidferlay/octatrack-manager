@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { TrackBadge } from './TrackBadge';
+import { formatSpecValue } from '../utils/partFieldSpecs';
 import { fieldHelp, helpTitle } from '../utils/partFieldHelp';
 import { AssignmentRow, ScenesResponse, sceneAssignments } from './sceneModel';
 import { SceneValue } from './SceneValue';
@@ -164,6 +165,11 @@ export function SceneMatrix({ data, selected, editable, showAll, onSet }: {
 /**
  * Two scenes side by side, listing only what either of them holds.
  *
+ * Laid out as one card per track, the way the scene list itself is, rather than as a
+ * single long table: a Part reaches for a few parameters on several tracks, so a
+ * table is a narrow ribbon beside a screen of nothing, and forty rows of scrolling
+ * for something that fits across the width.
+ *
  * It opens on the crossfader's own two ends, because that is the comparison the
  * device cannot show you: a parameter only moves where the two ends disagree about
  * it, and a row they agree on is one the fader passes over doing nothing.
@@ -182,16 +188,27 @@ export function SceneCompare({ data, left, right, onPick, editable, onSet }: {
     [data, left, right],
   );
 
+  /** The rows of each track that has any, in track order. */
+  const byTrack = useMemo(() => {
+    const tracks = new Map<number, AssignmentRow[]>();
+    for (const row of rows) {
+      const its = tracks.get(row.trackId);
+      if (its) its.push(row);
+      else tracks.set(row.trackId, [row]);
+    }
+    return [...tracks.entries()].sort(([a], [b]) => a - b);
+  }, [rows]);
+
   const endFor = (scene: number) => [
     scene === data.scene_a ? 'A' : null,
     scene === data.scene_b ? 'B' : null,
   ].filter(Boolean).join('/');
 
-  /** One side's heading: which scene it reads, and a way to change it. */
+  /** Which scene a side reads, chosen in what reads as a heading. */
   const picker = (side: 'left' | 'right', scene: number) => {
     const end = endFor(scene);
     return (
-      <th className="scene-compare-value">
+      <span className="scene-compare-heading">
         <select
           className="scene-compare-pick"
           value={scene}
@@ -200,76 +217,90 @@ export function SceneCompare({ data, left, right, onPick, editable, onSet }: {
         >
           {data.scenes.map(s => (
             <option key={s.scene_id} value={s.scene_id}>
-              {/* No "empty" note here: it would not fit the column, and a scene that
-                  holds nothing already reads as a column of dashes below */}
               Scene {s.scene_id + 1}
               {endFor(s.scene_id) ? ` (${endFor(s.scene_id)})` : ''}
             </option>
           ))}
         </select>
-      </th>
+      </span>
     );
+  };
+
+  /**
+   * How far the fader moves this parameter, in what the device shows rather than in
+   * stored bytes - the two differ wherever a parameter reads either side of a centre.
+   * Nothing is shown where a side does not hold it, or where the reading is a name
+   * rather than a number.
+   */
+  const travel = (row: AssignmentRow) => {
+    const from = row.values[left];
+    const to = row.values[right];
+    if (from === null || to === null) return null;
+    const a = Number(formatSpecValue(from, row.spec));
+    const b = Number(formatSpecValue(to, row.spec));
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a === b) return null;
+    const by = b - a;
+    return <span className={by > 0 ? 'rising' : 'falling'}>{by > 0 ? `+${by}` : by}</span>;
+  };
+
+  const cell = (row: AssignmentRow, scene: number) => {
+    const value = row.values[scene];
+    return value === null
+      ? <NotHeld editable={editable} onAdd={() => onSet(row, scene, row.spec.default)} />
+      : (
+        <SceneValue
+          slot={{ spec: row.spec, value }}
+          editable={editable}
+          onChange={next => onSet(row, scene, next)}
+        />
+      );
   };
 
   return (
     <div className="scene-compare">
-      {rows.length === 0 && (
+      <div className="scene-compare-sides">
+        {picker('left', left)}
+        <span className="scene-compare-versus">against</span>
+        {picker('right', right)}
+      </div>
+
+      {byTrack.length === 0 ? (
         <p className="scene-empty-message">
           Neither scene holds anything, so the crossfader has nothing to morph between
           here - everything stays as the Part sets it.
         </p>
-      )}
-      <table className="scene-compare-table">
-        <thead>
-          <tr>
-            <th className="scene-row-track">Track</th>
-            <th className="scene-row-page">Page</th>
-            <th className="scene-row-label">Parameter</th>
-            {picker('left', left)}
-            {picker('right', right)}
-            {/* Soaks up the width the five real columns do not need, so a parameter
-                and its two values stay next to each other */}
-            <th className="scene-compare-filler" />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(row => {
-            const same = row.values[left] === row.values[right];
-            return (
-              <tr
-                key={row.key}
-                className={same ? 'same' : 'differs'}
-                title={rowTitle(row, data)}
-              >
-                <RowHead row={row} />
-                {[left, right].map((scene, side) => {
-                  const value = row.values[scene];
-                  return (
-                    <td
-                      key={side}
-                      className={`scene-compare-value ${value === null ? 'unheld' : ''}`}
+      ) : (
+        <div className="scene-tracks">
+          {byTrack.map(([trackId, its]) => (
+            <div className="scene-track" key={trackId}>
+              <div className="scene-track-head">
+                <TrackBadge trackId={trackId} />
+                <span className="scene-track-machine">{data.machine_types[trackId]}</span>
+                <span className="scene-track-count">
+                  {its.filter(row => row.values[left] !== row.values[right]).length}
+                </span>
+              </div>
+              <table className="scene-compare-table">
+                <tbody>
+                  {its.map(row => (
+                    <tr
+                      key={row.key}
+                      className={row.values[left] === row.values[right] ? 'same' : 'differs'}
+                      title={rowTitle(row, data)}
                     >
-                      {value === null ? (
-                        <NotHeld
-                          editable={editable}
-                          onAdd={() => onSet(row, scene, row.spec.default)}
-                        />
-                      ) : (
-                        <SceneValue
-                          slot={{ spec: row.spec, value }}
-                          editable={editable}
-                          onChange={next => onSet(row, scene, next)}
-                        />
-                      )}
-                    </td>
-                  );
-                })}
-                <td className="scene-compare-filler" />
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+                      <td className="scene-row-page">{row.pageName}</td>
+                      <td className="scene-row-label">{row.label}</td>
+                      <td className="scene-compare-value">{cell(row, left)}</td>
+                      <td className="scene-compare-value">{cell(row, right)}</td>
+                      <td className="scene-compare-travel">{travel(row)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
