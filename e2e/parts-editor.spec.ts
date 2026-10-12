@@ -3353,9 +3353,26 @@ test.describe('Scenes', () => {
       // The colour is the whole marking now that the letters are gone, so it is pinned
       await expect(page.locator('.scene-matrix-head.crossfader-end:not(.selected)'))
         .toHaveCSS('color', 'rgb(255, 102, 0)')
-      // The marking sits on the button, which is what fills the heading cell
-      await expect(page.locator('.scene-matrix-head.selected button'))
+      await expect(page.locator('.scene-matrix-head.selected'))
         .toHaveCSS('background-color', 'rgb(74, 144, 226)')
+    })
+
+    /**
+     * The heading's fill has to span the column, not just the button inside it: the
+     * cell carries the column's padding, so a filled button is inset from the tinted
+     * cells below by that padding either side.
+     */
+    test('the chosen column is marked edge to edge', async ({ page }) => {
+      await open(page)
+      const edges = await page.evaluate(() => {
+        const head = document.querySelector('.scene-matrix-head.selected')!
+        const cell = document.querySelector('.scene-matrix-cell.selected')!
+        const h = head.getBoundingClientRect()
+        const c = cell.getBoundingClientRect()
+        return { left: Math.abs(h.left - c.left), right: Math.abs(h.right - c.right) }
+      })
+      expect(edges.left).toBeLessThanOrEqual(1)
+      expect(edges.right).toBeLessThanOrEqual(1)
     })
 
     /**
@@ -4173,6 +4190,7 @@ test.describe('Parts Editor - Nothing overflows sideways', () => {
     }
   })
 })
+
 
 
 
