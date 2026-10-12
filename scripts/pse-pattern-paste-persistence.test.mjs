@@ -207,22 +207,33 @@ test("unknown transport does not generalize checkpoint semantics", () => {
   assert.equal(judged.operation_kind, OPERATION_KIND);
 });
 
-test("committed evidence keeps bytes and manifests but cannot promote without S4 save proof", () => {
+test("committed evidence promotes when S4 save_operation is recorded", () => {
   const before = snapshotTree(FIXTURE_ROOT);
+  const deviceBefore = snapshotDeviceBinaryHashes(FIXTURE_ROOT);
   const status = persistenceStatus(FIXTURE_ROOT);
   const analyzed = analyzePatternPaste(FIXTURE_ROOT);
   assert.equal(status.persistence_harness, "READY");
   assert.equal(status.scope_correction, "PASS");
   assert.equal(status.copy_saved_checkpoint_semantics, "UNKNOWN");
   assert.equal(status.capture_sequence_proven, "YES");
-  assert.equal(status.device_evidence_promotion, "BLOCKED");
-  assert.equal(status.device_capture, "REJECTED");
+  assert.equal(status.device_evidence_promotion, "ALLOWED");
+  assert.equal(status.device_capture, "PASS");
   assert.equal(status.result, "STOP_WITH_FINDINGS");
-  assert.equal(status.captures.filter((row) => row.capture_status === "PRESENT").length, 5);
+  assert.equal(status.persistence_judgment, "OBSERVATION_ONLY");
+  assert.equal(status.pattern_paste_command_effect, "CONFIRMED");
+  assert.equal(status.pattern_paste_effect_confirmed_on_device, "YES");
+  assert.equal(status.captures.filter((row) => row.capture_status === "PRESENT").length, 6);
   const s4 = status.captures.find((row) => row.stage_id === "S4");
-  assert.match(s4.error, /S4.*save_operation/);
+  assert.equal(s4.capture_status, "PRESENT");
+  assert.equal(s4.error, undefined);
+  const s4Meta = JSON.parse(
+    readFileSync(path.join(FIXTURE_ROOT, "s4_after_project_save", "capture.meta.json"), "utf8"),
+  );
+  assert.equal(typeof s4Meta.save_operation, "string");
+  assert.notEqual(s4Meta.save_operation.trim(), "");
   assert.equal(analyzed.fixture_no_write, "PASS");
-  assert.equal(analyzed.device_evidence_promotion, "BLOCKED");
+  assert.equal(analyzed.device_evidence_promotion, "ALLOWED");
+  assert.equal(analyzed.device_capture, "PASS");
   for (const planned of PLANNED_CAPTURES) {
     assert.equal(verifyManifest(planned.name, FIXTURE_ROOT).ok, true);
     const meta = JSON.parse(readFileSync(path.join(FIXTURE_ROOT, planned.name, "capture.meta.json"), "utf8"));
@@ -231,8 +242,6 @@ test("committed evidence keeps bytes and manifests but cannot promote without S4
     assert.equal(meta.device_generated, true);
     assert.equal(meta.capture_sequence_proven, true);
   }
-  // Raw observation classification is not the promotion API. Preserve its evidence
-  // without filling save_operation or rewriting device bytes/metadata/manifests.
   const judged = classifyPatternPaste(buildPatternPasteDatasetFromFixture(FIXTURE_ROOT));
   assert.equal(judged.pattern_paste_effect_confirmed_on_device, "YES");
   assert.equal(judged.dest_work_first_changed_at, "CONTROL_SWITCH");
@@ -258,6 +267,7 @@ test("committed evidence keeps bytes and manifests but cannot promote without S4
   assert.deepEqual(judged.project_pattern_sequence, { S0: 0, S1: 0, S2: 0, S3: 0, S4: 0, S5: 0 });
   assert.equal(Object.hasOwn(judged, "device_evidence_promotion"), false);
   assert.equal(snapshotTree(FIXTURE_ROOT), before);
+  assert.equal(snapshotDeviceBinaryHashes(FIXTURE_ROOT), deviceBefore);
 });
 
 test("old schema is rejected once device_generated is set", () => {
@@ -406,6 +416,32 @@ test("oversized project.work is rejected before it is parsed", () => {
 test("pattern paste gate accepts the canonical sentinel shape", () => {
   assert.equal(patternPasteSuccessGate(syntheticStages({})).ok, true);
 });
+
+const DEVICE_BINARY_FILES = [
+  "project.work",
+  "project.strd",
+  "bank01.work",
+  "bank01.strd",
+  "bank02.work",
+  "bank02.strd",
+  "bank03.work",
+  "bank03.strd",
+  "bank04.work",
+  "bank04.strd",
+];
+
+function snapshotDeviceBinaryHashes(root) {
+  const digest = createHash("sha256");
+  for (const planned of PLANNED_CAPTURES) {
+    for (const name of DEVICE_BINARY_FILES) {
+      const full = path.join(root, planned.name, name);
+      digest.update(planned.name);
+      digest.update(name);
+      digest.update(readFileSync(full));
+    }
+  }
+  return digest.digest("hex");
+}
 
 function snapshotTree(root) {
   const digest = createHash("sha256");

@@ -63,19 +63,28 @@ Working `[STATES]` `BANK` and `PATTERN` must each occur exactly once and be
 zero-based indices in `0..15`, consistent with the existing `BankIndex` and
 `PatternIndex` domain. Out-of-domain values reject the capture.
 
-Impact on the six committed #227 captures: all manifests still verify, all
-selection values are in range, and S0–S3/S5 remain `PRESENT`. S4 has an empty
-`save_operation`, so `DEVICE_EVIDENCE_PROMOTION` is now `BLOCKED` despite the
-recorded sequence. No device bytes, metadata, or manifests are changed.
-Previously documented raw differences remain observations; the pure
-`classifyPatternPaste` helper does not grant promotion and is not a substitute
-for `persistenceStatus`/`analyzePatternPaste`. An actual operator record is
-required before a separately reviewed metadata correction could restore
-promotion. This change does not perform that correction.
+Impact on the six committed #227 captures after #228: all manifests still
+verify and selection values stay in range, but S4 had an empty
+`save_operation`, so `DEVICE_EVIDENCE_PROMOTION` became `BLOCKED` until a
+structured operator record was added. That gap was discovered by #228; it did
+not invalidate the raw byte observations.
 
-`COPY_SAVED_CHECKPOINT_SEMANTICS = UNKNOWN`, the open readiness gaps, and
-`BANK_CHANGEPLAN_READINESS = NOT_READY` remain unchanged. No Bank Apply or
-ChangePlan is enabled.
+### S4 save_operation correction (`MO-PSE-PATTERN-PASTE-S4-SAVE-METADATA-CORRECTION-1`)
+
+The operator had already confirmed the sequence S0 saved baseline → S1
+destination B01 → S2 Pattern Paste → S3 switch to control Bank D → S4 explicit
+Project Save → S5 Project Reload. Only the missing provenance field was
+corrected: S4 `save_operation` is now the non-empty free-text
+`Explicit project save` (no undocumented menu wording). S4
+`SHA256SUMS.json` was rebuilt; all six manifests verify. Device-generated
+`.work` / `.strd` bytes were not modified. `DEVICE_EVIDENCE_PROMOTION` is
+`ALLOWED` and `DEVICE_CAPTURE` is `PASS` again.
+
+Still unknown or unchanged: `capture_transport`, S5
+`destination_ui_sentinel_after_reload`, `COPY_SAVED_CHECKPOINT_SEMANTICS`,
+Bank Copy state-doc rules, `#217`, `#221`, and
+`BANK_CHANGEPLAN_READINESS = NOT_READY`. No Bank Apply or ChangePlan is
+enabled.
 
 ## Commands
 
