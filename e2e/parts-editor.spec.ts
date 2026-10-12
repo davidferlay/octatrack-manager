@@ -2734,6 +2734,47 @@ test.describe('Scenes', () => {
    * Shuffling the values, not which parameters are held: which parameters a scene
    * reaches for is the musical decision, and only the app knows each one's legal range.
    */
+  /**
+   * Every operation says what it did, the way copying a path on the project list does.
+   * These all change something out of sight - a scene that is not the one on screen,
+   * or a clipboard - so without a word there is nothing to tell you it happened.
+   */
+  test.describe('what each operation says it did', () => {
+    test.beforeEach(async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+    })
+
+    const badge = (page: Page) => page.locator('.toast-notification.tip')
+
+    test('copying a scene', async ({ page }) => {
+      await page.locator('.scene-action', { hasText: /^Copy$/ }).click()
+      await expect(badge(page)).toContainText('Scene 1 copied')
+    })
+
+    test('pasting one', async ({ page }) => {
+      await page.locator('.scene-action', { hasText: /^Copy$/ }).click()
+      await card(page, 4).click()
+      await page.locator('.scene-action', { hasText: /^Paste$/ }).click()
+      await expect(badge(page)).toContainText('Scene 1 pasted into scene 4')
+    })
+
+    test('emptying one', async ({ page }) => {
+      await page.locator('.scene-action', { hasText: /^Clear$/ }).click()
+      await expect(badge(page)).toContainText('Scene 1 emptied')
+    })
+
+    test('randomising one', async ({ page }) => {
+      await page.locator('.scene-action', { hasText: /^Randomize$/ }).click()
+      await expect(badge(page)).toContainText('Scene 1 randomized')
+    })
+
+    test('it fades rather than staying put', async ({ page }) => {
+      await page.locator('.scene-action', { hasText: /^Copy$/ }).click()
+      await expect(badge(page)).toBeVisible()
+      await expect(badge(page)).toHaveCount(0, { timeout: 5000 })
+    })
+  })
+
   test.describe('randomising a scene', () => {
     test.beforeEach(async ({ page }) => {
       await page.locator('.mode-toggle').click()

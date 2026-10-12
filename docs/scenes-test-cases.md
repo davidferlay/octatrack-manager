@@ -187,3 +187,6 @@ is shown and set on its own and never touches what a scene holds.
 | SC129 | Compare | Show all params | Turn it on while comparing | Every position either side could hold is listed, so an empty one can be filled |
 | SC130 | Compare | Make one side match the other | In Edit mode, press a card's arrow | That track's whole scene state is copied to the other side |
 | SC131 | Compare | Not offered on one scene | Set both sides to the same scene | The arrows are not shown: there is nothing to copy between |
+| SC132 | Actions | Every operation says what it did | Use Copy, Paste, Clear or Randomize | A floating badge names what happened, as copying a path on the project list does |
+| SC133 | Actions | The badge fades | Wait after an operation | It goes on its own rather than staying put |
+| SC134 | Matrix | The chosen column is marked edge to edge | Choose a scene and look at its column | The heading's blue spans the column, flush with the cells below it |

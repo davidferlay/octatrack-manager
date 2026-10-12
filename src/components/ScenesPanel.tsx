@@ -387,7 +387,8 @@ export function ScenesPanel({
       return next;
     });
     writeScene(scene.scene_id, tracks);
-  }, [data, scene, writeScene]);
+    showTip(`Scene ${scene.scene_id + 1} randomized, within each parameter's own range`);
+  }, [data, scene, writeScene, showTip]);
 
   /**
    * Changes one parameter of any scene, which is what the matrix and the comparison
@@ -623,7 +624,10 @@ export function ScenesPanel({
             <>
               <button
                 className="scene-action"
-                onClick={() => setClipboard({ from: selected, tracks: scene.tracks })}
+                onClick={() => {
+                  setClipboard({ from: selected, tracks: scene.tracks });
+                  showTip(`Scene ${selected + 1} copied`);
+                }}
                 title="Take a copy of this scene"
               >
                 Copy
@@ -631,7 +635,11 @@ export function ScenesPanel({
               <button
                 className="scene-action"
                 disabled={!clipboard}
-                onClick={() => clipboard && writeScene(selected, clipboard.tracks)}
+                onClick={() => {
+                  if (!clipboard) return;
+                  writeScene(selected, clipboard.tracks);
+                  showTip(`Scene ${clipboard.from + 1} pasted into scene ${selected + 1}`);
+                }}
                 title={clipboard
                   ? `Put scene ${clipboard.from + 1} here, replacing what this one holds`
                   : 'Copy a scene first'}
@@ -641,7 +649,10 @@ export function ScenesPanel({
               <button
                 className="scene-action danger"
                 disabled={scene.locked_count === 0}
-                onClick={() => writeScene(selected, emptyTracks(scene.tracks))}
+                onClick={() => {
+                  writeScene(selected, emptyTracks(scene.tracks));
+                  showTip(`Scene ${selected + 1} emptied`);
+                }}
                 title="Empty this scene, so the crossfader leaves everything as the Part sets it"
               >
                 Clear
