@@ -208,6 +208,7 @@ test("unknown transport does not generalize checkpoint semantics", () => {
 });
 
 test("committed evidence promotes when S4 save_operation is recorded", () => {
+  const before = snapshotTree(FIXTURE_ROOT);
   const deviceBefore = snapshotDeviceBinaryHashes(FIXTURE_ROOT);
   const status = persistenceStatus(FIXTURE_ROOT);
   const analyzed = analyzePatternPaste(FIXTURE_ROOT);
@@ -265,6 +266,7 @@ test("committed evidence promotes when S4 save_operation is recorded", () => {
   assert.deepEqual(judged.project_bank_sequence, { S0: 0, S1: 1, S2: 1, S3: 1, S4: 3, S5: 3 });
   assert.deepEqual(judged.project_pattern_sequence, { S0: 0, S1: 0, S2: 0, S3: 0, S4: 0, S5: 0 });
   assert.equal(Object.hasOwn(judged, "device_evidence_promotion"), false);
+  assert.equal(snapshotTree(FIXTURE_ROOT), before);
   assert.equal(snapshotDeviceBinaryHashes(FIXTURE_ROOT), deviceBefore);
 });
 
