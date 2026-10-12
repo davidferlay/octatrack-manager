@@ -603,17 +603,81 @@ export function ScenesPanel({
         ))}
       </div>
 
-      {/* "Show all params" belongs to whichever view is listing parameters */}
-      {view === 'matrix' && (
-        <button
-          className={`scene-action scene-show-all ${showAll ? 'on' : ''}`}
-          aria-pressed={showAll}
-          onClick={() => setShowAll(!showAll)}
-          title="List every parameter a scene could hold, not only the ones one does"
-        >
-          Show all params
-        </button>
-      )}
+      {/* The same operations whichever way the Part is being read: they act on the
+          selected scene, which the grid above chooses in every view. */}
+        <div className="scene-actions">
+          {isEditMode && (
+            <>
+              <button
+                className="scene-action"
+                onClick={() => setClipboard({ from: selected, tracks: scene.tracks })}
+                title="Take a copy of this scene"
+              >
+                Copy
+              </button>
+              <button
+                className="scene-action"
+                disabled={!clipboard}
+                onClick={() => clipboard && writeScene(selected, clipboard.tracks)}
+                title={clipboard
+                  ? `Put scene ${clipboard.from + 1} here, replacing what this one holds`
+                  : 'Copy a scene first'}
+              >
+                Paste
+              </button>
+              <button
+                className="scene-action danger"
+                disabled={scene.locked_count === 0}
+                onClick={() => writeScene(selected, emptyTracks(scene.tracks))}
+                title="Empty this scene, so the crossfader leaves everything as the Part sets it"
+              >
+                Clear
+              </button>
+              <button
+                className="scene-action"
+                disabled={scene.locked_count === 0}
+                onClick={randomise}
+                title="Give every value this scene holds a new one at random, within each parameter's own range. Which parameters it holds stays as it is."
+              >
+                Randomize
+              </button>
+              <button
+                className="scene-action"
+                disabled={data.scene_a === data.scene_b}
+                onClick={() => copyEnd('A', 'B')}
+                title="Put what the A end's scene holds into the B end's scene, replacing it"
+              >
+                Copy A to B
+              </button>
+              <button
+                className="scene-action"
+                disabled={data.scene_a === data.scene_b}
+                onClick={() => copyEnd('B', 'A')}
+                title="Put what the B end's scene holds into the A end's scene, replacing it"
+              >
+                Copy B to A
+              </button>
+              <button
+                className="scene-action"
+                disabled={data.scene_a === data.scene_b}
+                onClick={swapEnds}
+                title="Exchange what the two ends' scenes hold, so the fader builds towards the other one"
+              >
+                Swap A/B
+              </button>
+            </>
+          )}
+          {/* Last in the row on purpose: the buttons above it come and go with Edit
+              mode, and anything after them would move when they do. */}
+          <button
+            className={`scene-action scene-show-all ${showAll ? 'on' : ''}`}
+            aria-pressed={showAll}
+            onClick={() => setShowAll(!showAll)}
+            title="List every parameter this scene could hold, not only the ones it does"
+          >
+            Show all params
+          </button>
+        </div>
 
       {crossfaderRow}
       </div>
@@ -649,79 +713,6 @@ export function ScenesPanel({
               : 'Nothing held'}
           </span>
 
-          <div className="scene-actions">
-            {isEditMode && (
-              <>
-                <button
-                  className="scene-action"
-                  onClick={() => setClipboard({ from: selected, tracks: scene.tracks })}
-                  title="Take a copy of this scene"
-                >
-                  Copy
-                </button>
-                <button
-                  className="scene-action"
-                  disabled={!clipboard}
-                  onClick={() => clipboard && writeScene(selected, clipboard.tracks)}
-                  title={clipboard
-                    ? `Put scene ${clipboard.from + 1} here, replacing what this one holds`
-                    : 'Copy a scene first'}
-                >
-                  Paste
-                </button>
-                <button
-                  className="scene-action danger"
-                  disabled={scene.locked_count === 0}
-                  onClick={() => writeScene(selected, emptyTracks(scene.tracks))}
-                  title="Empty this scene, so the crossfader leaves everything as the Part sets it"
-                >
-                  Clear
-                </button>
-                <button
-                  className="scene-action"
-                  disabled={scene.locked_count === 0}
-                  onClick={randomise}
-                  title="Give every value this scene holds a new one at random, within each parameter's own range. Which parameters it holds stays as it is."
-                >
-                  Randomize
-                </button>
-                <button
-                  className="scene-action"
-                  disabled={data.scene_a === data.scene_b}
-                  onClick={() => copyEnd('A', 'B')}
-                  title="Put what the A end's scene holds into the B end's scene, replacing it"
-                >
-                  Copy A to B
-                </button>
-                <button
-                  className="scene-action"
-                  disabled={data.scene_a === data.scene_b}
-                  onClick={() => copyEnd('B', 'A')}
-                  title="Put what the B end's scene holds into the A end's scene, replacing it"
-                >
-                  Copy B to A
-                </button>
-                <button
-                  className="scene-action"
-                  disabled={data.scene_a === data.scene_b}
-                  onClick={swapEnds}
-                  title="Exchange what the two ends' scenes hold, so the fader builds towards the other one"
-                >
-                  Swap A/B
-                </button>
-              </>
-            )}
-            {/* Last in the row on purpose: the buttons above it come and go with Edit
-                mode, and anything after them would move when they do. */}
-            <button
-              className={`scene-action scene-show-all ${showAll ? 'on' : ''}`}
-              aria-pressed={showAll}
-              onClick={() => setShowAll(!showAll)}
-              title="List every parameter this scene could hold, not only the ones it does"
-            >
-              Show all params
-            </button>
-          </div>
         </div>
 
         {tracks.length === 0 ? (

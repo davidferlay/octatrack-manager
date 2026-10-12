@@ -2693,7 +2693,7 @@ test.describe('Scenes', () => {
       test('is offered only in Edit mode, with the scene own actions', async ({ page }) => {
         await expect(page.getByRole('button', { name: 'Copy A to B' })).toHaveCount(0)
         await page.locator('.mode-toggle').click()
-        const actions = page.locator('.scene-detail-head .scene-actions')
+        const actions = page.locator('.scene-view-row .scene-actions')
         await expect(actions.getByRole('button', { name: 'Copy A to B' })).toBeVisible()
         await expect(actions.getByRole('button', { name: 'Copy B to A' })).toBeVisible()
       })
@@ -3419,10 +3419,16 @@ test.describe('Scenes', () => {
           .toBeGreaterThan(held)
       })
 
-    test('Show all params is offered only where it lists parameters', async ({ page }) => {
-      await expect(page.locator('.scene-view-row .scene-show-all')).toHaveCount(0)
+    test('the same operations whichever view is open', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      const named = async () => page.locator('.scene-view-row .scene-action')
+        .evaluateAll(buttons => buttons.map(b => b.textContent))
+
+      const onScene = await named()
       await open(page)
-      await expect(page.locator('.scene-view-row .scene-show-all')).toBeVisible()
+      expect(await named()).toEqual(onScene)
+      await page.locator('.scene-view-tab', { hasText: 'Compare' }).click()
+      expect(await named()).toEqual(onScene)
     })
 
     test('a parameter can be put into another scene from here', async ({ page }) => {
@@ -3784,5 +3790,6 @@ test.describe('Parts Editor - Nothing overflows sideways', () => {
     }
   })
 })
+
 
 

@@ -538,6 +538,12 @@
   font-family: inherit;
 }
 
+/* The same element in both modes, just disabled, so entering Edit mode cannot change
+   a row's height - two element types never quite agree on their metrics */
+.scene-add:disabled {
+  border-color: transparent;
+}
+
 .scene-add:hover:not(:disabled) {
   border-color: var(--elektron-orange);
   color: var(--elektron-text-primary);
@@ -588,16 +594,30 @@
 .scene-view-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
   margin-bottom: 10px;
+  padding: 6px 8px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+}
+
+/* The operations take the middle, which is what the row was mostly empty of */
+.scene-view-row .scene-actions {
+  flex: 1 1 auto;
+  margin: 0;
 }
 
 /* The fader is the Part's own state, not a view, so it sits beside the tabs rather
-   than under whatever is being read. It keeps its own width and is pushed right. */
+   than under whatever is being read. It carries no frame of its own in here - the row
+   is the frame. */
 .scene-view-row .crossfader {
   margin-left: auto;
-  padding: 5px 10px;
+  padding: 0;
+  gap: 8px;
+  background: none;
+  border: none;
   flex: 0 0 auto;
 }
 
@@ -691,13 +711,23 @@
   white-space: nowrap;
 }
 
+/* The head and the cells below it have to carry the same horizontal padding, or the
+   centred number and the centred value sit over different middles - which is what
+   made the selected column look shifted. */
 .scene-matrix-head {
   text-align: center;
-  padding: 0 4px 6px;
+  padding: 0 3px 6px;
   vertical-align: bottom;
 }
 
+.scene-matrix-table td.scene-matrix-cell {
+  padding-left: 3px;
+  padding-right: 3px;
+}
+
 .scene-matrix-head.selected { background: #4a90e2; color: #fff; border-radius: 3px 3px 0 0; }
+.scene-matrix-head.selected,
+.scene-matrix-cell.selected { box-shadow: inset 0 0 0 1px rgba(74, 144, 226, 0.35); }
 .scene-matrix-head.crossfader-end { color: var(--elektron-orange); }
 .scene-matrix-head.selected.crossfader-end { color: #fff; }
 
@@ -730,15 +760,16 @@
 .scene-compare-pick {
   width: auto;
   max-width: 140px;
-  background: #222;
-  border: 1px solid #444;
+  background: #2a2a2a;
+  border: 1px solid #555;
   border-radius: 4px;
-  color: #ddd;
-  padding: 2px 4px;
-  font-size: 11px;
+  color: #fff;
+  padding: 3px 6px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
+  cursor: pointer;
 }
 
 .scene-compare-pick:hover {
@@ -770,11 +801,31 @@
   font-size: 13px;
 }
 
-/* The parameter name takes whatever is left, so the value columns stay put as rows
-   come and go */
-.scene-compare-table .scene-row-label,
+/* Only the matrix needs the slack absorbed: it has sixteen value columns and fills
+   the width anyway. The comparison has two, and pushing them to the far right leaves
+   a stretch of nothing between a parameter and its values. */
 .scene-matrix-table .scene-row-label {
   width: 100%;
+}
+
+/* The comparison has two value columns where the matrix has sixteen, so the table
+   has width to spare. A block-level table does not shrink-wrap, and the spare width
+   lands in whichever columns are unconstrained - which flung the values to the far
+   right. Every real column is sized to its content and a last empty one takes the
+   rest. */
+.scene-compare-table .scene-row-page,
+.scene-compare-table .scene-row-label {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.scene-compare-table .scene-row-label {
+  padding-right: 24px;
+}
+
+.scene-compare-filler {
+  width: auto;
+  border-bottom: 1px solid #262626;
 }
 
 /* A right-click on a card assigns a crossfader end, which is the one thing the grid

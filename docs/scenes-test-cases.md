@@ -169,6 +169,9 @@ is shown and set on its own and never touches what a scene holds.
 | SC122f | Ends | Compare with A from the grid | Right-click a card and choose "Compare with A" | The Compare tab opens with the A end on one side and that scene on the other |
 | SC122g | Ends | Comparing A with itself | Right-click the A end's own scene | "Compare with A" is refused |
 | SC122h | Layout | The fader sits with the tabs | Open the Scenes tab | The crossfader is on the same row as the view tabs, not below the list |
+| SC122i | Layout | The same operations in every view | Enter Edit mode and step through Scene, Matrix and Compare | Copy, Paste, Clear, Randomize, the three end actions and Show all params are the same in all three |
+| SC122j | Layout | Edit mode does not move the rows | In the Matrix, note a row's position, then toggle Edit mode | The rows stay where they are |
+| SC122k | Matrix | A column heading sits over its values | Look down a column | The number and the values below it share a centre line |
 | SC122d | Ends | The end already there | Right-click the scene an end already points at | That end's entry is refused |
 | SC122e | Ends | Read-only outside Edit mode | Right-click a card without Edit mode | Both entries are refused |
 | SC123 | Undo | A scene edit can be taken back | Change a scene value, then press Undo in the project header | The value goes back and the scene reads as it did |

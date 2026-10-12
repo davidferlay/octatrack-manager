@@ -15,6 +15,27 @@ import { SceneValue } from './SceneValue';
 /** A dash where a scene does not hold the parameter, as the device leaves it alone. */
 const NOT_HELD = '-';
 
+/**
+ * A cell nothing holds.
+ *
+ * Outside Edit mode it is still drawn at the size of the button it becomes, or every
+ * row would change height on the way into Edit mode and the table would jump.
+ */
+function NotHeld({ editable, onAdd }: { editable: boolean; onAdd: () => void }) {
+  return (
+    <button
+      className="scene-add"
+      disabled={!editable}
+      onClick={onAdd}
+      title={editable
+        ? 'Put this parameter into that scene, at its default'
+        : 'That scene leaves this as the Part sets it'}
+    >
+      {NOT_HELD}
+    </button>
+  );
+}
+
 /** The tooltip the Parts page would give this parameter, so naming stays consistent. */
 function rowTitle(row: AssignmentRow, data: ScenesResponse): string | undefined {
   return helpTitle(row.label, fieldHelp(row.field, data.machine_types[row.trackId], {
@@ -118,15 +139,10 @@ export function SceneMatrix({ data, selected, editable, showAll, onSet }: {
                     ].filter(Boolean).join(' ')}
                   >
                     {value === null ? (
-                      editable ? (
-                        <button
-                          className="scene-add"
-                          onClick={() => onSet(row, scene, row.spec.default)}
-                          title="Put this parameter into that scene, at its default"
-                        >
-                          {NOT_HELD}
-                        </button>
-                      ) : NOT_HELD
+                      <NotHeld
+                        editable={editable}
+                        onAdd={() => onSet(row, scene, row.spec.default)}
+                      />
                     ) : (
                       <SceneValue
                         slot={{ spec: row.spec, value }}
@@ -210,6 +226,9 @@ export function SceneCompare({ data, left, right, onPick, editable, onSet }: {
             <th className="scene-row-label">Parameter</th>
             {picker('left', left)}
             {picker('right', right)}
+            {/* Soaks up the width the five real columns do not need, so a parameter
+                and its two values stay next to each other */}
+            <th className="scene-compare-filler" />
           </tr>
         </thead>
         <tbody>
@@ -230,15 +249,10 @@ export function SceneCompare({ data, left, right, onPick, editable, onSet }: {
                       className={`scene-compare-value ${value === null ? 'unheld' : ''}`}
                     >
                       {value === null ? (
-                        editable ? (
-                          <button
-                            className="scene-add"
-                            onClick={() => onSet(row, scene, row.spec.default)}
-                            title="Put this parameter into that scene, at its default"
-                          >
-                            {NOT_HELD}
-                          </button>
-                        ) : NOT_HELD
+                        <NotHeld
+                          editable={editable}
+                          onAdd={() => onSet(row, scene, row.spec.default)}
+                        />
                       ) : (
                         <SceneValue
                           slot={{ spec: row.spec, value }}
@@ -249,6 +263,7 @@ export function SceneCompare({ data, left, right, onPick, editable, onSet }: {
                     </td>
                   );
                 })}
+                <td className="scene-compare-filler" />
               </tr>
             );
           })}
