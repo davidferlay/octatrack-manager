@@ -712,9 +712,10 @@
 }
 
 /* The head and the cells below it have to carry the same horizontal padding, or the
-   centred number and the centred value sit over different middles - which is what
-   made the selected column look shifted. */
-.scene-matrix-head {
+   centred number and the centred value sit over different middles.
+   Written against the table as well as the class: the generic `th` rule above is a
+   class plus a type, so it outranks a bare class and was winning on both. */
+.scene-matrix-table th.scene-matrix-head {
   text-align: center;
   padding: 0 3px 6px;
   vertical-align: bottom;

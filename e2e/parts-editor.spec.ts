@@ -3348,6 +3348,41 @@ test.describe('Scenes', () => {
       await open(page)
       await expect(page.locator('.scene-matrix-head.crossfader-end')).toHaveCount(2)
       await expect(page.locator('.scene-matrix-head.selected')).toHaveCount(1)
+      // The colour is the whole marking now that the letters are gone, so it is pinned
+      await expect(page.locator('.scene-matrix-head.crossfader-end:not(.selected)'))
+        .toHaveCSS('color', 'rgb(255, 102, 0)')
+      await expect(page.locator('.scene-matrix-head.selected'))
+        .toHaveCSS('background-color', 'rgb(74, 144, 226)')
+    })
+
+    /**
+     * Measured on the glyph, not on the cell.
+     *
+     * The table's own `th` rule is a class plus a type, so it outranks a bare class:
+     * the headings were left-aligned inside correctly-centred boxes, and a check on
+     * the boxes saw nothing wrong.
+     */
+    test('a heading sits over the values below it', async ({ page }) => {
+      await open(page)
+      const offsets = await page.evaluate(() => {
+        const textMid = (el: Element) => {
+          const range = document.createRange()
+          range.selectNodeContents(el)
+          const r = range.getBoundingClientRect()
+          return r.left + r.width / 2
+        }
+        const boxMid = (el: Element) => {
+          const r = el.getBoundingClientRect()
+          return r.left + r.width / 2
+        }
+        const heads = Array.from(document.querySelectorAll('.scene-matrix-head'))
+        const row = Array.from(document.querySelectorAll('.scene-matrix-table tbody tr'))
+          .find(tr => tr.querySelector('input.scene-value'))!
+        const cells = Array.from(row.querySelectorAll('.scene-matrix-cell'))
+        return heads.map((head, i) => textMid(head) - boxMid(cells[i]))
+      })
+      // Sub-pixel column widths make an exact zero unreachable; a pixel is alignment
+      expect(Math.max(...offsets.map(Math.abs))).toBeLessThanOrEqual(1)
     })
 
     test('a heading is just the scene number', async ({ page }) => {
@@ -3790,6 +3825,8 @@ test.describe('Parts Editor - Nothing overflows sideways', () => {
     }
   })
 })
+
+
 
 
 
