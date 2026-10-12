@@ -758,22 +758,44 @@
 
 /* Each side says which scene it reads, and changes it in place. Sized to its text:
    a full-width select here stretches the whole value column with it. */
+/* Fills its column, which the value below it also does, so the two line up as one
+   column rather than a wide heading with a small box adrift under it.
+   `appearance: none` as every other select in the app does: the native arrow takes
+   width the label needs, and the native popup comes up white against this theme. */
 .scene-compare-pick {
-  width: auto;
-  max-width: 140px;
-  background: #2a2a2a;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 24px;
+  background: #333;
   border: 1px solid #555;
-  border-radius: 4px;
+  border-radius: 3px;
   color: #fff;
-  padding: 3px 6px;
+  padding: 0 6px;
+  font-family: inherit;
   font-size: 12px;
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0;
+  text-align: center;
+  text-align-last: center;
   cursor: pointer;
+  outline: none;
+}
+
+.scene-compare-pick option {
+  background: #2a2a2a;
+  color: #ffffff;
+  text-transform: none;
+  text-align: left;
 }
 
 .scene-compare-pick:hover {
+  border-color: #5dade2;
+}
+
+.scene-compare-pick:focus {
   border-color: #5dade2;
 }
 
@@ -796,10 +818,17 @@
 
 .scene-compare-value input.scene-value,
 .scene-compare-value .scene-add {
-  width: 64px;
+  width: 100%;
   height: 24px;
   line-height: 24px;
   font-size: 13px;
+}
+
+/* As wide as the longest name the heading carries - "Scene 16 (B)" - with room to
+   spare, since a font that renders a little wider would clip it */
+.scene-compare-table .scene-compare-value {
+  width: 124px;
+  min-width: 124px;
 }
 
 /* Only the matrix needs the slack absorbed: it has sixteen value columns and fills

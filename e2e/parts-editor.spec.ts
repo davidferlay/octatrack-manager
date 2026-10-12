@@ -3557,6 +3557,66 @@ test.describe('Scenes', () => {
         .not.toHaveClass(/editable/)
     })
 
+    /**
+     * The heading picks the scene and the cells show its values, so they have to read
+     * as one column. Left to itself the select is wider than the values, which leaves
+     * each value adrift in a column twice its width.
+     */
+    test('the heading and its values are one column wide', async ({ page }) => {
+      // The widest label the heading ever carries: an end on a two-digit scene
+      await page.locator('.mode-toggle').click()
+      await page.locator('.crossfader-end-picker select').last().selectOption('15')
+      await open(page)
+
+      const widths = await page.evaluate(() => {
+        const select = document.querySelector('.scene-compare-pick') as HTMLSelectElement
+        const value = document.querySelector(
+          '.scene-compare-value input.scene-value',
+        ) as HTMLElement
+        const w = (el: HTMLElement) => Math.round(el.getBoundingClientRect().width)
+        return {
+          picker: w(select),
+          value: w(value),
+          clipped: select.scrollWidth > select.clientWidth + 1,
+        }
+      })
+
+      expect(widths.picker).toBe(widths.value)
+
+      /*
+       * Measured against the text, not the select's scrollWidth: a select reports
+       * nothing useful there, which is how a clipped "Scene 16 (E" got through once.
+       */
+      const fit = await page.evaluate(() => {
+        const select = document.querySelector('.scene-compare-pick') as HTMLSelectElement
+        const style = getComputedStyle(select)
+        const ruler = document.createElement('span')
+        ruler.style.cssText =
+          `position:absolute;visibility:hidden;white-space:pre;font:${style.font}`
+        ruler.textContent = select.options[select.selectedIndex].textContent || ''
+        document.body.append(ruler)
+        const needed = ruler.getBoundingClientRect().width
+        ruler.remove()
+        return {
+          needed,
+          available: select.clientWidth
+            - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
+          // The native arrow eats the width the label needs, and its popup comes up
+          // white against this theme, so every select in the app drops it
+          appearance: style.appearance,
+        }
+      })
+      expect(fit.needed, 'the scene name must fit the heading')
+        .toBeLessThan(fit.available)
+      expect(fit.appearance).toBe('none')
+    })
+
+    test('the drop-down list is not the browser default white', async ({ page }) => {
+      await open(page)
+      await expect(page.locator('.scene-compare-pick option').first())
+        .toHaveCSS('background-color', 'rgb(42, 42, 42)')
+    })
+
     test('a value can be changed in place in Edit mode', async ({ page }) => {
       await page.locator('.mode-toggle').click()
       await open(page)
@@ -3825,6 +3885,8 @@ test.describe('Parts Editor - Nothing overflows sideways', () => {
     }
   })
 })
+
+
 
 
 

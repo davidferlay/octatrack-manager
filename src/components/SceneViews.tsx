@@ -200,9 +200,10 @@ export function SceneCompare({ data, left, right, onPick, editable, onSet }: {
         >
           {data.scenes.map(s => (
             <option key={s.scene_id} value={s.scene_id}>
+              {/* No "empty" note here: it would not fit the column, and a scene that
+                  holds nothing already reads as a column of dashes below */}
               Scene {s.scene_id + 1}
               {endFor(s.scene_id) ? ` (${endFor(s.scene_id)})` : ''}
-              {s.locked_count ? '' : ' - empty'}
             </option>
           ))}
         </select>
