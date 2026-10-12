@@ -105,7 +105,9 @@ symlink の参照先は digest だけを保持し、manifest に root 外の pat
 
 ## 5. Plan envelope（BMS-PLAN / BMS-SCHEMA）
 
-`BankMutationEnvelope` は #181 ChangePlan の安全に関わる射影である。#181 の Plan は、少なくとも次を envelope として出せなければならない。
+`BankMutationEnvelope` は **Apply 入口**の安全に関わる射影である。読み取り専用の #181 ChangePlan 本体は別 schema `masterocta.bank-changeplan:v1`（[`PSE_BANK_CHANGEPLAN_CORE.md`](./PSE_BANK_CHANGEPLAN_CORE.md)）であり、post-state の `expected_changes.after` を fabricate しない。将来 Prepare が envelope を封印する。
+
+Apply 用 envelope は、少なくとも次を出せなければならない。
 
 | field | 意味 |
 | --- | --- |

@@ -694,7 +694,7 @@ impl ReadinessGap {
 /// # use ot_plan::bank_mutation::{ReadinessEvidence, ReadinessGap};
 /// let readiness = ReadinessEvidence::current_main();
 /// assert!(!readiness.open_gaps().contains(&ReadinessGap::ArrangementFileSlot));
-/// assert_eq!(readiness.open_gaps().len(), ReadinessGap::ALL.len() - 1);
+/// assert_eq!(readiness.open_gaps().len(), ReadinessGap::ALL.len() - 2);
 /// ```
 ///
 /// ```compile_fail,E0599
@@ -722,6 +722,8 @@ impl ReadinessEvidence {
         let mut resolved = BTreeSet::new();
         // #204: UI Arrangement 1/2/8 mapped to raw 0/1/7 and arr01/arr02/arr08.
         resolved.insert(ReadinessGap::ArrangementFileSlot);
+        // MO-PSE-BANK-CHANGEPLAN-CORE-1 (#181): read-only ChangePlan planner on main.
+        resolved.insert(ReadinessGap::BankChangePlan);
         Self { resolved }
     }
 
@@ -1667,13 +1669,12 @@ mod tests {
     fn current_main_readiness_keeps_remaining_changeplan_gaps_open() {
         let open = ReadinessEvidence::current_main().open_gaps();
         assert!(!open.contains(&ReadinessGap::ArrangementFileSlot));
-        assert_eq!(open.len(), ReadinessGap::ALL.len() - 1);
-        assert!(open.contains(&ReadinessGap::BankChangePlan));
+        assert!(!open.contains(&ReadinessGap::BankChangePlan));
+        assert_eq!(open.len(), ReadinessGap::ALL.len() - 2);
         assert_eq!(ReadinessGap::BankChangePlan.tracking(), "#181");
         assert_eq!(ReadinessGap::ArrangementFileSlot.tracking(), "#204");
 
         let expected_open = [
-            ReadinessGap::BankChangePlan,
             ReadinessGap::ArrangerPatternReferences,
             ReadinessGap::BankInternalIdentity,
             ReadinessGap::SceneAndRecorderDependencies,

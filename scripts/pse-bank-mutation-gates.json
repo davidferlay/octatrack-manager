@@ -17,25 +17,22 @@
       "id": "change-plan.bank-copy-deterministic",
       "phase": "change-plan",
       "title": "Bank Copy ChangePlan deterministic test",
-      "status": "BLOCKED",
-      "waits_on": [181],
-      "required_tests": []
+      "status": "ACTIVE",
+      "required_tests": ["bank_copy_changeplan_is_deterministic_and_blocked"]
     },
     {
       "id": "change-plan.bank-move-deterministic",
       "phase": "change-plan",
       "title": "Bank Move ChangePlan deterministic test",
-      "status": "BLOCKED",
-      "waits_on": [181],
-      "required_tests": []
+      "status": "ACTIVE",
+      "required_tests": ["bank_move_changeplan_is_deterministic_and_blocked"]
     },
     {
       "id": "change-plan.bank-swap-deterministic",
       "phase": "change-plan",
       "title": "Bank Swap ChangePlan deterministic test",
-      "status": "BLOCKED",
-      "waits_on": [181],
-      "required_tests": []
+      "status": "ACTIVE",
+      "required_tests": ["bank_swap_changeplan_is_deterministic_and_blocked"]
     },
     {
       "id": "change-plan.affected-reference-enumeration",
@@ -49,9 +46,11 @@
       "id": "change-plan.stale-precondition-detection",
       "phase": "change-plan",
       "title": "stale/precondition detection",
-      "status": "BLOCKED",
-      "waits_on": [181, 182],
-      "required_tests": [],
+      "status": "ACTIVE",
+      "required_tests": [
+        "bank_changeplan_stale_when_project_scope_differs",
+        "bank_changeplan_integrity_detects_tampering"
+      ],
       "contract_rules": ["BMS-ENTRY", "BMS-PLAN"],
       "contract_tests": [
         "stale_live_observation_withholds_the_permit",
@@ -64,10 +63,11 @@
       "id": "change-plan.plan-generation-no-write",
       "phase": "change-plan",
       "title": "ChangePlan生成だけではfixtureを変更しないことを証明",
-      "status": "BLOCKED",
-      "waits_on": [181],
+      "status": "ACTIVE",
       "reusable_primitives": ["scripts/pse-fixture-manifest.mjs"],
-      "required_tests": [],
+      "required_tests": [
+        "bank_changeplan_generation_leaves_committed_fixture_bytes_identical"
+      ],
       "contract_rules": ["BMS-NOWRITE"],
       "contract_tests": ["contract_evaluation_on_a_real_read_model_leaves_the_copy_byte_identical"]
     },
