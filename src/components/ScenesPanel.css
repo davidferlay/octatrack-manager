@@ -293,12 +293,6 @@
   border-radius: 4px;
 }
 
-.crossfader-caption {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--elektron-text-secondary);
-}
 
 .crossfader-end-picker {
   display: flex;
@@ -338,12 +332,16 @@
   border-style: dashed;
 }
 
+/* The same orange outline every editable field carries, so it reads as something
+   that can be changed rather than as a label that happens to be clickable */
 .crossfader-end-label:not(:disabled) {
   cursor: pointer;
+  border-color: #f59e0b;
 }
 
 .crossfader-end-label:not(:disabled):hover {
-  border-color: var(--elektron-orange);
+  border-color: #fbbf24;
+  background: rgba(245, 158, 11, 0.12);
 }
 
 .crossfader-end-label.muted:not(:disabled):hover {
@@ -595,7 +593,6 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
   margin-bottom: 10px;
   padding: 6px 8px;
   background: #1a1a1a;
@@ -603,27 +600,57 @@
   border-radius: 6px;
 }
 
-/* The operations take the middle, which is what the row was mostly empty of */
-.scene-view-row .scene-actions {
-  flex: 1 1 auto;
-  margin: 0;
-}
-
-/* The fader is the Part's own state, not a view, so it sits beside the tabs rather
-   than under whatever is being read. It carries no frame of its own in here - the row
-   is the frame. */
-.scene-view-row .crossfader {
-  margin-left: auto;
-  padding: 0;
-  gap: 8px;
-  background: none;
-  border: none;
+.scene-view-row .scene-view-tabs {
   flex: 0 0 auto;
 }
 
-/* The travel between the ends is decoration; it gives up its width first */
-.scene-view-row .crossfader-track {
-  min-width: 40px;
+/* The operations end the row, so the one that is always there - Show all params -
+   keeps the same place whether or not Edit mode has added the others.
+   They wrap rather than widen: Edit mode brings seven more buttons, and a column
+   that grows past its share pushes the fader off the centre of the row. */
+.scene-view-row .scene-actions {
+  /* One declaration: a `margin: 0` after `margin-left: auto` puts it back to zero */
+  margin: 0 0 0 auto;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+/* The fader is the Part's own state rather than a way of reading it, so it belongs to
+   the bank header beside the Part tabs.
+   Three columns rather than absolute positioning: the name and the Part tabs either
+   side are never the same width, so taking the fader out of the flow centres it but
+   lets it run under the tabs. A middle column is centred on the header while it has
+   the room, and pushes rather than overlaps when it does not. */
+.scenes-panel .bank-card-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+}
+
+.scenes-panel .bank-card-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.scenes-panel .bank-card-header .parts-part-tabs {
+  justify-self: end;
+}
+
+.scenes-panel .bank-card-header .crossfader {
+  justify-self: center;
+  padding: 0;
+  gap: 12px;
+  background: none;
+  border: none;
+}
+
+/* The travel between the two ends is what the fader is: worth the width */
+.scenes-panel .bank-card-header .crossfader-track {
+  min-width: 140px;
+  flex: 0 1 140px;
 }
 
 .scene-view-tabs {
@@ -846,18 +873,40 @@
   width: 100%;
 }
 
-/* The two scenes being read, above the cards rather than inside them */
+/* The two scenes being read, centred above the cards rather than inside them. It is
+   the one thing on the tab that says what is being compared, so it is given a frame
+   of its own rather than reading as a stray pair of words. */
 .scene-compare-sides {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
+  justify-content: center;
+  gap: 14px;
+  width: fit-content;
+  margin: 0 auto 12px;
+  padding: 6px 16px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+}
+
+.scene-compare-sides .scene-compare-heading {
+  color: #ffffff;
+}
+
+.scene-compare-sides .scene-compare-heading:hover,
+.scene-compare-sides .scene-compare-heading:focus-within {
+  color: #5dade2;
+}
+
+.scene-compare-sides .scene-compare-pick {
+  font-size: 15px;
+  letter-spacing: 0.3px;
 }
 
 .scene-compare-versus {
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 1px;
   color: var(--elektron-text-dim);
 }
 

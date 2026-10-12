@@ -464,7 +464,6 @@ export function ScenesPanel({
 
   const crossfaderRow = (
         <div className="crossfader">
-          <span className="crossfader-caption">Crossfader</span>
           <div className={`crossfader-end-picker ${data.scene_a_muted ? 'muted' : ''}`}>
             <EndLabel
               end="A"
@@ -514,15 +513,18 @@ export function ScenesPanel({
   return (
     <div className={`scenes-panel bank-card ${commits.modifiedPartIds.size > 0 ? 'edit-mode' : ''}`}>
       <div className="bank-card-header">
+        {/* Name and write controls together, so the header is three columns and the
+            fader can have the middle one to itself */}
         <div className="bank-card-header-left">
           <h3>{bankName} - Scenes</h3>
+          <PartSaveControls
+            state={commits}
+            activePartIndex={partId}
+            partNames={partNames}
+            visible={isEditMode}
+          />
         </div>
-        <PartSaveControls
-          state={commits}
-          activePartIndex={partId}
-          partNames={partNames}
-          visible={isEditMode}
-        />
+        {crossfaderRow}
         <div className="parts-part-tabs">
           {partNames.map((name, index) => (
             <button
@@ -678,8 +680,6 @@ export function ScenesPanel({
             Show all params
           </button>
         </div>
-
-      {crossfaderRow}
       </div>
 
       {view === 'matrix' && (

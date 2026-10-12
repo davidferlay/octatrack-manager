@@ -3603,10 +3603,26 @@ test.describe('Scenes', () => {
      * a caret marking them as clickable. The value boxes in the cards are then the only
      * framed things on the tab.
      */
+    test('the two sides are centred above the cards', async ({ page }) => {
+      await open(page)
+      const offset = await page.evaluate(() => {
+        const mid = (el: Element) => {
+          const b = el.getBoundingClientRect()
+          return b.left + b.width / 2
+        }
+        return Math.abs(mid(document.querySelector('.scene-compare-sides')!)
+          - mid(document.querySelector('.scene-compare')!))
+      })
+      expect(offset).toBeLessThanOrEqual(1)
+    })
+
     test('the side pickers read as headings, not form fields', async ({ page }) => {
       await open(page)
       const pick = page.locator('.scene-compare-pick').first()
-      await expect(pick).toHaveCSS('font-size', '11px')
+      // Larger and white, since the pair stands on its own above the cards
+      await expect(pick).toHaveCSS('font-size', '15px')
+      await expect(page.locator('.scene-compare-sides .scene-compare-heading').first())
+        .toHaveCSS('color', 'rgb(255, 255, 255)')
       await expect(pick).toHaveCSS('text-transform', 'uppercase')
       await expect(pick).toHaveCSS('border-top-width', '0px')
       await expect(pick).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
@@ -3732,6 +3748,80 @@ test.describe('Scenes', () => {
       await expect(menu(page)).toBeVisible()
       await page.keyboard.press('Escape')
       await expect(menu(page)).toHaveCount(0)
+    })
+  })
+
+  /** Where the fader lives, and the strip of operations above the list. */
+  test.describe('the header and the view row', () => {
+    const boxes = (page: Page) => page.evaluate(() => {
+      const box = (sel: string) => {
+        const el = document.querySelector(sel)
+        if (!el) return null
+        const b = el.getBoundingClientRect()
+        return { mid: b.left + b.width / 2, left: b.left, right: b.right }
+      }
+      return {
+        header: box('.scenes-panel .bank-card-header'),
+        fader: box('.scenes-panel .bank-card-header .crossfader'),
+        tabs: box('.scenes-panel .bank-card-header .parts-part-tabs'),
+        left: box('.scenes-panel .bank-card-header-left'),
+        row: box('.scene-view-row'),
+        viewTabs: box('.scene-view-row .scene-view-tabs'),
+        actions: box('.scene-view-row .scene-actions'),
+      }
+    })
+
+    test('the fader sits in the bank header, centred', async ({ page }) => {
+      for (const mode of ['view', 'edit']) {
+        if (mode === 'edit') await page.locator('.mode-toggle').click()
+        const { header, fader } = await boxes(page)
+        expect(fader, `no fader in the header in ${mode} mode`).not.toBeNull()
+        expect(Math.abs(fader!.mid - header!.mid), `off centre in ${mode} mode`)
+          .toBeLessThanOrEqual(1)
+      }
+    })
+
+    /**
+     * The name and the Part tabs either side are never the same width, so a fader
+     * taken out of the flow is centred but free to run under the tabs - which it did.
+     */
+    test('the fader clears what sits either side of it', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      const { fader, tabs, left } = await boxes(page)
+      expect(left!.right, 'the write controls run into the fader')
+        .toBeLessThanOrEqual(fader!.left)
+      expect(fader!.right, 'the fader runs under the Part tabs')
+        .toBeLessThanOrEqual(tabs!.left)
+    })
+
+    test('the fader needs no caption', async ({ page }) => {
+      // Its own A and B letters say what it is
+      await expect(page.locator('.crossfader-caption')).toHaveCount(0)
+    })
+
+    test('the travel between the ends is worth some width', async ({ page }) => {
+      await expect(page.locator('.scenes-panel .bank-card-header .crossfader-track'))
+        .toHaveCSS('min-width', '140px')
+    })
+
+    test('the view row is the tabs and the operations', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      const { row, viewTabs, actions } = await boxes(page)
+      expect(viewTabs!.left).toBeLessThan(actions!.left)
+      // The operations end the row, allowing for its padding and border
+      expect(row!.right - actions!.right).toBeLessThanOrEqual(10)
+    })
+
+    /** Clickable in Edit mode, so it carries the outline every editable field has. */
+    test('the crossfader ends read as editable in Edit mode', async ({ page }) => {
+      const label = page.locator('.crossfader-end-label').first()
+      await expect(label).toBeDisabled()
+      await expect(label).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)')
+
+      await page.locator('.mode-toggle').click()
+
+      await expect(label).toBeEnabled()
+      await expect(label).toHaveCSS('border-top-color', 'rgb(245, 158, 11)')
     })
   })
 
@@ -3919,6 +4009,8 @@ test.describe('Parts Editor - Nothing overflows sideways', () => {
     }
   })
 })
+
+
 
 
 
