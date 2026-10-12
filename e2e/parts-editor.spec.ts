@@ -3616,6 +3616,32 @@ test.describe('Scenes', () => {
       expect(offset).toBeLessThanOrEqual(1)
     })
 
+    /**
+     * The word between the two sides sits on the middle of the pill.
+     *
+     * Two scene names are rarely the same length, so both sides reserve the same
+     * width - otherwise it drifts with whatever is picked.
+     */
+    test('the word between the two sides is centred', async ({ page }) => {
+      await open(page)
+      for (const [left, right] of [['14', '1'], ['0', '8']]) {
+        await page.locator('.scene-compare-pick').first().selectOption({ value: left })
+        await page.locator('.scene-compare-pick').last().selectOption({ value: right })
+        const offset = await page.evaluate(() => {
+          const mid = (el: Element) => {
+            const b = el.getBoundingClientRect()
+            return b.left + b.width / 2
+          }
+          return Math.abs(mid(document.querySelector('.scene-compare-versus')!)
+            - mid(document.querySelector('.scene-compare-sides')!))
+        })
+        expect(offset, `off centre with scenes ${left} and ${right}`)
+          .toBeLessThanOrEqual(1)
+      }
+      await expect(page.locator('.scene-compare-versus'))
+        .toHaveCSS('color', 'rgb(204, 204, 204)')
+    })
+
     test('the side pickers read as headings, not form fields', async ({ page }) => {
       await open(page)
       const pick = page.locator('.scene-compare-pick').first()
@@ -4009,6 +4035,7 @@ test.describe('Parts Editor - Nothing overflows sideways', () => {
     }
   })
 })
+
 
 
 

@@ -903,11 +903,25 @@
   letter-spacing: 0.3px;
 }
 
+/* Both sides reserve the same width, so the word between them lands on the middle of
+   the pill rather than wherever two differently-long scene names leave it */
+.scene-compare-sides .scene-compare-heading {
+  min-width: 150px;
+}
+
+.scene-compare-sides .scene-compare-heading:first-child {
+  justify-content: flex-end;
+}
+
+.scene-compare-sides .scene-compare-heading:last-child {
+  justify-content: flex-start;
+}
+
 .scene-compare-versus {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: var(--elektron-text-dim);
+  color: #cccccc;
 }
 
 /* How far the fader moves this parameter, in what the device shows */
