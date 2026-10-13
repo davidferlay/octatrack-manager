@@ -292,9 +292,12 @@ test.describe('Home - renaming a project', () => {
           if (cmd === 'rescan_set') {
             // What the backend answers for a parent that is not a Set
             if (!opts.rescanWorks) throw new Error('Path is not a valid Octatrack Set')
+            // After a rename it answers with the new name; after a delete, with none
             return {
               name: 'HOLDER', path: '/media/HOLDER', has_audio_pool: true,
-              projects: [{ ...project, name: 'PROJ=', path: '/media/HOLDER/PROJ=' }],
+              projects: calls.some((c: any) => c.cmd === 'delete_project')
+                ? []
+                : [{ ...project, name: 'PROJ=', path: '/media/HOLDER/PROJ=' }],
             }
           }
           return null
@@ -345,6 +348,31 @@ test.describe('Home - renaming a project', () => {
     expect(page.url()).toContain('PROJ%3D')
   })
 
+  /**
+   * Deleting has the same shape as renaming, and had the same fault: the card was
+   * taken out by rescanning the Set, which is refused outside one, leaving a card for
+   * a directory that is no longer there.
+   */
+  test('a deleted project leaves the list, even outside a Set', async ({ page }) => {
+    await setup(page, { inASet: false, rescanWorks: false })
+    await page.locator('.project-card').first().click({ button: 'right' })
+    await page.locator('.context-menu-item', { hasText: /Delete/i }).click()
+    await page.getByRole('button', { name: /^Delete$/ }).click()
+
+    await expect(page.locator('.project-card')).toHaveCount(0)
+  })
+
+  test('a deleted project leaves the list from inside a Set', async ({ page }) => {
+    await setup(page, { inASet: true, rescanWorks: true })
+    await page.locator('.project-card').first().click({ button: 'right' })
+    await page.locator('.context-menu-item', { hasText: /Delete/i }).click()
+    await page.getByRole('button', { name: /^Delete$/ }).click()
+
+    // A Set keeps its "New Project" tile, so the project itself is what is counted.
+    // A regex, because a string hasText is case-insensitive and "PROJ" matches it.
+    await expect(page.locator('.project-card', { hasText: /PROJ/ })).toHaveCount(0)
+  })
+
   test('the new name is what the list shows', async ({ page }) => {
     await setup(page, { inASet: false, rescanWorks: false })
     await renameTo(page, 'RENAMED')
@@ -353,41 +381,4 @@ test.describe('Home - renaming a project', () => {
   })
 })
 
-test.describe('ZZZ delete repro', () => {
-  test('probe', async ({ page }) => {
-    await page.addInitScript(() => {
-      const calls: { cmd: string; args: any }[] = []
-      ;(window as any).__invokeCalls = calls
-      ;(window as any).__TAURI_INTERNALS__ = {
-        transformCallback: () => {},
-        invoke: async (cmd: string, args?: any) => {
-          calls.push({ cmd, args })
-          if (cmd === 'scan_devices') {
-            return {
-              locations: [],
-              standalone_projects: [{
-                name: 'PROJ', path: '/media/LOOSE/PROJ', has_audio_pool: false,
-                sample_count: 0, missing_count: 0, size_bytes: 0,
-              }],
-            }
-          }
-          if (cmd === 'rescan_set') throw new Error('Path is not a valid Octatrack Set')
-          return null
-        },
-      }
-      ;(window as any).__TAURI__ = { invoke: (window as any).__TAURI_INTERNALS__.invoke }
-    })
-    await page.goto('/')
-    await page.getByRole('button', { name: /Scan/i }).first().click()
-    await expect(page.locator('.project-card').first()).toBeVisible()
 
-    await page.locator('.project-card').first().click({ button: 'right' })
-    await page.locator('.context-menu-item', { hasText: /Delete/i }).click()
-    const confirm = page.getByRole('button', { name: /^Delete$/ })
-    if (await confirm.count()) await confirm.click()
-    await page.waitForTimeout(600)
-    console.log('cards left:', await page.locator('.project-card').count())
-    console.log('deleted?', JSON.stringify(await page.evaluate(() =>
-      (window as any).__invokeCalls.filter((c: any) => c.cmd === 'delete_project'))))
-  })
-})
