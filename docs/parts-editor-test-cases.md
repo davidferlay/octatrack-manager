@@ -328,3 +328,8 @@ Up is more, down is less, throughout.
 | PE220 | Undo | Fifty writes deep | Make more than fifty changes, then undo repeatedly | It walks back fifty of them and then stops |
 | PE221 | Undo | A refused button is not a forbidden one | Hover Undo with nothing to undo | The pointer stays a normal arrow |
 | PE222 | Undo | It leaves your place alone | Open a page tab, make a change, then Undo | The same page tab is still open |
+| PE223 | Undo | Both copies of a bank travel together | Save a Part, then Undo | The working and the stored copy both go back; the device shows no disagreement between them |
+| PE224 | Undo | A slot comes back whole | Assign a sample, then Undo | Both the slot and its trim window go back, so the slot still plays rather than falling silent |
+| PE225 | Undo | Other banks are untouched | Edit bank A, edit bank B, then Undo twice | Each goes back on its own; neither disturbs the other |
+| PE226 | Undo | Redo puts the exact bytes back | Make a change, Undo, then Redo | The file matches what it was after the change, byte for byte |
+

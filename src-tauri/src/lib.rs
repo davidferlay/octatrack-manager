@@ -1736,6 +1736,232 @@ pub fn run() {
 mod tests {
     use super::*;
 
+    /// What the undo helpers snapshot before a write, and that the write comes back.
+    ///
+    /// The helpers decide which files one operation touches. Snapshot too few and an
+    /// undo leaves the project half-restored, which is worse than not offering one:
+    /// a bank whose two copies disagree, or a sample slot pointing at one file with
+    /// another's trim window.
+    mod undo_snapshots {
+        use super::*;
+        use tempfile::TempDir;
+
+        struct Project {
+            _dir: TempDir,
+            path: String,
+        }
+
+        impl Project {
+            /// A project with one bank and the files the device writes beside it.
+            fn new() -> Self {
+                let dir = TempDir::new().expect("temp dir");
+                let at = dir.path();
+                std::fs::write(
+                    at.join("project.work"),
+                    test_fixtures::default_project_bytes(),
+                )
+                .expect("project.work");
+                for bank in 1..=2 {
+                    for extension in ["work", "strd"] {
+                        std::fs::write(
+                            at.join(format!("bank{:02}.{}", bank, extension)),
+                            test_fixtures::default_bank_bytes(),
+                        )
+                        .expect("bank file");
+                    }
+                }
+                let path = at.to_string_lossy().to_string();
+                Project { _dir: dir, path }
+            }
+
+            fn at(&self, name: &str) -> std::path::PathBuf {
+                std::path::Path::new(&self.path).join(name)
+            }
+
+            fn put(&self, name: &str, contents: &str) {
+                std::fs::write(self.at(name), contents).expect("write");
+            }
+
+            fn read(&self, name: &str) -> Vec<u8> {
+                std::fs::read(self.at(name)).expect("read")
+            }
+        }
+
+        #[test]
+        fn test_a_bank_write_takes_both_copies_of_that_bank() {
+            let project = Project::new();
+            make_bank_undoable(&project.path, "A", "Change a part").unwrap();
+
+            // The device keeps what it is playing and what it last saved side by side,
+            // and a half-undone bank is one whose two copies disagree
+            project.put("bank01.work", "edited work");
+            project.put("bank01.strd", "edited stored");
+
+            write_history::undo(&project.path).unwrap();
+
+            assert_eq!(
+                project.read("bank01.work"),
+                test_fixtures::default_bank_bytes()
+            );
+            assert_eq!(
+                project.read("bank01.strd"),
+                test_fixtures::default_bank_bytes()
+            );
+        }
+
+        #[test]
+        fn test_a_bank_write_leaves_the_other_banks_alone() {
+            let project = Project::new();
+            make_bank_undoable(&project.path, "A", "Change a part").unwrap();
+            project.put("bank01.work", "edited");
+            project.put("bank02.work", "edited elsewhere");
+
+            write_history::undo(&project.path).unwrap();
+
+            assert_eq!(project.read("bank02.work"), b"edited elsewhere");
+        }
+
+        #[test]
+        fn test_a_bank_with_no_stored_copy_is_still_undoable() {
+            let project = Project::new();
+            std::fs::remove_file(project.at("bank01.strd")).unwrap();
+
+            make_bank_undoable(&project.path, "A", "Change a part").unwrap();
+            project.put("bank01.work", "edited");
+            write_history::undo(&project.path).unwrap();
+
+            assert_eq!(
+                project.read("bank01.work"),
+                test_fixtures::default_bank_bytes()
+            );
+            assert!(!project.at("bank01.strd").exists(), "none was invented");
+        }
+
+        #[test]
+        fn test_a_bank_that_does_not_exist_cannot_be_made_undoable() {
+            let project = Project::new();
+            assert!(make_bank_undoable(&project.path, "Z", "Change a part").is_err());
+        }
+
+        #[test]
+        fn test_a_project_write_takes_the_project_file() {
+            let project = Project::new();
+            make_project_undoable(&project.path, "Mute the A end").unwrap();
+            project.put("project.work", "edited");
+
+            write_history::undo(&project.path).unwrap();
+
+            assert_eq!(
+                project.read("project.work"),
+                test_fixtures::default_project_bytes()
+            );
+        }
+
+        /// A slot carries its sample in the project file and its trim window in the
+        /// markers file. Taking back only half leaves a slot pointing at one sample
+        /// with another's trim window, which plays as silence.
+        #[test]
+        fn test_a_slot_write_takes_the_markers_file_too() {
+            let project = Project::new();
+            project.put("markers.work", "markers before");
+
+            make_slots_undoable(&project.path, "Assign 1 sample slots").unwrap();
+            project.put("project.work", "edited");
+            project.put("markers.work", "markers after");
+
+            write_history::undo(&project.path).unwrap();
+
+            assert_eq!(
+                project.read("project.work"),
+                test_fixtures::default_project_bytes()
+            );
+            assert_eq!(project.read("markers.work"), b"markers before");
+        }
+
+        #[test]
+        fn test_a_slot_write_falls_back_to_the_stored_markers() {
+            let project = Project::new();
+            project.put("markers.strd", "stored markers");
+
+            make_slots_undoable(&project.path, "Assign 1 sample slots").unwrap();
+            project.put("markers.strd", "edited");
+            write_history::undo(&project.path).unwrap();
+
+            assert_eq!(project.read("markers.strd"), b"stored markers");
+        }
+
+        #[test]
+        fn test_a_slot_write_without_a_markers_file_is_still_undoable() {
+            let project = Project::new();
+            assert!(!project.at("markers.work").exists());
+
+            make_slots_undoable(&project.path, "Assign 1 sample slots").unwrap();
+            project.put("project.work", "edited");
+            write_history::undo(&project.path).unwrap();
+
+            assert_eq!(
+                project.read("project.work"),
+                test_fixtures::default_project_bytes()
+            );
+        }
+
+        /// The whole way through: a real scene edit, taken back, read again.
+        #[test]
+        fn test_a_scene_edit_comes_back_byte_for_byte() {
+            let project = Project::new();
+            let before = project.read("bank01.work");
+
+            make_bank_undoable(&project.path, "A", "Change scene 1").unwrap();
+            let mut tracks = project_reader::read_scenes(&project.path, "A", 0)
+                .unwrap()
+                .scenes[0]
+                .tracks
+                .clone();
+            tracks[0].amp[3] = Some(100);
+            project_reader::save_scene(&project.path, "A", 0, 0, tracks).unwrap();
+
+            let changed = project_reader::read_scenes(&project.path, "A", 0).unwrap();
+            assert_eq!(
+                changed.scenes[0].tracks[0].amp[3],
+                Some(100),
+                "the edit landed"
+            );
+
+            write_history::undo(&project.path).unwrap();
+
+            let back = project_reader::read_scenes(&project.path, "A", 0).unwrap();
+            assert_eq!(back.scenes[0].tracks[0].amp[3], None, "and was taken back");
+            assert_eq!(project.read("bank01.work"), before, "byte for byte");
+        }
+
+        #[test]
+        fn test_putting_a_scene_edit_back_again() {
+            let project = Project::new();
+            make_bank_undoable(&project.path, "A", "Change scene 1").unwrap();
+            let mut tracks = project_reader::read_scenes(&project.path, "A", 0)
+                .unwrap()
+                .scenes[0]
+                .tracks
+                .clone();
+            tracks[0].amp[3] = Some(100);
+            project_reader::save_scene(&project.path, "A", 0, 0, tracks).unwrap();
+            let edited = project.read("bank01.work");
+
+            write_history::undo(&project.path).unwrap();
+            write_history::redo(&project.path).unwrap();
+
+            assert_eq!(project.read("bank01.work"), edited);
+            assert_eq!(
+                project_reader::read_scenes(&project.path, "A", 0)
+                    .unwrap()
+                    .scenes[0]
+                    .tracks[0]
+                    .amp[3],
+                Some(100)
+            );
+        }
+    }
+
     // =========================================================================
     // rename_file command tests
     // =========================================================================

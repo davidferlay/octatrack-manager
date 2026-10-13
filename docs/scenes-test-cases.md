@@ -191,3 +191,8 @@ is shown and set on its own and never touches what a scene holds.
 | SC133 | Actions | The badge fades | Wait after an operation | It goes on its own rather than staying put |
 | SC134 | Matrix | The chosen column is marked edge to edge | Choose a scene and look at its column | The heading's blue spans the column, flush with the cells below it |
 | SC135 | Undo | It leaves your place alone | Open the Matrix on a chosen scene, make a change, then Undo | The Matrix is still open on the same scene, with the same options set |
+| SC136 | Undo | A scene edit comes back exactly | Change a scene value, Undo, then re-read the scene | The scene holds what it held before, and the bank file is unchanged |
+| SC137 | Matrix | Reading a whole Part | Open the Matrix on a Part whose scenes touch several tracks and pages | Every parameter any scene reaches for has a row, in track then page order |
+| SC138 | Matrix | Named by what the track runs | Change a track's machine, then open the Matrix | That track's SRC rows are named for the new machine |
+| SC139 | Matrix | Named by the effect loaded | Change a track's FX1, then open the Matrix | That track's FX1 rows are named for the new effect |
+
