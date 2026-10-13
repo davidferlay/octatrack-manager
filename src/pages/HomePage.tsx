@@ -1333,18 +1333,40 @@ export function HomePage() {
           onConfirm={async (newName) => {
             setRenamingProject(null);
             try {
-              await invoke('rename_project', { projectPath: renamingProject.project.path, newName });
-              // A rename moves the directory; carry the bookmark to the new path
               const oldPath = renamingProject.project.path;
-              const parent = oldPath.substring(0, oldPath.lastIndexOf('/'));
+              /*
+               * The backend answers with where the project now is, and that is what
+               * the list is corrected with.
+               *
+               * A rescan alone is not enough: it is refused for anything whose parent
+               * is not a Set, which is every project outside one, and the refusal used
+               * to be swallowed - leaving the card pointing at a directory that no
+               * longer exists, so opening it reported no project file found.
+               */
+              const newPath = await invoke<string>('rename_project', {
+                projectPath: oldPath, newName,
+              });
+              const renamed = (project: OctatrackProject) => (project.path === oldPath
+                ? { ...project, name: newName, path: newPath }
+                : project);
+              setLocations((prev) => prev.map((loc) => ({
+                ...loc,
+                sets: loc.sets.map((set) => ({
+                  ...set,
+                  projects: set.projects.map(renamed),
+                })),
+              })));
+              setStandaloneProjects((prev) => prev.map(renamed));
+              // A rename moves the directory; carry the bookmark to the new path
               retargetBookmark(oldPath, {
-                path: `${parent}/${newName}`,
+                path: newPath,
                 name: newName,
                 setPath: renamingProject.setPath,
                 setName: locations
                   .flatMap((l) => l.sets)
                   .find((set) => set.path === renamingProject.setPath)?.name ?? '',
               });
+              // Still worth asking, for the counts it refreshes; it may well refuse
               await rescanSet(renamingProject.setPath);
             } catch (err) {
               alert(`Rename failed: ${err}`);

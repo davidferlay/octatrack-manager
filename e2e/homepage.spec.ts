@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect, Page } from '@playwright/test'
 
 test.describe('HomePage', () => {
   test.beforeEach(async ({ page }) => {
@@ -248,5 +248,107 @@ test.describe('Accessibility', () => {
     // Basic checks
     await expect(page.getByRole('main')).toBeVisible()
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  })
+})
+
+
+
+/**
+ * Renaming moves the directory, so the list has to follow it.
+ *
+ * It used to follow by rescanning the Set, which is refused for anything whose parent
+ * is not one - every project outside a Set - and the refusal was swallowed. The card
+ * kept pointing at a directory that no longer existed, and opening it reported
+ * "No project file found" while the device opened the project perfectly well.
+ */
+test.describe('Home - renaming a project', () => {
+  const setup = async (page: Page, options: { inASet: boolean; rescanWorks: boolean }) => {
+    await page.addInitScript((opts: { inASet: boolean; rescanWorks: boolean }) => {
+      const calls: { cmd: string; args: any }[] = []
+      ;(window as any).__invokeCalls = calls
+      const project = {
+        name: 'PROJ', path: '/media/HOLDER/PROJ', has_audio_pool: false,
+        sample_count: 0, missing_count: 0, size_bytes: 0,
+      }
+      ;(window as any).__TAURI_INTERNALS__ = {
+        transformCallback: () => {},
+        invoke: async (cmd: string, args?: any) => {
+          calls.push({ cmd, args })
+          if (cmd === 'scan_devices') {
+            return opts.inASet
+              ? {
+                locations: [{
+                  name: 'OCTATRACK', path: '/media', device_type: 'CompactFlash',
+                  sets: [{
+                    name: 'HOLDER', path: '/media/HOLDER', has_audio_pool: true,
+                    projects: [project],
+                  }],
+                }],
+                standalone_projects: [],
+              }
+              : { locations: [], standalone_projects: [project] }
+          }
+          if (cmd === 'rename_project') return `/media/HOLDER/${args.newName}`
+          if (cmd === 'rescan_set') {
+            // What the backend answers for a parent that is not a Set
+            if (!opts.rescanWorks) throw new Error('Path is not a valid Octatrack Set')
+            return {
+              name: 'HOLDER', path: '/media/HOLDER', has_audio_pool: true,
+              projects: [{ ...project, name: 'PROJ=', path: '/media/HOLDER/PROJ=' }],
+            }
+          }
+          return null
+        },
+      }
+      ;(window as any).__TAURI__ = { invoke: (window as any).__TAURI_INTERNALS__.invoke }
+    }, options)
+    await page.goto('/')
+    await page.getByRole('button', { name: /Scan/i }).first().click()
+    await expect(page.locator('.project-card').first()).toBeVisible()
+  }
+
+  const renameTo = async (page: Page, name: string) => {
+    await page.locator('.project-card').first().click({ button: 'right' })
+    await page.locator('.context-menu-item', { hasText: /Rename/i }).click()
+    await page.locator('input[type="text"]').last().fill(name)
+    await page.getByRole('button', { name: /^Rename$/ }).click()
+  }
+
+  const openedPath = async (page: Page) => {
+    await page.locator('.project-card').first().click()
+    await expect.poll(async () => (await page.evaluate(() =>
+      (window as any).__invokeCalls.filter((c: any) => c.cmd === 'load_project_metadata')
+    )).length).toBeGreaterThan(0)
+    const calls = await page.evaluate(() => (window as any).__invokeCalls
+      .filter((c: any) => c.cmd === 'load_project_metadata'))
+    return calls[calls.length - 1].args.path
+  }
+
+  test('a project outside a Set opens at its new path', async ({ page }) => {
+    await setup(page, { inASet: false, rescanWorks: false })
+    await renameTo(page, 'PROJ=')
+    await expect(page.locator('.project-card').first()).toContainText('PROJ=')
+    expect(await openedPath(page)).toBe('/media/HOLDER/PROJ=')
+  })
+
+  test('a project inside a Set opens at its new path', async ({ page }) => {
+    await setup(page, { inASet: true, rescanWorks: true })
+    await renameTo(page, 'PROJ=')
+    expect(await openedPath(page)).toBe('/media/HOLDER/PROJ=')
+  })
+
+  /** The name is legal on the device, so it must survive the round trip intact. */
+  test('a name ending in = survives being opened', async ({ page }) => {
+    await setup(page, { inASet: false, rescanWorks: false })
+    await renameTo(page, 'PROJ=')
+    expect(await openedPath(page)).toBe('/media/HOLDER/PROJ=')
+    expect(page.url()).toContain('PROJ%3D')
+  })
+
+  test('the new name is what the list shows', async ({ page }) => {
+    await setup(page, { inASet: false, rescanWorks: false })
+    await renameTo(page, 'RENAMED')
+    await expect(page.locator('.project-card').first()).toContainText('RENAMED')
+    expect(await openedPath(page)).toBe('/media/HOLDER/RENAMED')
   })
 })

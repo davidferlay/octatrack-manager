@@ -176,3 +176,8 @@
 
 | PM134 | Project opening | A sample filename containing "=" does not truncate the project | Open a project whose Audio Pool holds a file with "=" in its name (for example `bass=sub.wav`), assigned to a slot | The project opens, its name and metadata read correctly, and the slot shows the full filename - nothing is cut at the "=" |
 | PM135 | Project opening | A project whose settings block is incomplete still opens | Open a project saved by an older OS whose [SETTINGS] block is missing keys | The project opens with defaults for the absent keys instead of refusing to load |
+| PM142 | Rename | The list follows the rename | Rename a project, then open it | It opens: the entry points at where the project now is, not where it was |
+| PM143 | Rename | A project outside a Set | Rename a project that is not inside a Set, then open it | It opens; renaming does not depend on the parent being a Set |
+| PM144 | Rename | A name the device allows | Rename a project to end in "=", then open it | It opens, and the name reads as typed |
+| PM145 | Rename | The bookmark follows too | Bookmark a project, rename it, then open the bookmark | It opens at the new location |
+
