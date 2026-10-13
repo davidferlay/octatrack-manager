@@ -14,12 +14,13 @@ use ot_domain::bank_state_documents::{
     CopySavedCheckpointSemantics, StateDocOperationBlockReason, StateDocOperationVerdict,
 };
 use ot_domain::project_structure::{
-    state_role_rank, BankIndex, PartIndex, PartStructure, PatternIndex,
+    state_role_rank, BankIndex, MachineKind, PartIndex, PartStructure, PatternIndex,
     ProjectArrangementSelection, ProjectBankSelection, ProjectStructure, TrackIndex, TrackPlayback,
     TrackSlotReference, TrackStructure, UnmodeledDependency,
 };
 use ot_domain::{
-    ContentHash, RootId, RootRelativePath, StateDocumentParseStatus, StateDocumentRole,
+    ContentHash, RootId, RootRelativePath, SampleSlotKind, StateDocumentParseStatus,
+    StateDocumentRole,
 };
 use sha2::{Digest, Sha256};
 use std::fmt;
@@ -140,6 +141,11 @@ pub enum PreconditionPresence {
         byte_size: u64,
         content_hash: ContentHash,
     },
+    Directory,
+    Symlink {
+        target_digest: ContentHash,
+    },
+    Other,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -215,6 +221,7 @@ pub enum BankChangePlanBlocker {
     BankIdentityMismatch,
     DocumentMalformed,
     DocumentUnsupportedVersion,
+    NonRegularPrecondition,
     UnmodeledDependency(UnmodeledDependency),
     ReadinessGap(ReadinessGap),
 }
@@ -339,9 +346,9 @@ impl fmt::Display for BankChangePlanError {
             Self::ProjectPathMismatch => {
                 formatter.write_str("project structure path does not match planning facts")
             }
-            Self::BankPresenceMismatch => {
-                formatter.write_str("bank state document presence does not match the declared bank")
-            }
+            Self::BankPresenceMismatch => formatter.write_str(
+                "bank state document presence does not match the declared bank or the project structure",
+            ),
             Self::ReadinessEvidenceMismatch => {
                 formatter.write_str("readiness evidence is not current_main()")
             }
@@ -394,9 +401,6 @@ pub fn plan_bank_change(
         blockers.push(BankChangePlanBlocker::UnmodeledDependency(*dependency));
     }
 
-    blockers.sort_by_key(blocker_rank);
-    blockers.dedup();
-
     let read_dependencies = build_read_dependencies(
         &facts.project_relative_path,
         &facts.project_structure,
@@ -411,6 +415,9 @@ pub fn plan_bank_change(
         &candidate_change_documents,
         &facts.project_relative_path,
     );
+    append_non_regular_precondition_blockers(&preconditions, &mut blockers);
+    blockers.sort_by_key(blocker_rank);
+    blockers.dedup();
 
     let (affected_patterns, affected_parts, affected_tracks, affected_sample_references) =
         enumerate_affected_references(&facts.project_structure, source, destination, operation);
@@ -498,10 +505,23 @@ fn validate_facts(
     }
     if facts.source_presence.bank != intent.source()
         || facts.destination_presence.bank != intent.destination()
+        || !presence_matches_structure(&facts.source_presence, &facts.project_structure)
+        || !presence_matches_structure(&facts.destination_presence, &facts.project_structure)
     {
         return Err(BankChangePlanError::BankPresenceMismatch);
     }
     Ok(())
+}
+
+fn presence_matches_structure(set: &BankStateDocumentSet, structure: &ProjectStructure) -> bool {
+    structure
+        .bank(set.bank, StateDocumentRole::Working)
+        .is_some()
+        == set.working_present
+        && structure
+            .bank(set.bank, StateDocumentRole::SavedCheckpoint)
+            .is_some()
+            == set.saved_checkpoint_present
 }
 
 fn active_bank_index(structure: &ProjectStructure) -> Option<BankIndex> {
@@ -576,16 +596,26 @@ fn append_document_blockers(
             let Some(document) = structure.bank(bank, role) else {
                 continue;
             };
-            match document.parse_status {
-                StateDocumentParseStatus::Malformed => {
-                    blockers.push(BankChangePlanBlocker::DocumentMalformed);
-                }
-                StateDocumentParseStatus::UnsupportedVersion => {
-                    blockers.push(BankChangePlanBlocker::DocumentUnsupportedVersion);
-                }
-                StateDocumentParseStatus::Parsed => {}
-            }
+            push_parse_status_blocker(document.parse_status, blockers);
         }
+    }
+    if let Some(state) = structure.project_state.as_ref() {
+        push_parse_status_blocker(state.parse_status, blockers);
+    }
+}
+
+fn push_parse_status_blocker(
+    status: StateDocumentParseStatus,
+    blockers: &mut Vec<BankChangePlanBlocker>,
+) {
+    match status {
+        StateDocumentParseStatus::Malformed => {
+            blockers.push(BankChangePlanBlocker::DocumentMalformed);
+        }
+        StateDocumentParseStatus::UnsupportedVersion => {
+            blockers.push(BankChangePlanBlocker::DocumentUnsupportedVersion);
+        }
+        StateDocumentParseStatus::Parsed => {}
     }
 }
 
@@ -627,6 +657,7 @@ fn blocker_rank(blocker: &BankChangePlanBlocker) -> u8 {
         BankChangePlanBlocker::CrossRolePairRejected => 3,
         BankChangePlanBlocker::DocumentMalformed => 4,
         BankChangePlanBlocker::DocumentUnsupportedVersion => 5,
+        BankChangePlanBlocker::NonRegularPrecondition => 6,
         BankChangePlanBlocker::WorkingSavedCheckpointRuleUnresolved => 10,
         BankChangePlanBlocker::OperationRuleBlocked => 11,
         BankChangePlanBlocker::CopySavedCheckpointSemanticsUnknown => 12,
@@ -831,7 +862,27 @@ fn manifest_entry_precondition(
             byte_size: *byte_size,
             content_hash: content_hash.clone(),
         },
-        Some(_) => PreconditionPresence::Absent,
+        Some(crate::bank_mutation::ManifestEntry::Directory) => PreconditionPresence::Directory,
+        Some(crate::bank_mutation::ManifestEntry::Symlink { target_digest }) => {
+            PreconditionPresence::Symlink {
+                target_digest: target_digest.clone(),
+            }
+        }
+        Some(crate::bank_mutation::ManifestEntry::Other) => PreconditionPresence::Other,
+    }
+}
+
+fn append_non_regular_precondition_blockers(
+    preconditions: &[FilePrecondition],
+    blockers: &mut Vec<BankChangePlanBlocker>,
+) {
+    if preconditions.iter().any(|precondition| {
+        !matches!(
+            precondition.presence,
+            PreconditionPresence::Absent | PreconditionPresence::File { .. }
+        )
+    }) {
+        blockers.push(BankChangePlanBlocker::NonRegularPrecondition);
     }
 }
 
@@ -1152,34 +1203,28 @@ fn encode_parts(hasher: &mut Sha256, parts: &[AffectedPartObservation]) {
 fn encode_tracks(hasher: &mut Sha256, tracks: &[AffectedTrackObservation]) {
     encode_count(hasher, 54, tracks.len());
     for track in tracks {
-        encode_field(
-            hasher,
-            55,
-            &[
-                track.bank.get(),
-                role_code(track.role),
-                track.part.get(),
-                track.track.get(),
-                track_playback_code(track.playback),
-            ],
-        );
+        let mut bytes = vec![
+            track.bank.get(),
+            role_code(track.role),
+            track.part.get(),
+            track.track.get(),
+        ];
+        bytes.extend(track_playback_bytes(track.playback));
+        encode_field(hasher, 55, &bytes);
     }
 }
 
 fn encode_samples(hasher: &mut Sha256, samples: &[AffectedSampleReferenceObservation]) {
     encode_count(hasher, 56, samples.len());
     for sample in samples {
-        encode_field(
-            hasher,
-            57,
-            &[
-                sample.bank.get(),
-                role_code(sample.role),
-                sample.part.get(),
-                sample.track.get(),
-                slot_reference_code(sample.slot),
-            ],
-        );
+        let mut bytes = vec![
+            sample.bank.get(),
+            role_code(sample.role),
+            sample.part.get(),
+            sample.track.get(),
+        ];
+        bytes.extend(slot_reference_bytes(sample.slot));
+        encode_field(hasher, 57, &bytes);
     }
 }
 
@@ -1197,6 +1242,12 @@ fn encode_preconditions(hasher: &mut Sha256, preconditions: &[FilePrecondition])
                 encode_field(hasher, 73, &byte_size.to_be_bytes());
                 encode_field(hasher, 74, content_hash.as_str().as_bytes());
             }
+            PreconditionPresence::Directory => encode_field(hasher, 72, &[2]),
+            PreconditionPresence::Symlink { target_digest } => {
+                encode_field(hasher, 72, &[3]);
+                encode_field(hasher, 75, target_digest.as_str().as_bytes());
+            }
+            PreconditionPresence::Other => encode_field(hasher, 72, &[4]),
         }
     }
 }
@@ -1294,20 +1345,46 @@ fn execution_readiness_code(readiness: BankChangePlanExecutionReadiness) -> u8 {
     }
 }
 
-fn track_playback_code(playback: TrackPlayback) -> u8 {
+fn track_playback_bytes(playback: TrackPlayback) -> Vec<u8> {
     match playback {
-        TrackPlayback::Master => 0,
-        TrackPlayback::Audio { .. } => 1,
+        TrackPlayback::Master => vec![0],
+        TrackPlayback::Audio { machine, slot } => {
+            let mut bytes = vec![1];
+            bytes.extend(machine_bytes(machine));
+            bytes.extend(slot_reference_bytes(slot));
+            bytes
+        }
     }
 }
 
-fn slot_reference_code(slot: TrackSlotReference) -> u8 {
+fn machine_bytes(machine: MachineKind) -> Vec<u8> {
+    match machine {
+        MachineKind::Static => vec![0],
+        MachineKind::Flex => vec![1],
+        MachineKind::Thru => vec![2],
+        MachineKind::Neighbor => vec![3],
+        MachineKind::Pickup => vec![4],
+        MachineKind::Unknown(raw) => vec![5, raw],
+    }
+}
+
+/// Discriminant and payload stay in separate bytes. Folding `raw` into the
+/// discriminant overflows parser-supported `Unrecognized(252..=254)` and
+/// aliases `NoSampleMachine`, `Unassigned`, or `Slot`.
+fn slot_reference_bytes(slot: TrackSlotReference) -> [u8; 4] {
     match slot {
-        TrackSlotReference::NoSampleMachine => 0,
-        TrackSlotReference::Unassigned => 1,
-        TrackSlotReference::Slot(_) => 2,
-        TrackSlotReference::RecorderBuffer(_) => 3,
-        TrackSlotReference::Unrecognized(raw) => 4 + raw,
+        TrackSlotReference::NoSampleMachine => [0, 0, 0, 0],
+        TrackSlotReference::Unassigned => [1, 0, 0, 0],
+        TrackSlotReference::Slot(id) => {
+            let kind = match id.kind() {
+                SampleSlotKind::Static => 0,
+                SampleSlotKind::Flex => 1,
+            };
+            let number = id.number();
+            [2, kind, (number >> 8) as u8, number as u8]
+        }
+        TrackSlotReference::RecorderBuffer(buffer) => [3, buffer.buffer_number(), 0, 0],
+        TrackSlotReference::Unrecognized(raw) => [4, raw, 0, 0],
     }
 }
 
@@ -1330,6 +1407,7 @@ fn blocker_code(blocker: BankChangePlanBlocker) -> u8 {
         BankChangePlanBlocker::BankIdentityMismatch => 15,
         BankChangePlanBlocker::DocumentMalformed => 16,
         BankChangePlanBlocker::DocumentUnsupportedVersion => 17,
+        BankChangePlanBlocker::NonRegularPrecondition => 18,
         BankChangePlanBlocker::UnmodeledDependency(dependency) => 20 + unmodeled_code(dependency),
         BankChangePlanBlocker::ReadinessGap(gap) => 40 + readiness_gap_code(gap),
     }
@@ -1371,7 +1449,8 @@ mod tests {
         BankStructure, MachineKind, PatternPlaybackScale, PatternScale, PatternStructure,
         ProjectStateDocument, TrackPlayback, TrackStructure, BANK_UNMODELED_DEPENDENCIES,
     };
-    use ot_domain::RecorderBufferId;
+    use ot_domain::{RecorderBufferId, SampleSlotId, SampleSlotKind};
+    use std::collections::HashSet;
 
     fn fingerprint() -> String {
         format!("rootfp:v1:{}", "a".repeat(64))
@@ -1659,5 +1738,178 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(error, BankChangePlanError::ReadinessEvidenceMismatch);
+    }
+
+    fn plan_id_for_slot(slot: TrackSlotReference) -> PlanId {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let mut planning = facts(source, destination);
+        for bank in &mut planning.project_structure.banks {
+            for part in &mut bank.parts {
+                for track in &mut part.tracks {
+                    if let TrackPlayback::Audio { slot: assigned, .. } = &mut track.playback {
+                        *assigned = slot;
+                    }
+                }
+            }
+        }
+        let plan = plan_bank_change(
+            BankChangeIntent::Copy {
+                source,
+                destination,
+            },
+            &planning,
+            &ReadinessEvidence::current_main(),
+        )
+        .unwrap();
+        plan.validate_integrity().unwrap();
+        plan.id().clone()
+    }
+
+    #[test]
+    fn plan_id_distinguishes_complete_slot_identities() {
+        let ids = [
+            plan_id_for_slot(TrackSlotReference::Slot(
+                SampleSlotId::new(SampleSlotKind::Flex, 1).unwrap(),
+            )),
+            plan_id_for_slot(TrackSlotReference::Slot(
+                SampleSlotId::new(SampleSlotKind::Flex, 128).unwrap(),
+            )),
+            plan_id_for_slot(TrackSlotReference::Slot(
+                SampleSlotId::new(SampleSlotKind::Static, 1).unwrap(),
+            )),
+            plan_id_for_slot(TrackSlotReference::RecorderBuffer(
+                RecorderBufferId::new(129).unwrap(),
+            )),
+            plan_id_for_slot(TrackSlotReference::RecorderBuffer(
+                RecorderBufferId::new(136).unwrap(),
+            )),
+            plan_id_for_slot(TrackSlotReference::NoSampleMachine),
+            plan_id_for_slot(TrackSlotReference::Unassigned),
+            plan_id_for_slot(TrackSlotReference::Unrecognized(252)),
+            plan_id_for_slot(TrackSlotReference::Unrecognized(253)),
+            plan_id_for_slot(TrackSlotReference::Unrecognized(254)),
+        ];
+        let unique: HashSet<_> = ids.iter().collect();
+        assert_eq!(unique.len(), ids.len());
+    }
+
+    #[test]
+    fn non_regular_precondition_is_explicit_and_blocking() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let intent = BankChangeIntent::Copy {
+            source,
+            destination,
+        };
+        let readiness = ReadinessEvidence::current_main();
+        let cases = [
+            (
+                ManifestEntry::Symlink {
+                    target_digest: hash(7),
+                },
+                PreconditionPresence::Symlink {
+                    target_digest: hash(7),
+                },
+            ),
+            (ManifestEntry::Directory, PreconditionPresence::Directory),
+            (ManifestEntry::Other, PreconditionPresence::Other),
+        ];
+        for (entry, expected) in cases {
+            let mut planning = facts(source, destination);
+            planning.scope_manifest.insert(
+                RootRelativePath::parse("SET/PROJECT/bank02.work").unwrap(),
+                entry,
+            );
+            let plan = plan_bank_change(intent, &planning, &readiness).unwrap();
+            let presence = &plan
+                .preconditions
+                .iter()
+                .find(|item| item.relative_path.as_str() == "SET/PROJECT/bank02.work")
+                .expect("candidate path is a precondition")
+                .presence;
+            assert_eq!(presence, &expected);
+            assert!(plan
+                .blockers
+                .contains(&BankChangePlanBlocker::NonRegularPrecondition));
+        }
+    }
+
+    #[test]
+    fn copy_plan_blocks_unparsed_project_state() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let intent = BankChangeIntent::Copy {
+            source,
+            destination,
+        };
+        let readiness = ReadinessEvidence::current_main();
+        for (status, blocker) in [
+            (
+                StateDocumentParseStatus::Malformed,
+                BankChangePlanBlocker::DocumentMalformed,
+            ),
+            (
+                StateDocumentParseStatus::UnsupportedVersion,
+                BankChangePlanBlocker::DocumentUnsupportedVersion,
+            ),
+        ] {
+            let mut planning = facts(source, destination);
+            planning
+                .project_structure
+                .project_state
+                .as_mut()
+                .unwrap()
+                .parse_status = status;
+            let plan = plan_bank_change(intent, &planning, &readiness).unwrap();
+            assert!(plan.read_dependencies.iter().any(|dependency| {
+                dependency.relative_path.as_str().ends_with("project.work")
+                    && dependency.parse_status == Some(status)
+            }));
+            assert!(plan.blockers.contains(&blocker));
+        }
+    }
+
+    #[test]
+    fn declared_presence_must_match_structure_roles() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let intent = BankChangeIntent::Copy {
+            source,
+            destination,
+        };
+        let readiness = ReadinessEvidence::current_main();
+
+        let mut declared_present = facts(source, destination);
+        declared_present
+            .project_structure
+            .banks
+            .retain(|bank| bank.bank != source);
+        assert_eq!(
+            plan_bank_change(intent, &declared_present, &readiness).unwrap_err(),
+            BankChangePlanError::BankPresenceMismatch
+        );
+
+        let mut declared_absent = facts(source, destination);
+        declared_absent.destination_presence = BankStateDocumentSet::new(destination, false, false);
+        assert_eq!(
+            plan_bank_change(intent, &declared_absent, &readiness).unwrap_err(),
+            BankChangePlanError::BankPresenceMismatch
+        );
+
+        let mut one_role = facts(source, destination);
+        one_role.source_presence = BankStateDocumentSet::new(source, true, false);
+        assert_eq!(
+            plan_bank_change(intent, &one_role, &readiness).unwrap_err(),
+            BankChangePlanError::BankPresenceMismatch
+        );
+
+        let mut agreed_absent = facts(source, destination);
+        agreed_absent.destination_presence = BankStateDocumentSet::new(destination, false, false);
+        agreed_absent
+            .project_structure
+            .banks
+            .retain(|bank| bank.bank != destination);
+        assert!(plan_bank_change(intent, &agreed_absent, &readiness).is_ok());
     }
 }

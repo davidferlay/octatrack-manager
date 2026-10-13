@@ -60,7 +60,7 @@ Production callers must pass `ReadinessEvidence::current_main()` unchanged. Arbi
 - read dependencies vs candidate change documents (Copy: source read-only, destination candidates only)
 - affected Pattern / Part / Track / sample-slot observations (Working vs SavedCheckpoint separate)
 - `reference_coverage = PARTIAL` with documented missing classes (sample locks, inactive machine slots, `parts.saved`, `recorder_slot_id`)
-- `readiness_gaps`, `blockers`, preconditions (path + size + hash or absence)
+- `readiness_gaps`, `blockers`, preconditions (regular-file size and hash, an explicit non-regular entry, or absence)
 - backup requirement declaration (paths only; no `BackupEvidence`)
 - verification requirement declaration (no fabricated post hashes)
 - `execution_readiness = Blocked`, `execution_authorized() = false`
