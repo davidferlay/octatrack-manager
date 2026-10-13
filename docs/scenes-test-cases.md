@@ -195,4 +195,6 @@ is shown and set on its own and never touches what a scene holds.
 | SC137 | Matrix | Reading a whole Part | Open the Matrix on a Part whose scenes touch several tracks and pages | Every parameter any scene reaches for has a row, in track then page order |
 | SC138 | Matrix | Named by what the track runs | Change a track's machine, then open the Matrix | That track's SRC rows are named for the new machine |
 | SC139 | Matrix | Named by the effect loaded | Change a track's FX1, then open the Matrix | That track's FX1 rows are named for the new effect |
+| SC140 | Values | Drag a scene value | In Edit mode, drag a scene value up or down | It follows the drag, as the Parts values do |
+| SC141 | Grid | A swipe does not change the scene | Drag across the scene grid | The chosen scene stays put; only the wheel moves it |
 

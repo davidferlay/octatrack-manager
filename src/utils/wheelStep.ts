@@ -20,7 +20,15 @@ function direction(e: WheelEvent): 1 | -1 | 0 {
 }
 
 /**
- * A ref for a parameter cell whose value the wheel should step.
+ * How far the pointer travels for one step while dragging.
+ *
+ * Small enough that a parameter's whole range is a comfortable stroke - 127 steps is
+ * about 500 px - and large enough that a hand resting on the button does not nudge it.
+ */
+const PIXELS_PER_STEP = 4;
+
+/**
+ * A ref for a parameter cell whose value the wheel steps, and a drag changes.
  *
  * Only the cell's own controls answer - its knob, its readout, its indicator. The name
  * and the space around it stay ordinary scrolling surface, because a page made mostly
@@ -31,6 +39,11 @@ function direction(e: WheelEvent): 1 | -1 | 0 {
  * `within` narrows which part of the element answers. The default is the parameter's
  * own controls; passing null makes the whole element answer, which is what a region
  * that is one control - a row of cards to pick from - wants.
+ *
+ * Dragging up and down changes the value too, but only where `within` names the
+ * controls. A region that is one control is a surface the pointer may legitimately be
+ * dragged across, and taking the drag there would mean a swipe over a row of cards
+ * quietly moved the selection.
  */
 export function useWheelStep(
   step: ((by: 1 | -1) => void) | null,
@@ -58,8 +71,78 @@ export function useWheelStep(
       e.stopPropagation();
       latest.current(by);
     };
+    /**
+     * Dragging up and down, which is how a knob is turned everywhere else.
+     *
+     * Up is more, as the wheel is. The anchor follows the pointer a step at a time
+     * rather than being read from where the drag began, so a long drag does not drift
+     * and a change of direction answers at once.
+     */
+    let anchor: number | null = null;
+    let stepped = false;
+
+    const onPointerDown = (e: PointerEvent) => {
+      // The main button only: a right-click opens a menu, a middle one pastes
+      if (e.button !== 0) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('select')) return;
+      if (!within || !target?.closest?.(within)) return;
+      if (!latest.current) return;
+      anchor = e.clientY;
+      stepped = false;
+      // Keeps the moves coming when the pointer leaves the control mid-drag. Only an
+      // improvement, so a browser that refuses it still steps.
+      try {
+        node.setPointerCapture(e.pointerId);
+      } catch {
+        /* no capture: the drag still works while the pointer stays over the control */
+      }
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (anchor === null || !latest.current) return;
+      const by = Math.trunc((anchor - e.clientY) / PIXELS_PER_STEP);
+      if (!by) return;
+      // Nothing is selected while dragging over a readout, which otherwise highlights
+      e.preventDefault();
+      stepped = true;
+      anchor -= by * PIXELS_PER_STEP;
+      const direction = by > 0 ? 1 : -1;
+      for (let taken = 0; taken < Math.abs(by); taken++) latest.current(direction);
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (anchor === null) return;
+      anchor = null;
+      try {
+        if (node.hasPointerCapture(e.pointerId)) node.releasePointerCapture(e.pointerId);
+      } catch {
+        /* it was never taken */
+      }
+      // A drag that changed something must not also count as a click on the control
+      if (stepped) {
+        const swallow = (click: MouseEvent) => {
+          click.preventDefault();
+          click.stopPropagation();
+        };
+        node.addEventListener('click', swallow, { capture: true, once: true });
+        // Nothing to swallow if no click follows, so it does not sit there waiting
+        setTimeout(() => node.removeEventListener('click', swallow, { capture: true }), 0);
+      }
+    };
+
     node.addEventListener('wheel', onWheel, { passive: false });
-    return () => node.removeEventListener('wheel', onWheel);
+    node.addEventListener('pointerdown', onPointerDown);
+    node.addEventListener('pointermove', onPointerMove);
+    node.addEventListener('pointerup', onPointerUp);
+    node.addEventListener('pointercancel', onPointerUp);
+    return () => {
+      node.removeEventListener('wheel', onWheel);
+      node.removeEventListener('pointerdown', onPointerDown);
+      node.removeEventListener('pointermove', onPointerMove);
+      node.removeEventListener('pointerup', onPointerUp);
+      node.removeEventListener('pointercancel', onPointerUp);
+    };
   }, [within]);
 }
 

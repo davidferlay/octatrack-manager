@@ -332,4 +332,11 @@ Up is more, down is less, throughout.
 | PE224 | Undo | A slot comes back whole | Assign a sample, then Undo | Both the slot and its trim window go back, so the slot still plays rather than falling silent |
 | PE225 | Undo | Other banks are untouched | Edit bank A, edit bank B, then Undo twice | Each goes back on its own; neither disturbs the other |
 | PE226 | Undo | Redo puts the exact bytes back | Make a change, Undo, then Redo | The file matches what it was after the change, byte for byte |
+| PE227 | Values | Drag a value up | Hold a value field and drag upwards | It rises, a step every few pixels, as the wheel steps it |
+| PE228 | Values | Drag a value down | Drag downwards | It falls |
+| PE229 | Values | What is dragged to is what is written | Drag a value, then check the device | The value on the device matches where the drag ended |
+| PE230 | Values | A click still types | Click a value field and type | It takes the typed value; a click is not a drag |
+| PE231 | Values | Only the control drags | Drag from the parameter name beside the field | Nothing changes: the name and the gaps stay ordinary surface |
+| PE232 | Values | Read-only outside Edit mode | Drag a value without Edit mode | Nothing changes |
+| PE233 | Values | The widget drags too | Drag a parameter's knob rather than its readout | The value follows the drag |
 

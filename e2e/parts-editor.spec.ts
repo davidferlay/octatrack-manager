@@ -4249,6 +4249,112 @@ test.describe('Parts Editor - Undo and redo', () => {
   })
 })
 
+/**
+ * Dragging a value up and down, which is how a knob is turned everywhere else.
+ *
+ * The wheel already steps a value, but it needs the pointer held still over the
+ * control; a drag is what the hand reaches for when the value is a long way off.
+ */
+test.describe('Parts Editor - Dragging a value', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await openPartsTab(page)
+  })
+
+  /** Returns what the field read before and after the drag. */
+  const drag = async (page: Page, field: ReturnType<typeof atkInput>, by: number) => {
+    const before = await field.inputValue()
+    const box = (await field.boundingBox())!
+    const x = box.x + box.width / 2
+    const y = box.y + box.height / 2
+    await page.mouse.move(x, y)
+    await page.mouse.down()
+    await page.mouse.move(x, y - by, { steps: 5 })
+    await page.mouse.up()
+    return { before, after: await field.inputValue() }
+  }
+
+  test('upwards asks for more', async ({ page }) => {
+    await enterEditMode(page)
+    const { before, after } = await drag(page, atkInput(page), 20)
+    expect(Number(after)).toBeGreaterThan(Number(before))
+  })
+
+  test('downwards asks for less', async ({ page }) => {
+    await enterEditMode(page)
+    const { before, after } = await drag(page, atkInput(page), -20)
+    expect(Number(after)).toBeLessThan(Number(before))
+  })
+
+  test('a step every few pixels, not one per drag', async ({ page }) => {
+    await enterEditMode(page)
+    const { before, after } = await drag(page, atkInput(page), 20)
+    // Far enough to be unmistakably more than a single step
+    expect(Number(after) - Number(before)).toBeGreaterThan(2)
+  })
+
+  test('what it drags to is what gets written', async ({ page }) => {
+    await enterEditMode(page)
+    const { after } = await drag(page, atkInput(page), 20)
+    await expect
+      .poll(async () => (await getInvokeCalls(page, 'save_parts')).length, { timeout: 3000 })
+      .toBeGreaterThan(0)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    expect(String(calls[calls.length - 1].args.partsData[0].amps[0].atk)).toBe(after)
+  })
+
+  test('a read-only field does not drag', async ({ page }) => {
+    const { before, after } = await drag(page, atkInput(page), 20)
+    expect(after).toBe(before)
+  })
+
+  test('a plain click still lets the value be typed', async ({ page }) => {
+    await enterEditMode(page)
+    const field = atkInput(page)
+    await field.click()
+    await field.fill('42')
+    await expect(field).toHaveValue('42')
+  })
+
+  test('the name beside it is not a drag handle', async ({ page }) => {
+    await enterEditMode(page)
+    const label = page.locator('.param-item')
+      .filter({ has: page.getByText('ATK', { exact: true }) })
+      .first().locator('.param-label')
+    const before = await atkInput(page).inputValue()
+    const box = (await label.boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 - 30, { steps: 5 })
+    await page.mouse.up()
+    await expect(atkInput(page)).toHaveValue(before)
+  })
+
+  test('a scene value drags too', async ({ page }) => {
+    await page.getByRole('button', { name: 'Scenes', exact: true }).click()
+    await expect(page.locator('.scenes-grid')).toBeVisible()
+    await page.locator('.mode-toggle').click()
+    const { before, after } = await drag(page, page.locator('input.scene-value').first(), -16)
+    expect(Number(after)).toBeLessThan(Number(before))
+  })
+
+  /**
+   * A row of cards is a surface the pointer may be dragged across, so a swipe there
+   * must not quietly move the selection - only the wheel does that.
+   */
+  test('the scene grid is not dragged through', async ({ page }) => {
+    await page.getByRole('button', { name: 'Scenes', exact: true }).click()
+    await expect(page.locator('.scenes-grid')).toBeVisible()
+    const grid = page.locator('.scenes-grid')
+    const box = (await grid.boundingBox())!
+    await page.mouse.move(box.x + 20, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + 20, box.y + box.height / 2 - 40, { steps: 5 })
+    await page.mouse.up()
+    await expect(page.locator('.scene-card.active .scene-number')).toHaveText('1')
+  })
+})
+
 test.describe('Parts Editor - Nothing overflows sideways', () => {
   /** The card's padding is the only room there is: a child that bleeds past it with a
    *  negative margin puts a horizontal scrollbar on the whole window. */
@@ -4266,6 +4372,7 @@ test.describe('Parts Editor - Nothing overflows sideways', () => {
     }
   })
 })
+
 
 
 

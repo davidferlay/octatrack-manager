@@ -293,6 +293,189 @@ describe('stepping a parameter with the wheel', () => {
     })
   })
 
+  /**
+   * Dragging up and down, which is how a knob is turned everywhere else. Up is more,
+   * as the wheel is.
+   */
+  describe('dragging a value', () => {
+    const press = (on: HTMLElement, y: number) => {
+      const event = new MouseEvent('pointerdown', {
+        clientY: y, button: 0, bubbles: true, cancelable: true,
+      }) as PointerEvent
+      Object.defineProperty(event, 'pointerId', { value: 1 })
+      on.dispatchEvent(event)
+      return event
+    }
+    const moveTo = (on: HTMLElement, y: number) => {
+      const event = new MouseEvent('pointermove', {
+        clientY: y, bubbles: true, cancelable: true,
+      }) as PointerEvent
+      Object.defineProperty(event, 'pointerId', { value: 1 })
+      on.dispatchEvent(event)
+      return event
+    }
+    const release = (on: HTMLElement, y: number) => {
+      const event = new MouseEvent('pointerup', {
+        clientY: y, bubbles: true, cancelable: true,
+      }) as PointerEvent
+      Object.defineProperty(event, 'pointerId', { value: 1 })
+      on.dispatchEvent(event)
+    }
+
+    it('asks for the next value on the way up', () => {
+      const step = vi.fn()
+      const { node } = attach(step)
+      const control = node.querySelector('.param-control') as HTMLElement
+      press(control, 100)
+      moveTo(control, 96)
+      expect(step).toHaveBeenCalledWith(1)
+    })
+
+    it('asks for the previous value on the way down', () => {
+      const step = vi.fn()
+      const { node } = attach(step)
+      const control = node.querySelector('.param-control') as HTMLElement
+      press(control, 100)
+      moveTo(control, 104)
+      expect(step).toHaveBeenCalledWith(-1)
+    })
+
+    it('takes a step for every few pixels, not one per drag', () => {
+      const step = vi.fn()
+      const { node } = attach(step)
+      const control = node.querySelector('.param-control') as HTMLElement
+      press(control, 100)
+      moveTo(control, 88)
+      expect(step).toHaveBeenCalledTimes(3)
+    })
+
+    it('carries on as the drag goes, without drifting', () => {
+      const step = vi.fn()
+      const { node } = attach(step)
+      const control = node.querySelector('.param-control') as HTMLElement
+      press(control, 100)
+      moveTo(control, 96)
+      moveTo(control, 92)
+      moveTo(control, 88)
+      expect(step).toHaveBeenCalledTimes(3)
+      expect(step).toHaveBeenNthCalledWith(3, 1)
+    })
+
+    it('answers a change of direction at once', () => {
+      const step = vi.fn()
+      const { node } = attach(step)
+      const control = node.querySelector('.param-control') as HTMLElement
+      press(control, 100)
+      moveTo(control, 92)
+      step.mockClear()
+      moveTo(control, 96)
+      expect(step).toHaveBeenCalledWith(-1)
+    })
+
+    it('ignores a movement too small to be a step', () => {
+      const step = vi.fn()
+      const { node } = attach(step)
+      const control = node.querySelector('.param-control') as HTMLElement
+      press(control, 100)
+      moveTo(control, 98)
+      expect(step).not.toHaveBeenCalled()
+    })
+
+    it('does nothing until the pointer goes down', () => {
+      const step = vi.fn()
+      const { node } = attach(step)
+      const control = node.querySelector('.param-control') as HTMLElement
+      moveTo(control, 50)
+      expect(step).not.toHaveBeenCalled()
+    })
+
+    it('stops when the pointer comes up', () => {
+      const step = vi.fn()
+      const { node } = attach(step)
+      const control = node.querySelector('.param-control') as HTMLElement
+      press(control, 100)
+      moveTo(control, 96)
+      release(control, 96)
+      step.mockClear()
+      moveTo(control, 50)
+      expect(step).not.toHaveBeenCalled()
+    })
+
+    it('keeps the readout from being selected while it drags', () => {
+      const { node } = attach(vi.fn())
+      const value = node.querySelector('.param-value') as HTMLElement
+      press(value, 100)
+      expect(moveTo(value, 92).defaultPrevented).toBe(true)
+    })
+
+    it('leaves the name and the gaps alone', () => {
+      const step = vi.fn()
+      const { node } = attach(step)
+      const label = node.querySelector('.param-label') as HTMLElement
+      press(label, 100)
+      moveTo(label, 80)
+      expect(step).not.toHaveBeenCalled()
+    })
+
+    it('leaves a read-only field alone', () => {
+      const step = vi.fn()
+      const { node } = attach(null)
+      const control = node.querySelector('.param-control') as HTMLElement
+      press(control, 100)
+      moveTo(control, 80)
+      expect(step).not.toHaveBeenCalled()
+    })
+
+    it('leaves a drop-down to its own stepping', () => {
+      const step = vi.fn()
+      const { node } = attach(step)
+      const control = node.querySelector('.param-control') as HTMLElement
+      control.innerHTML = '<select><option>a</option></select>'
+      const select = control.querySelector('select') as HTMLElement
+      press(select, 100)
+      moveTo(select, 80)
+      expect(step).not.toHaveBeenCalled()
+    })
+
+    it('ignores a button that is not the main one', () => {
+      const step = vi.fn()
+      const { node } = attach(step)
+      const control = node.querySelector('.param-control') as HTMLElement
+      const event = new MouseEvent('pointerdown', {
+        clientY: 100, button: 2, bubbles: true, cancelable: true,
+      }) as PointerEvent
+      Object.defineProperty(event, 'pointerId', { value: 1 })
+      control.dispatchEvent(event)
+      moveTo(control, 80)
+      expect(step).not.toHaveBeenCalled()
+    })
+
+    /**
+     * A region that is one control - a row of cards - is a surface the pointer may be
+     * dragged across, so a swipe there must not quietly move the selection.
+     */
+    it('is not offered where the whole element is the control', () => {
+      const step = vi.fn()
+      const { node } = attach(step, null)
+      press(node, 100)
+      moveTo(node, 80)
+      expect(step).not.toHaveBeenCalled()
+      // The wheel still works there
+      wheel(node, -120)
+      expect(step).toHaveBeenCalledWith(1)
+    })
+
+    it('stops dragging once the element goes away', () => {
+      const step = vi.fn()
+      const { node, detach } = attach(step)
+      const control = node.querySelector('.param-control') as HTMLElement
+      detach?.()
+      press(control, 100)
+      moveTo(control, 80)
+      expect(step).not.toHaveBeenCalled()
+    })
+  })
+
   it('uses the newest step function without being rebound', () => {
     const first = vi.fn()
     const second = vi.fn()
