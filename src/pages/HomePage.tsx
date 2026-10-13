@@ -1311,13 +1311,26 @@ export function HomePage() {
           setName={deleteTarget.setName}
           onConfirm={async () => {
             try {
-              await invoke('delete_project', { projectPath: deleteTarget.project.path });
-              retargetBookmark(deleteTarget.project.path, null);
-              const setPath = deleteTarget.project.path.substring(
-                0,
-                deleteTarget.project.path.lastIndexOf('/')
-              );
-              await rescanSet(setPath);
+              const gonePath = deleteTarget.project.path;
+              await invoke('delete_project', { projectPath: gonePath });
+              retargetBookmark(gonePath, null);
+              /*
+               * Taken out of the list here rather than by rescanning, for the same
+               * reason the rename is: a rescan is refused for anything whose parent is
+               * not a Set, and the refusal is only logged - which would leave a card
+               * for a directory that no longer exists.
+               */
+              const without = (project: OctatrackProject) => project.path !== gonePath;
+              setLocations((prev) => prev.map((loc) => ({
+                ...loc,
+                sets: loc.sets.map((set) => ({
+                  ...set,
+                  projects: set.projects.filter(without),
+                })),
+              })));
+              setStandaloneProjects((prev) => prev.filter(without));
+              // Still worth asking, for the counts it refreshes; it may well refuse
+              await rescanSet(gonePath.substring(0, gonePath.lastIndexOf('/')));
             } catch (err) {
               alert(`Delete failed: ${err}`);
             }

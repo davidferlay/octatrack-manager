@@ -352,3 +352,42 @@ test.describe('Home - renaming a project', () => {
     expect(await openedPath(page)).toBe('/media/HOLDER/RENAMED')
   })
 })
+
+test.describe('ZZZ delete repro', () => {
+  test('probe', async ({ page }) => {
+    await page.addInitScript(() => {
+      const calls: { cmd: string; args: any }[] = []
+      ;(window as any).__invokeCalls = calls
+      ;(window as any).__TAURI_INTERNALS__ = {
+        transformCallback: () => {},
+        invoke: async (cmd: string, args?: any) => {
+          calls.push({ cmd, args })
+          if (cmd === 'scan_devices') {
+            return {
+              locations: [],
+              standalone_projects: [{
+                name: 'PROJ', path: '/media/LOOSE/PROJ', has_audio_pool: false,
+                sample_count: 0, missing_count: 0, size_bytes: 0,
+              }],
+            }
+          }
+          if (cmd === 'rescan_set') throw new Error('Path is not a valid Octatrack Set')
+          return null
+        },
+      }
+      ;(window as any).__TAURI__ = { invoke: (window as any).__TAURI_INTERNALS__.invoke }
+    })
+    await page.goto('/')
+    await page.getByRole('button', { name: /Scan/i }).first().click()
+    await expect(page.locator('.project-card').first()).toBeVisible()
+
+    await page.locator('.project-card').first().click({ button: 'right' })
+    await page.locator('.context-menu-item', { hasText: /Delete/i }).click()
+    const confirm = page.getByRole('button', { name: /^Delete$/ })
+    if (await confirm.count()) await confirm.click()
+    await page.waitForTimeout(600)
+    console.log('cards left:', await page.locator('.project-card').count())
+    console.log('deleted?', JSON.stringify(await page.evaluate(() =>
+      (window as any).__invokeCalls.filter((c: any) => c.cmd === 'delete_project'))))
+  })
+})
