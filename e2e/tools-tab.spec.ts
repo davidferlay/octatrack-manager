@@ -4645,3 +4645,135 @@ test.describe('Tools Tab - Clear Project', () => {
     expect(calls[0][1]).toMatchObject({ slotIndices: [1] })
   })
 })
+
+
+/**
+ * A slider already drags - that is what it is - but it ignored the wheel, so the two
+ * ways of changing a value disagreed depending on which control the pointer was over.
+ */
+test.describe('Tools Tab - Stepping a slider with the wheel', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await page.waitForTimeout(500)
+    await page.locator('.tools-section .tools-select').selectOption('copy_sample_slots')
+    await page.waitForTimeout(300)
+  })
+
+  const overSlider = async (page: Page, deltaY: number) => {
+    const slider = page.locator('input.tools-dual-range-input').first()
+    const box = (await slider.boundingBox())!
+    const before = await slider.inputValue()
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.wheel(0, deltaY)
+    await page.waitForTimeout(200)
+    return { before, after: await slider.inputValue() }
+  }
+
+  test('the wheel moves the slot slider', async ({ page }) => {
+    const { before, after } = await overSlider(page, -120)
+    expect(Number(after)).toBeGreaterThan(Number(before))
+  })
+
+  test('and back down again', async ({ page }) => {
+    await overSlider(page, -120)
+    await overSlider(page, -120)
+    const { before, after } = await overSlider(page, 120)
+    expect(Number(after)).toBeLessThan(Number(before))
+  })
+
+  /**
+   * The sliders are stacked under their own track and let the pointer through to the
+   * handles, so the wheel arrives at the container rather than at an input. What is
+   * under the pointer is what it has to find.
+   */
+  test('it finds the slider under the pointer, not the event target', async ({ page }) => {
+    const slider = page.locator('input.tools-dual-range-input').first()
+    const box = (await slider.boundingBox())!
+    const under = await page.evaluate(([x, y]) => {
+      const el = document.elementFromPoint(x, y)
+      return el ? el.tagName : 'none'
+    }, [box.x + box.width / 2, box.y + box.height / 2])
+    // The container takes the event, and the stepping still works
+    expect(under).toBe('DIV')
+    const { before, after } = await overSlider(page, -120)
+    expect(after).not.toBe(before)
+  })
+})
+
+/**
+ * A row like Flex / Both / Static is a drop-down drawn as buttons, so it answers the
+ * wheel the way a drop-down does.
+ */
+test.describe('Tools Tab - Stepping a row of buttons with the wheel', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await page.waitForTimeout(600)
+    await page.locator('.tools-section .tools-select').selectOption('clear_project')
+    await page.waitForTimeout(400)
+    await page.locator('.tools-toggle-btn', { hasText: /^Sample Slots$/ }).first().click()
+    await page.waitForTimeout(400)
+  })
+
+  /** Slot Type, which sits directly above the slot range sliders. */
+  const slotType = (page: Page) => page.locator('.tools-toggle-group').nth(1)
+  const chosen = async (page: Page) =>
+    (await slotType(page).locator('.tools-toggle-btn.selected').allTextContents()).join('|')
+  const sliders = (page: Page) => page.locator('input[type=range]')
+    .evaluateAll(els => els.map(el => (el as HTMLInputElement).value))
+
+  const overSlotType = async (page: Page, deltaY: number) => {
+    const box = (await slotType(page).boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.wheel(0, deltaY)
+    await page.waitForTimeout(250)
+  }
+
+  test('the wheel moves along the row', async ({ page }) => {
+    expect(await chosen(page)).toBe('Flex')
+    await overSlotType(page, -120)
+    expect(await chosen(page)).toBe('Both')
+    await overSlotType(page, -120)
+    expect(await chosen(page)).toBe('Static')
+  })
+
+  test('and holds at either end', async ({ page }) => {
+    // Flex is first, so there is nothing before it to step to
+    await overSlotType(page, 120)
+    expect(await chosen(page)).toBe('Flex')
+  })
+
+  /**
+   * What is under the pointer is what answers.
+   *
+   * Finding the slider under the pointer used to ask every element in the stack for
+   * its sliders, and that stack runs up to the document - so a wheel over a row of
+   * buttons moved the sliders sitting below it.
+   */
+  test('it does not reach the sliders below it', async ({ page }) => {
+    const before = await sliders(page)
+    expect(before.length).toBeGreaterThan(0)
+
+    await overSlotType(page, -120)
+    expect(await chosen(page)).toBe('Both')
+
+    expect(await sliders(page)).toEqual(before)
+  })
+
+  test('and the sliders do not reach the row above them', async ({ page }) => {
+    const row = await chosen(page)
+    const slider = page.locator('input[type=range]').first()
+    const box = (await slider.boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.wheel(0, -120)
+    await page.waitForTimeout(250)
+
+    expect(await chosen(page)).toBe(row)
+    expect((await sliders(page))[0]).not.toBe('1')
+  })
+})

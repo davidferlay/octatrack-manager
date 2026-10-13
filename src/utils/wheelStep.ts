@@ -147,6 +147,142 @@ export function useWheelStep(
 }
 
 /**
+ * Makes every row of pick-one buttons steppable with the wheel, in one place.
+ *
+ * A row like Audio / Both / MIDI is a drop-down drawn as buttons, so it answers the
+ * wheel the way a drop-down does. A grid where several can be on at once is not: there
+ * is no next value to step to, so those are left alone - which is what having exactly
+ * one button marked as chosen means.
+ *
+ * Returns a function that removes the listener again.
+ */
+export function installToggleWheelStepping(target: Document = document): () => void {
+  const onWheel = (event: Event) => {
+    const e = event as WheelEvent;
+    // Another of these has already answered this turn of the wheel
+    if (e.defaultPrevented) return;
+    const group = (e.target as HTMLElement | null)?.closest?.('.tools-toggle-group');
+    if (!group) return;
+
+    const buttons = Array.from(group.querySelectorAll('button.tools-toggle-btn'))
+      .filter((button): button is HTMLButtonElement =>
+        button instanceof HTMLButtonElement && !button.disabled);
+    const chosen = buttons.filter(button => button.classList.contains('selected'));
+    // Several at once is a grid, not a choice of one, so it has no next value
+    if (chosen.length !== 1) return;
+
+    const by = direction(e);
+    if (!by) return;
+
+    const next = buttons[buttons.indexOf(chosen[0]) + by];
+    // Nothing left to step to, so the wheel goes back to being the page's
+    if (!next) return;
+
+    e.preventDefault();
+    next.click();
+  };
+
+  target.addEventListener('wheel', onWheel, { passive: false });
+  return () => target.removeEventListener('wheel', onWheel);
+}
+
+/** How far along its own track a slider's handle currently sits, in page pixels. */
+function handleAt(slider: HTMLInputElement): number {
+  const box = slider.getBoundingClientRect();
+  const min = slider.min === '' ? 0 : Number(slider.min);
+  const max = slider.max === '' ? 100 : Number(slider.max);
+  const along = max === min ? 0 : (Number(slider.value) - min) / (max - min);
+  return box.left + along * box.width;
+}
+
+/**
+ * The slider the pointer is over, if any.
+ *
+ * Not simply the event's target: a pair of sliders sharing one track is built by
+ * stacking them and letting the pointer through to the handles, so the wheel arrives
+ * at the container rather than at either input. What is under the pointer is what the
+ * wheel is about, so that is what is asked - and of a stacked pair, the one whose
+ * handle is nearest, which is the one the hand is reaching for.
+ */
+function sliderUnder(e: WheelEvent): HTMLInputElement | null {
+  const direct = (e.target as HTMLElement | null)?.closest?.('input[type="range"]');
+  if (direct instanceof HTMLInputElement) return direct;
+
+  const stacked = (document.elementsFromPoint?.(e.clientX, e.clientY) ?? [])
+    .flatMap(el => (el instanceof HTMLInputElement && el.type === 'range'
+      ? [el]
+      : Array.from(el.querySelectorAll?.('input[type="range"]') ?? [])))
+    .filter((el): el is HTMLInputElement => el instanceof HTMLInputElement)
+    /*
+     * The pointer has to be over the slider itself.
+     *
+     * What is under the pointer includes every ancestor up to the document, and asking
+     * those for their sliders turns up every slider on the page - so a wheel over a
+     * row of buttons was moving the sliders underneath it.
+     */
+    .filter(slider => {
+      const box = slider.getBoundingClientRect();
+      return e.clientX >= box.left && e.clientX <= box.right
+        && e.clientY >= box.top && e.clientY <= box.bottom;
+    });
+  if (stacked.length === 0) return null;
+
+  return stacked.reduce((nearest, slider) => (
+    Math.abs(handleAt(slider) - e.clientX) < Math.abs(handleAt(nearest) - e.clientX)
+      ? slider
+      : nearest
+  ));
+}
+
+/**
+ * Makes every slider in the app steppable with the wheel, in one place.
+ *
+ * A slider already drags - that is what it is - but it ignores the wheel, so the two
+ * ways of changing a value disagree depending on which control you are over. The
+ * Tools and the Audio Pool are built from these, so doing it here covers them all
+ * without each one wiring it up.
+ *
+ * Returns a function that removes the listener again.
+ */
+export function installRangeWheelStepping(target: Document = document): () => void {
+  const onWheel = (event: Event) => {
+    const e = event as WheelEvent;
+    // Another of these has already answered this turn of the wheel
+    if (e.defaultPrevented) return;
+    const input = sliderUnder(e);
+    if (!input || input.disabled || input.readOnly) return;
+
+    const by = direction(e);
+    if (!by) return;
+
+    const step = Number(input.step) || 1;
+    const min = input.min === '' ? 0 : Number(input.min);
+    const max = input.max === '' ? 100 : Number(input.max);
+    const next = Math.min(max, Math.max(min, Number(input.value) + by * step));
+    // Nothing left to step to, so the wheel goes back to being the page's. Holding it
+    // here would strand the page whenever a slider sat at either end of its range.
+    if (next === Number(input.value)) return;
+
+    e.preventDefault();
+    /*
+     * Through the prototype's own setter, not the property.
+     *
+     * React keeps a tracker of what it last wrote to an input and skips the change
+     * when the value it reads back matches; assigning the property updates that
+     * tracker too, so the component would never hear about it.
+     */
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set;
+    if (setter) setter.call(input, String(next));
+    else input.value = String(next);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+
+  target.addEventListener('wheel', onWheel, { passive: false });
+  return () => target.removeEventListener('wheel', onWheel);
+}
+
+/**
  * Makes every drop-down in the app steppable with the wheel, in one place.
  *
  * A select has everything the stepping needs - its options, in order, and which one is
@@ -157,6 +293,8 @@ export function useWheelStep(
 export function installSelectWheelStepping(target: Document = document): () => void {
   const onWheel = (event: Event) => {
     const e = event as WheelEvent;
+    // Another of these has already answered this turn of the wheel
+    if (e.defaultPrevented) return;
     const select = (e.target as HTMLElement | null)?.closest?.('select');
     if (!(select instanceof HTMLSelectElement)) return;
     // A list box shows its options already and scrolls through them on its own

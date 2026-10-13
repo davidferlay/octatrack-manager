@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
-import { installSelectWheelStepping, useWheelStep } from './wheelStep'
+import { installSelectWheelStepping, installRangeWheelStepping, useWheelStep } from './wheelStep'
 
 /**
  * The app-wide drop-down stepping. The direction is the one judgement call in here -
@@ -491,5 +491,191 @@ describe('stepping a parameter with the wheel', () => {
     wheel(node.querySelector('.param-control')!, -120)
     expect(first).not.toHaveBeenCalled()
     expect(second).toHaveBeenCalledWith(1)
+  })
+})
+
+
+/**
+ * The app's sliders. They already drag - that is what a slider is - but they ignored
+ * the wheel, so the two ways of changing a value disagreed depending on the control.
+ */
+describe('stepping a slider with the wheel', () => {
+  let uninstall: () => void
+  let slider: HTMLInputElement
+
+  const build = (attrs: Partial<HTMLInputElement> = {}) => {
+    slider = document.createElement('input')
+    slider.type = 'range'
+    slider.min = '1'
+    slider.max = '128'
+    slider.value = '10'
+    Object.assign(slider, attrs)
+    document.body.append(slider)
+    return slider
+  }
+
+  const wheel = (on: HTMLElement, deltaY: number) => {
+    const event = new WheelEvent('wheel', { deltaY, bubbles: true, cancelable: true })
+    on.dispatchEvent(event)
+    return event
+  }
+
+  beforeEach(() => { uninstall = installRangeWheelStepping() })
+  afterEach(() => { uninstall(); document.body.innerHTML = '' })
+
+  it('goes up on the way up', () => {
+    build()
+    wheel(slider, -120)
+    expect(slider.value).toBe('11')
+  })
+
+  it('goes down on the way down', () => {
+    build()
+    wheel(slider, 120)
+    expect(slider.value).toBe('9')
+  })
+
+  it('moves by the slider own step', () => {
+    build({ step: '5' })
+    wheel(slider, -120)
+    expect(slider.value).toBe('15')
+  })
+
+  it('stops at the top rather than running off', () => {
+    build({ value: '128' })
+    wheel(slider, -120)
+    expect(slider.value).toBe('128')
+  })
+
+  it('stops at the bottom', () => {
+    build({ value: '1' })
+    wheel(slider, 120)
+    expect(slider.value).toBe('1')
+  })
+
+  it('hands the wheel back at the ends, so the page is not stranded', () => {
+    build({ value: '128' })
+    expect(wheel(slider, -120).defaultPrevented).toBe(false)
+  })
+
+  it('keeps the page still while it is stepping', () => {
+    build()
+    expect(wheel(slider, -120).defaultPrevented).toBe(true)
+  })
+
+  /** React skips a change whose value matches what it last wrote, so the tracker has
+   *  to be bypassed or the component never hears about it. */
+  it('tells the page the value changed', () => {
+    build()
+    const heard: string[] = []
+    slider.addEventListener('input', () => heard.push(slider.value))
+    slider.addEventListener('change', () => heard.push(slider.value))
+    wheel(slider, -120)
+    expect(heard).toEqual(['11', '11'])
+  })
+
+  it('says nothing when the value did not move', () => {
+    build({ value: '128' })
+    const heard: string[] = []
+    slider.addEventListener('input', () => heard.push(slider.value))
+    wheel(slider, -120)
+    expect(heard).toEqual([])
+  })
+
+  it('leaves a disabled slider alone', () => {
+    build({ disabled: true })
+    wheel(slider, -120)
+    expect(slider.value).toBe('10')
+  })
+
+  it('leaves everything that is not a slider alone', () => {
+    const text = document.createElement('input')
+    text.type = 'text'
+    text.value = '10'
+    document.body.append(text)
+    wheel(text, -120)
+    expect(text.value).toBe('10')
+  })
+
+  it('ignores a wheel event that is not going anywhere', () => {
+    build()
+    wheel(slider, 0)
+    expect(slider.value).toBe('10')
+  })
+
+  it('works from inside the slider, where the pointer actually is', () => {
+    build()
+    const wrap = document.createElement('div')
+    document.body.append(wrap)
+    wrap.append(slider)
+    wheel(slider, -120)
+    expect(slider.value).toBe('11')
+  })
+
+  it('stops stepping once it is taken off again', () => {
+    build()
+    uninstall()
+    wheel(slider, -120)
+    expect(slider.value).toBe('10')
+  })
+
+  /**
+   * Two sliders sharing one track are stacked and let the pointer through to their
+   * handles, so the wheel arrives at the container. What is under the pointer is what
+   * it has to find - and of a stacked pair, the handle the hand is reaching for.
+   */
+  describe('a pair sharing one track', () => {
+    let low: HTMLInputElement
+    let high: HTMLInputElement
+    let shell: HTMLDivElement
+
+    const at = (el: HTMLElement, left: number, width: number) => {
+      el.getBoundingClientRect = () => ({
+        left, width, right: left + width, top: 0, bottom: 20, height: 20,
+        x: left, y: 0, toJSON: () => ({}),
+      }) as DOMRect
+    }
+
+    beforeEach(() => {
+      shell = document.createElement('div')
+      low = build({ value: '10' })
+      high = build({ value: '120' })
+      shell.append(low, high)
+      document.body.append(shell)
+      // The track runs 0 to 400, so the handles sit near 28 and 374
+      for (const el of [shell, low, high]) at(el, 0, 400)
+      // jsdom has no hit testing, so what the pointer is over is stated
+      ;(document as unknown as { elementsFromPoint: (x: number, y: number) => Element[] })
+        .elementsFromPoint = () => [shell]
+    })
+
+    afterEach(() => {
+      delete (document as unknown as { elementsFromPoint?: unknown }).elementsFromPoint
+    })
+
+    const wheelAt = (x: number, deltaY: number) => {
+      const event = new WheelEvent('wheel', {
+        deltaY, clientX: x, clientY: 10, bubbles: true, cancelable: true,
+      })
+      shell.dispatchEvent(event)
+    }
+
+    it('moves the near handle when the pointer is by it', () => {
+      wheelAt(20, -120)
+      expect(low.value).toBe('11')
+      expect(high.value).toBe('120')
+    })
+
+    it('moves the far handle when the pointer is by that one', () => {
+      wheelAt(380, -120)
+      expect(high.value).toBe('121')
+      expect(low.value).toBe('10')
+    })
+
+    it('still steps although the event landed on the container', () => {
+      // Neither input is the target: the pointer goes through to the handles
+      wheelAt(20, 120)
+      expect(low.value).toBe('9')
+    })
   })
 })

@@ -338,4 +338,8 @@
 | CLR-47 | Clear Slots | Slots outside the range untouched | Clear slots 3-5 | Slots 1, 2 and 6-128 keep their samples and attributes |
 | CLR-48 | Clear Slots | project.work is backed up | Clear sample slots and look in the project directory | A backups/ entry labelled clear_sample_slots holds the previous project.work |
 | CLR-49 | Clear Slots | Usage reflects the clearing | Clear slots holding Audio Pool files, then look at the Audio Pool Usage column | Those files no longer report usage from this project |
+| SLD-1 | Sliders | The wheel moves a slider | Hover a slot range slider and turn the wheel | It moves a step at a time, up for more |
+| SLD-2 | Sliders | The nearer handle moves | On a range with two handles, scroll near one of them | That handle moves, not the other |
+| SLD-3 | Sliders | The ends hand the wheel back | Scroll past either end of a slider | It holds at the end and the page scrolls instead |
+| SLD-4 | Sliders | Dragging still works | Drag a slider handle | It follows the pointer as it always did |
 
