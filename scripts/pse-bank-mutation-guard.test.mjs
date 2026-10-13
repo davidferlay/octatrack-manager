@@ -58,7 +58,7 @@ describe("pse-bank-mutation-guard on the current tree", () => {
     assert.deepEqual(report.findings, []);
     assert.equal(report.verdict, "PASS");
     assert.equal(report.bank_apply, "NOT_AUTHORIZED");
-    assert.deepEqual(report.gates, { BLOCKED: ISSUE_191_GATE_IDS.length, ACTIVE: 0 });
+    assert.deepEqual(report.gates, { BLOCKED: 13, ACTIVE: 5 });
     for (const target of REQUIRED_RUST_TARGETS) {
       assert.ok(report.scanned.rust.includes(target), target);
     }
@@ -242,9 +242,21 @@ describe("ChangePlan / Mutation gate ledger", () => {
       current.contract.document,
       "docs/planning/PSE_BANK_MUTATION_SAFETY_CONTRACT.md",
     );
+    const activeChangePlan = new Set([
+      "change-plan.bank-copy-deterministic",
+      "change-plan.bank-move-deterministic",
+      "change-plan.bank-swap-deterministic",
+      "change-plan.stale-precondition-detection",
+      "change-plan.plan-generation-no-write",
+    ]);
     for (const gate of current.gates) {
-      assert.deepEqual(gate.required_tests, [], gate.id);
-      assert.equal(gate.status, "BLOCKED", gate.id);
+      if (activeChangePlan.has(gate.id)) {
+        assert.equal(gate.status, "ACTIVE", gate.id);
+        assert.ok(gate.required_tests.length > 0, gate.id);
+      } else {
+        assert.deepEqual(gate.required_tests, [], gate.id);
+        assert.equal(gate.status, "BLOCKED", gate.id);
+      }
     }
   });
 
@@ -284,11 +296,13 @@ describe("ChangePlan / Mutation gate ledger", () => {
   });
 
   it("rejects a BLOCKED gate that claims tests or has no blocker", () => {
+    const blockedGate = (value) =>
+      value.gates.find((entry) => entry.id === "mutation.pre-manifest");
     const claimed = ledger();
-    claimed.gates[0].required_tests = ["anything"];
+    blockedGate(claimed).required_tests = ["anything"];
     assert.match(evaluate(claimed).findings[0].detail, /BLOCKED but lists required tests/);
     const unexplained = ledger();
-    unexplained.gates[0].waits_on = [];
+    blockedGate(unexplained).waits_on = [];
     assert.match(evaluate(unexplained).findings[0].detail, /without waits_on/);
   });
 
@@ -306,22 +320,23 @@ describe("ChangePlan / Mutation gate ledger", () => {
   });
 
   it("allows an ACTIVE change-plan gate only with inventory-backed tests", () => {
+    const changePlanGate = (value) =>
+      value.gates.find((entry) => entry.id === "change-plan.bank-copy-deterministic");
+
     const empty = ledger();
-    empty.gates[0].status = "ACTIVE";
+    changePlanGate(empty).required_tests = [];
     assert.match(evaluate(empty).findings[0].detail, /ACTIVE without required tests/);
 
     const unknown = ledger();
-    unknown.gates[0].status = "ACTIVE";
-    unknown.gates[0].required_tests = ["bank_copy_plan_is_deterministic"];
+    changePlanGate(unknown).required_tests = ["bank_copy_plan_is_deterministic"];
     assert.match(evaluate(unknown).findings[0].detail, /not in scripts\/pse-read-model-inventory\.json/);
 
     const backed = ledger();
-    backed.gates[0].status = "ACTIVE";
-    backed.gates[0].required_tests = ["repeated_reads_return_equal_structure"];
+    changePlanGate(backed).required_tests = ["bank_copy_changeplan_is_deterministic_and_blocked"];
     assert.deepEqual(evaluate(backed).findings, []);
     assert.deepEqual(evaluate(backed).summary, {
-      BLOCKED: ISSUE_191_GATE_IDS.length - 1,
-      ACTIVE: 1,
+      BLOCKED: ISSUE_191_GATE_IDS.length - 5,
+      ACTIVE: 5,
     });
   });
 

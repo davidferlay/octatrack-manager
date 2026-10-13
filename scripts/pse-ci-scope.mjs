@@ -29,6 +29,8 @@ const IN_SCOPE_PREFIXES = [
   "src-tauri/crates/ot-codec/src/project_structure.rs",
   "src-tauri/crates/ot-domain/src/lib.rs",
   "src-tauri/crates/ot-plan/src/bank_mutation.rs",
+  "src-tauri/crates/ot-plan/src/bank_changeplan.rs",
+  "src-tauri/src/pse_bank_changeplan.rs",
   "src-tauri/crates/ot-plan/src/lib.rs",
   "src-tauri/crates/ot-plan/Cargo.toml",
   "src-tauri/src/bank_mutation_contract.rs",

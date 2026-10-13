@@ -35,6 +35,8 @@ mod bank_mutation_contract;
 #[cfg(test)]
 mod gate_c_clone_rescan;
 #[cfg(test)]
+mod pse_bank_changeplan;
+#[cfg(test)]
 mod pse_bank_identity_crossover;
 mod pse_bank_internal_identity_audit;
 #[cfg(test)]

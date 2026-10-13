@@ -7,6 +7,8 @@ Base branch: `main` @ `4b33a524bfd9822d15ea77bb42d3e9cd85f10b96`
 
 This work recalculates Bank Copy / Move / Swap ChangePlan blockers after #227. It does **not** collect new device evidence, implement ChangePlan, enable Apply, or mutate committed fixture bytes.
 
+**Follow-up:** read-only planner implementation is documented in [`PSE_BANK_CHANGEPLAN_CORE.md`](./PSE_BANK_CHANGEPLAN_CORE.md) (`MO-PSE-BANK-CHANGEPLAN-CORE-1`). That work closes `ReadinessGap::BankChangePlan` only; **execution** readiness stays `NOT_READY`.
+
 ```text
 WRITE_TO_OCTATRACK_MEDIA = NO
 APPLY = NO

@@ -7,6 +7,7 @@ use std::fmt;
 pub(crate) const ROOT_FINGERPRINT_PREFIX: &str = "rootfp:v1:";
 const PLAN_ID_PREFIX: &str = "plan:v1:";
 
+pub mod bank_changeplan;
 pub mod bank_mutation;
 pub mod rename;
 

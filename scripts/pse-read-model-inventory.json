@@ -89,6 +89,35 @@
       ]
     },
     {
+      "id": "ot-plan-bank-changeplan",
+      "package": "ot-plan",
+      "features": [],
+      "filter": "bank_changeplan::",
+      "required_tests": [
+        "bank_copy_changeplan_is_deterministic_and_blocked",
+        "bank_move_changeplan_is_deterministic_and_blocked",
+        "bank_swap_changeplan_is_deterministic_and_blocked",
+        "bank_changeplan_reference_enumeration_is_deterministic_and_partial",
+        "bank_changeplan_stale_when_project_scope_differs",
+        "bank_changeplan_integrity_detects_tampering",
+        "bank_changeplan_rejects_non_current_readiness",
+        "plan_id_distinguishes_complete_slot_identities",
+        "non_regular_precondition_is_explicit_and_blocking",
+        "copy_plan_blocks_unparsed_project_state",
+        "declared_presence_must_match_structure_roles"
+      ]
+    },
+    {
+      "id": "masterocta-pse-bank-changeplan",
+      "package": "masterocta",
+      "features": ["test-seams"],
+      "filter": "pse_bank_changeplan::",
+      "required_tests": [
+        "bank_changeplan_generation_leaves_committed_fixture_bytes_identical",
+        "bank_changeplan_generation_on_multi_device_fixture_is_read_only"
+      ]
+    },
+    {
       "id": "ot-plan-bank-mutation-contract",
       "package": "ot-plan",
       "features": [],

@@ -14,6 +14,8 @@ describe("pse ci scope", () => {
     assert.equal(isInScopePath("src-tauri/src/sample_slot_boundary.rs"), true);
     assert.equal(isInScopePath("src-tauri/tests/fixtures/real_device/bank01.work"), true);
     assert.equal(isInScopePath("src-tauri/crates/ot-plan/src/bank_mutation.rs"), true);
+    assert.equal(isInScopePath("src-tauri/crates/ot-plan/src/bank_changeplan.rs"), true);
+    assert.equal(isInScopePath("src-tauri/src/pse_bank_changeplan.rs"), true);
     assert.equal(isInScopePath("src-tauri/crates/ot-plan/Cargo.toml"), true);
     assert.equal(isInScopePath("src-tauri/src/bank_mutation_contract.rs"), true);
     assert.equal(isInScopePath("src-tauri/crates/ot-plan/src/rename.rs"), false);
