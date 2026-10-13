@@ -11,19 +11,19 @@
 // Wired to `v2_project_structure_read`; exercised by tests until then.
 #![cfg_attr(not(test), allow(dead_code))]
 
-use crate::bank_validation::{bank_machine_slot_to_usage_index, bank_parse_status};
+use crate::bank_validation::bank_parse_status;
 use crate::legacy_read_adapter::{join_relative, resolve_relative_for_read};
 use crate::project_compatibility::{evaluate_project_compatibility, ProjectCompatibility};
 use ot_domain::project_structure::{
     pattern_playback_scale, per_track_master_length, project_arrangement_selection,
     project_bank_selection, project_pattern_selection, state_role_rank, BankIndex, BankStructure,
     MachineKind, PartIndex, PartStructure, PatternIndex, PatternScale, PatternStructure,
-    ProjectStateDocument, ProjectStructure, TrackIndex, TrackPlayback, TrackScale,
-    TrackSlotReference, TrackStructure, BANK_UNMODELED_DEPENDENCIES,
+    ProjectStateDocument, ProjectStructure, TrackIndex, TrackPlayback, TrackScale, TrackStructure,
+    BANK_UNMODELED_DEPENDENCIES,
 };
 use ot_domain::{
-    RecorderBufferId, RootRelativePath, SampleSlotId, SampleSlotKind, StateDocumentParseStatus,
-    StateDocumentRole,
+    track_slot_from_raw::track_slot_reference_from_machine, RootRelativePath,
+    StateDocumentParseStatus, StateDocumentRole,
 };
 use ot_storage_ports::StorageError;
 use ot_tools_io::{BankFile, OctatrackFileIO};
@@ -35,8 +35,6 @@ use std::path::{Path, PathBuf};
 /// `project_manager` records an empty `project.work` at about 3 KiB. One
 /// mebibyte is the allocation cap for this text document.
 const PROJECT_WORK_MAX_BYTES: u64 = 1024 * 1024;
-
-const BANK_UNASSIGNED_SLOT: u8 = 255;
 
 pub(crate) fn read_project_structure(
     canonical_root: &Path,
@@ -248,15 +246,11 @@ fn bank_parts(bank: &BankFile, track_eight_is_master: bool) -> Option<Vec<PartSt
                     let playback = if track_eight_is_master && track.get() == 7 {
                         TrackPlayback::Master
                     } else {
-                        let slot = match machine {
-                            MachineKind::Static => {
-                                machine_slot_reference(SampleSlotKind::Static, slots.static_slot_id)
-                            }
-                            MachineKind::Flex => {
-                                machine_slot_reference(SampleSlotKind::Flex, slots.flex_slot_id)
-                            }
-                            _ => TrackSlotReference::NoSampleMachine,
-                        };
+                        let slot = track_slot_reference_from_machine(
+                            machine,
+                            slots.static_slot_id,
+                            slots.flex_slot_id,
+                        );
                         TrackPlayback::Audio { machine, slot }
                     };
                     Some(TrackStructure {
@@ -268,27 +262,6 @@ fn bank_parts(bank: &BankFile, track_eight_is_master: bool) -> Option<Vec<PartSt
             Some(PartStructure { index, tracks })
         })
         .collect()
-}
-
-fn machine_slot_reference(kind: SampleSlotKind, raw: u8) -> TrackSlotReference {
-    if raw == BANK_UNASSIGNED_SLOT {
-        return TrackSlotReference::Unassigned;
-    }
-    if let Some(index) = bank_machine_slot_to_usage_index(raw) {
-        return u16::try_from(index + 1)
-            .ok()
-            .and_then(|number| SampleSlotId::new(kind, number).ok())
-            .map_or(
-                TrackSlotReference::Unrecognized(raw),
-                TrackSlotReference::Slot,
-            );
-    }
-    if kind == SampleSlotKind::Flex {
-        if let Ok(buffer) = RecorderBufferId::new(u16::from(raw)) {
-            return TrackSlotReference::RecorderBuffer(buffer);
-        }
-    }
-    TrackSlotReference::Unrecognized(raw)
 }
 
 #[cfg(unix)]
@@ -519,6 +492,9 @@ fn io_unavailable(error: std::io::Error) -> StorageError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ot_domain::project_structure::TrackSlotReference;
+    use ot_domain::track_slot_from_raw::track_slot_reference_from_raw;
+    use ot_domain::{RecorderBufferId, SampleSlotId, SampleSlotKind};
     use sha2::{Digest, Sha256};
     use std::collections::BTreeMap;
     use std::fs;
@@ -1664,27 +1640,27 @@ mod tests {
     fn machine_slot_raw_values_map_without_guessing() {
         let flex = SampleSlotKind::Flex;
         assert_eq!(
-            machine_slot_reference(flex, 0),
+            track_slot_reference_from_raw(flex, 0),
             TrackSlotReference::Slot(SampleSlotId::new(flex, 1).unwrap())
         );
         assert_eq!(
-            machine_slot_reference(flex, 127),
+            track_slot_reference_from_raw(flex, 127),
             TrackSlotReference::Slot(SampleSlotId::new(flex, 128).unwrap())
         );
         assert_eq!(
-            machine_slot_reference(flex, 255),
+            track_slot_reference_from_raw(flex, 255),
             TrackSlotReference::Unassigned
         );
         assert_eq!(
-            machine_slot_reference(flex, 129),
+            track_slot_reference_from_raw(flex, 129),
             TrackSlotReference::RecorderBuffer(RecorderBufferId::new(129).unwrap())
         );
         assert_eq!(
-            machine_slot_reference(flex, 128),
+            track_slot_reference_from_raw(flex, 128),
             TrackSlotReference::Unrecognized(128)
         );
         assert_eq!(
-            machine_slot_reference(SampleSlotKind::Static, 129),
+            track_slot_reference_from_raw(SampleSlotKind::Static, 129),
             TrackSlotReference::Unrecognized(129)
         );
     }

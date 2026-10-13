@@ -2,6 +2,7 @@
 
 use std::fmt;
 
+pub mod bank_sample_reference;
 pub mod bank_state_documents;
 pub mod derivation;
 pub mod derived_slice_export;
@@ -9,9 +10,15 @@ pub mod derived_trim;
 pub mod onsets;
 pub mod project_structure;
 pub mod reference_identity;
+pub mod sample_lock_reference;
 pub mod slice_draft;
 pub mod slicing;
+pub mod track_slot_from_raw;
 
+pub use bank_sample_reference::{
+    BankReferenceInventory, BankSampleReferenceObservation, PartStateRole, ReferenceClassStatus,
+    ReferenceCoverage, ReferenceCoverageAggregate, ReferenceOrigin, ReferenceScopeRole,
+};
 pub use bank_state_documents::{
     bank_state_document_file_name, bank_state_document_path, evaluate_bank_operation_state_effect,
     swap_aligned_role_pairings, swap_banks_have_symmetric_role_presence,
@@ -38,6 +45,14 @@ pub use derived_trim::{
 pub use reference_identity::{
     inventory_paths_equivalent, raw_path_matches_inventory_reference, resolve_against_inventory,
     resolve_project_reference_syntax, ProjectReferenceSyntaxError,
+};
+pub use sample_lock_reference::{
+    effective_sample_lock_track_length, locked_sample_slot_raw, sample_lock_is_audible,
+    SAMPLE_LOCK_SCAN_STEPS,
+};
+pub use track_slot_from_raw::{
+    bank_machine_slot_to_pool_index, track_slot_reference_from_machine,
+    track_slot_reference_from_raw, BANK_MACHINE_UNASSIGNED_SLOT,
 };
 
 const FILE_INSTANCE_ID_PREFIX: &str = "fileinst:v1:";

@@ -3,6 +3,29 @@
   "update_hint": "Add new required tests here when extending the Project Structure reader or domain. The CI runner fails closed on missing, ignored, failed, or zero executed tests.",
   "suites": [
     {
+      "id": "ot-domain-sample-lock-reference",
+      "package": "ot-domain",
+      "features": [],
+      "filter": "sample_lock_reference::",
+      "required_tests": [
+        "static_sample_lock_uses_static_slot",
+        "flex_sample_lock_uses_flex_slot",
+        "sample_lock_scans_all_64_steps_constant",
+        "inaudible_leftover_lock_is_preserved_in_audibility_flag"
+      ]
+    },
+    {
+      "id": "ot-domain-track-slot-from-raw",
+      "package": "ot-domain",
+      "features": [],
+      "filter": "track_slot_from_raw::",
+      "required_tests": [
+        "recorder_buffer_type_is_preserved",
+        "unrecognized_reference_is_preserved",
+        "recorder_slot_id_is_not_sample_slot"
+      ]
+    },
+    {
       "id": "ot-domain-project-structure",
       "package": "ot-domain",
       "features": [],
@@ -97,7 +120,19 @@
         "bank_copy_changeplan_is_deterministic_and_blocked",
         "bank_move_changeplan_is_deterministic_and_blocked",
         "bank_swap_changeplan_is_deterministic_and_blocked",
-        "bank_changeplan_reference_enumeration_is_deterministic_and_partial",
+        "reference_inventory_is_deterministic",
+        "active_machine_reference_is_enumerated",
+        "copy_reference_scope_is_deterministic",
+        "move_reference_scope_is_deterministic",
+        "swap_reference_scope_is_deterministic",
+        "reference_slot_change_invalidates_plan_id",
+        "reference_step_change_invalidates_plan_id",
+        "reference_status_change_invalidates_plan_id",
+        "coverage_change_invalidates_plan_id",
+        "missing_reference_status_is_preserved",
+        "invalid_path_status_is_preserved",
+        "ambiguous_reference_status_is_preserved",
+        "working_and_saved_checkpoint_references_stay_separate",
         "bank_changeplan_stale_when_project_scope_differs",
         "bank_changeplan_integrity_detects_tampering",
         "bank_changeplan_rejects_non_current_readiness",
@@ -105,6 +140,20 @@
         "non_regular_precondition_is_explicit_and_blocking",
         "copy_plan_blocks_unparsed_project_state",
         "declared_presence_must_match_structure_roles"
+      ]
+    },
+    {
+      "id": "masterocta-bank-reference-inventory",
+      "package": "masterocta",
+      "features": ["test-seams"],
+      "filter": "bank_reference_inventory::",
+      "required_tests": [
+        "saved_part_reference_classification_is_pinned",
+        "inactive_machine_slot_is_excluded",
+        "static_sample_lock_uses_static_slot",
+        "flex_sample_lock_uses_flex_slot",
+        "inaudible_leftover_lock_is_preserved",
+        "recorder_slot_id_is_not_sample_slot"
       ]
     },
     {

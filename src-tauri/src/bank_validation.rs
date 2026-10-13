@@ -79,11 +79,7 @@ fn machine_flex_slot_id_valid(slot_id: u8) -> bool {
 
 /// Map a Bank machine slot raw value to a 0-based usage pool index.
 pub(crate) fn bank_machine_slot_to_usage_index(slot_id: u8) -> Option<usize> {
-    match slot_id {
-        255 => None,
-        0..=127 => Some(slot_id as usize),
-        _ => None,
-    }
+    ot_domain::bank_machine_slot_to_pool_index(slot_id)
 }
 
 #[cfg(test)]

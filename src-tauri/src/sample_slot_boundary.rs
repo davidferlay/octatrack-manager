@@ -1227,7 +1227,7 @@ fn absolute_path_guard_rejects_paths_outside_the_registered_root() {
     assert!(!contains_absolute_path("masterocta.project-structure:v4"));
 }
 
-const PROJECT_LINE_SOURCES: [(&str, &str); 5] = [
+const PROJECT_LINE_SOURCES: [(&str, &str); 6] = [
     (
         "ot-domain/project_structure.rs",
         include_str!("../crates/ot-domain/src/project_structure.rs"),
@@ -1243,6 +1243,10 @@ const PROJECT_LINE_SOURCES: [(&str, &str); 5] = [
     (
         "project_structure_reader.rs",
         include_str!("project_structure_reader.rs"),
+    ),
+    (
+        "bank_reference_inventory.rs",
+        include_str!("bank_reference_inventory.rs"),
     ),
     (
         "project_structure_command.rs",

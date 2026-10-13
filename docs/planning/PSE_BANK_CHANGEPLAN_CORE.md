@@ -59,7 +59,7 @@ Production callers must pass `ReadinessEvidence::current_main()` unchanged. Arbi
 - deterministic `PlanId` (`validate_integrity()`)
 - read dependencies vs candidate change documents (Copy: source read-only, destination candidates only)
 - affected Pattern / Part / Track / sample-slot observations (Working vs SavedCheckpoint separate)
-- `reference_coverage = PARTIAL` with documented missing classes (sample locks, inactive machine slots, `parts.saved`, `recorder_slot_id`)
+- structured `ReferenceCoverage` (see [`PSE_BANK_CHANGEPLAN_REFERENCE_COVERAGE.md`](./PSE_BANK_CHANGEPLAN_REFERENCE_COVERAGE.md))
 - `readiness_gaps`, `blockers`, preconditions (regular-file size and hash, an explicit non-regular entry, or absence)
 - backup requirement declaration (paths only; no `BackupEvidence`)
 - verification requirement declaration (no fabricated post hashes)
@@ -92,4 +92,4 @@ Still open: `ArrangerPatternReferences`, `BankInternalIdentity`, `SceneAndRecord
 
 ## Issue #181 close gate
 
-`ISSUE_181_CLOSE_READY = NO` until sample/reference coverage beyond partial Part/Track machine slots is honest in the plan model or read model.
+After reference coverage (#181 follow-up): see [`PSE_BANK_CHANGEPLAN_REFERENCE_COVERAGE.md`](./PSE_BANK_CHANGEPLAN_REFERENCE_COVERAGE.md) for `ISSUE_181_CLOSE_READY` on the read-only planner.
