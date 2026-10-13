@@ -514,7 +514,9 @@ mod tests {
         if locks.is_empty() {
             return;
         }
-        assert!(locks.iter().all(|observation| observation.audible.is_some()));
+        assert!(locks
+            .iter()
+            .all(|observation| observation.audible.is_some()));
     }
 
     #[test]
