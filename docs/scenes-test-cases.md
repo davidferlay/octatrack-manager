@@ -200,6 +200,7 @@ is shown and set on its own and never touches what a scene holds.
 
 | SC142 | Randomize | One control, two halves | Enter Edit mode and read the actions row | "Randomize" carries a gear at its right edge. At rest the pair reads as one button; hovering shows the divider and highlights whichever half is under the pointer. Neither appears outside Edit mode |
 | SC142b | Randomize | The halves do different things | Click the word, then the gear | The word rerolls straight away; the gear opens the modal |
+| SC142c | Randomize | The hovered half owns the outline | Hover the word, then the gear | Whichever half is under the pointer is outlined in orange all the way round, the divider between them included |
 | SC143 | Randomize | The plain one is unchanged | Press "Randomize" | It rerolls every value the selected scene holds, full range, with no questions asked |
 | SC144 | Randomize | A modal opens | Press the gear | A modal titled "Randomize" opens over the page, wider than it is tall, with a close button in its header. Bounds and Scenes sit on the left, the parameter list fills the right |
 | SC144b | Randomize | The header reads like the others | Look at the modal header | An orange glyph, the name, then a quiet line saying how many parameters in how many scenes, and the close button at the right - the same shape as the Missing Samples header. No rule under the title |

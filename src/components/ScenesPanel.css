@@ -1047,6 +1047,11 @@
   border-left-color: #555;
 }
 
+.scene-split .scene-split-main:hover:not(:disabled) + .scene-split-more,
+.scene-split .scene-split-more:hover:not(:disabled) {
+  border-left-color: var(--elektron-orange);
+}
+
 .scene-split-more:hover:not(:disabled),
 .scene-split-more.on {
   color: var(--elektron-orange);
@@ -1157,7 +1162,7 @@
   border: none;
   cursor: pointer;
   font-family: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -1177,7 +1182,7 @@
 
 .scene-randomize-page-params {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
   gap: 4px;
   padding: 4px 0 0 0;
 }
@@ -1185,7 +1190,7 @@
 .scene-randomize-param {
   padding: 3px 7px;
   text-align: center;
-  font-size: 11px;
+  font-size: 12px;
   font-family: inherit;
   background: #2b2b2b;
   color: var(--elektron-text-primary);
