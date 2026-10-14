@@ -882,6 +882,36 @@ async fn clear_tracks(
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
+async fn copy_scenes(
+    source_project: String,
+    source_bank_index: u8,
+    source_part_index: u8,
+    source_scene_indices: Vec<u8>,
+    dest_project: String,
+    dest_bank_index: u8,
+    dest_part_indices: Vec<u8>,
+    dest_scene_indices: Vec<u8>,
+    copy_crossfader: bool,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::copy_scenes(
+            &source_project,
+            source_bank_index,
+            source_part_index,
+            source_scene_indices,
+            &dest_project,
+            dest_bank_index,
+            dest_part_indices,
+            dest_scene_indices,
+            copy_crossfader,
+        )
+    })
+    .await
+    .unwrap()
+}
+
+#[tauri::command]
 async fn copy_parts(
     source_project: String,
     source_bank_index: u8,
@@ -1680,6 +1710,7 @@ pub fn run() {
             copy_bank,
             validate_bank_sample_slots,
             copy_parts,
+            copy_scenes,
             copy_patterns,
             clear_banks,
             clear_parts,

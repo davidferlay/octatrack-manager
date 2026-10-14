@@ -90,13 +90,6 @@ export function useWheelStep(
       if (!latest.current) return;
       anchor = e.clientY;
       stepped = false;
-      // Keeps the moves coming when the pointer leaves the control mid-drag. Only an
-      // improvement, so a browser that refuses it still steps.
-      try {
-        node.setPointerCapture(e.pointerId);
-      } catch {
-        /* no capture: the drag still works while the pointer stays over the control */
-      }
     };
 
     const onPointerMove = (e: PointerEvent) => {
@@ -105,6 +98,22 @@ export function useWheelStep(
       if (!by) return;
       // Nothing is selected while dragging over a readout, which otherwise highlights
       e.preventDefault();
+      /*
+       * Capture once the drag is real, not when the pointer went down.
+       *
+       * Capture retargets the click that follows to the capturing element, so taking
+       * it on pointerdown meant a plain click on a button inside never reached the
+       * button. Waiting for the first step leaves a click a click, and by then the
+       * pointer has moved only a few pixels. Only an improvement, so a browser that
+       * refuses it still steps while the pointer stays over the control.
+       */
+      if (!stepped) {
+        try {
+          node.setPointerCapture(e.pointerId);
+        } catch {
+          /* no capture: the drag still works while the pointer stays over the control */
+        }
+      }
       stepped = true;
       anchor -= by * PIXELS_PER_STEP;
       const direction = by > 0 ? 1 : -1;

@@ -55,7 +55,7 @@ function compareLocations(a: { name: string; device_type: string }, b: { name: s
 }
 
 // Operation types
-type OperationType = "copy_bank" | "copy_parts" | "copy_patterns" | "copy_tracks" | "copy_sample_slots" | "clear_project" | "fix_missing_samples" | "fix_project_samples" | "purge_project_samples";
+type OperationType = "copy_bank" | "copy_parts" | "copy_scenes" | "copy_patterns" | "copy_tracks" | "copy_sample_slots" | "clear_project" | "fix_missing_samples" | "fix_project_samples" | "purge_project_samples";
 
 // Part assignment modes for copy_patterns
 type PartAssignmentMode = "keep_original" | "copy_source_part" | "select_specific";
@@ -224,6 +224,14 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const setSourcePatternIndices = useCallback((selection: number[]) => {
     setSourcePatternSelection({ selection, anchor: selection.length > 0 ? selection[0] : null });
   }, []);
+  // Copy Scenes picks scenes out of one Part, so it keeps its own selections rather
+  // than sharing Copy Parts' - the two mean different things by "part".
+  const [sceneSourcePartIndex, setSceneSourcePartIndex] = useState<number>(0);
+  const [sourceSceneSelection, setSourceSceneSelection] = useState<SelectionState>({ selection: [0], anchor: 0 });
+  const sourceSceneIndices = sourceSceneSelection.selection;
+  const selectSourceScene = useCallback((idx: number, e: React.MouseEvent) => {
+    setSourceSceneSelection((prev) => applyItemClick(prev, idx, clickModifiers(e)));
+  }, []);
   const [sourceTrackIndices, setSourceTrackIndices] = useState<number[]>([]); // Copy Tracks source
   const [patternsTrackIndices, setPatternsTrackIndices] = useState<number[]>([]); // Copy Patterns specific tracks filter
   const [sourceSampleIndices, setSourceSampleIndices] = useState<number[]>(() => {
@@ -245,6 +253,11 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [destPartIndices, setDestPartIndices] = useState<number[]>([0]);
   const [destPatternIndices, setDestPatternIndices] = useState<number[]>([0]); // For copy_patterns multi-select
   const [destTrackIndices, setDestTrackIndices] = useState<number[]>([]);
+  const [sceneDestBankIndices, setSceneDestBankIndices] = useState<number[]>([0]);
+  const [sceneDestPartIndices, setSceneDestPartIndices] = useState<number[]>([0]);
+  const [destSceneIndices, setDestSceneIndices] = useState<number[]>([0]);
+  /** Which scenes the fader sits between is Part state, not scene data, so it is asked for. */
+  const [copySceneCrossfader, setCopySceneCrossfader] = useState<boolean>(false);
   const [destSampleStart, setDestSampleStart] = useState<number>(savedSettings.destSampleStart ?? 0);
 
   // Operation-specific options
@@ -1081,6 +1094,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         return sourcePartIndices.length === 4
           ? "Copying all parts..."
           : `Copying part to ${destPartIndices.length} destination${destPartIndices.length > 1 ? 's' : ''}...`;
+      case "copy_scenes":
+        return `Copying ${sourceSceneIndices.length} scene${sourceSceneIndices.length > 1 ? 's' : ''} to ${sceneDestPartIndices.length} part${sceneDestPartIndices.length > 1 ? 's' : ''}...`;
       case "copy_patterns":
         return `Copying ${sourcePatternIndices.length} pattern${sourcePatternIndices.length > 1 ? 's' : ''} to ${destPatternBankIndices.length} bank${destPatternBankIndices.length > 1 ? 's' : ''}...`;
       case "copy_tracks":
@@ -1127,6 +1142,12 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           project: destProject,
           files: destPartBankIndices.map(bankFile),
           label: "copy_parts",
+        }];
+      case "copy_scenes":
+        return [{
+          project: destProject,
+          files: sceneDestBankIndices.map(bankFile),
+          label: "copy_scenes",
         }];
       case "copy_patterns":
         return [{
@@ -1283,6 +1304,36 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           }
           break;
 
+        case "copy_scenes": {
+          /*
+           * A bank that is both read and written goes last, so the scenes being
+           * copied are still the originals when the other banks read them.
+           */
+          const sceneBanksOrdered = destProject === sourceProject
+            && sceneDestBankIndices.includes(sourceBankIndex)
+            ? [...sceneDestBankIndices.filter(i => i !== sourceBankIndex), sourceBankIndex]
+            : sceneDestBankIndices;
+          for (const bankIdx of sceneBanksOrdered) {
+            await invoke("copy_scenes", {
+              sourceProject,
+              sourceBankIndex,
+              sourcePartIndex: sceneSourcePartIndex,
+              sourceSceneIndices,
+              destProject,
+              destBankIndex: bankIdx,
+              destPartIndices: sceneDestPartIndices,
+              destSceneIndices,
+              copyCrossfader: copySceneCrossfader,
+            });
+          }
+          const scenes = sourceSceneIndices.length;
+          setStatusMessage(
+            `${scenes} scene${scenes > 1 ? 's' : ''} copied to `
+            + `${sceneDestPartIndices.length} part${sceneDestPartIndices.length > 1 ? 's' : ''} `
+            + `in ${sceneBanksOrdered.length} bank${sceneBanksOrdered.length > 1 ? 's' : ''}`,
+          );
+          break;
+        }
         case "copy_patterns": {
           // Process self-copy (source bank == dest bank, same project) last to avoid
           // source data being overwritten before other banks read it.
@@ -1414,6 +1465,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         >
           <option value="copy_bank">Copy Banks</option>
           <option value="copy_parts">Copy Parts</option>
+          <option value="copy_scenes">Copy Scenes</option>
           <option value="copy_patterns">Copy Patterns</option>
           <option value="copy_tracks">Copy Tracks</option>
           <option value="copy_sample_slots">Copy Sample Slots</option>
@@ -1515,6 +1567,77 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 </div>
               )}
             </div>
+          )}
+
+          {/* Copy Scenes reads out of one Part of one bank */}
+          {operation === "copy_scenes" && (
+            <>
+            <div className="tools-field">
+              <label>Bank</label>
+              <div className="tools-multi-select banks-stacked">
+                {[[0, 1, 2, 3, 4, 5, 6, 7], [8, 9, 10, 11, 12, 13, 14, 15]].map((row, rowIdx) => (
+                  <div className="tools-track-row-buttons" key={rowIdx}>
+                    {row.map((idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={`tools-multi-btn bank-btn ${sourceBankIndex === idx ? "selected" : ""} ${!sourceLoadedBankIndices.has(idx) ? "disabled" : ""}`}
+                        onClick={() => sourceLoadedBankIndices.has(idx) && setSourceBankIndex(sourceBankIndex === idx ? -1 : idx)}
+                        disabled={!sourceLoadedBankIndices.has(idx)}
+                        title={sourceLoadedBankIndices.has(idx)
+                          ? (sourceBanks[idx] ? formatBankName(sourceBanks[idx].name, idx) : `Bank ${String.fromCharCode(65 + idx)}`)
+                          : "Bank not loaded"}
+                      >
+                        {String.fromCharCode(65 + idx)}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="tools-field">
+              <label>Part</label>
+              <div className="tools-toggle-group">
+                {[0, 1, 2, 3].map((idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className={`tools-toggle-btn ${sceneSourcePartIndex === idx ? "selected" : ""}`}
+                    onClick={() => setSceneSourcePartIndex(idx)}
+                    title={`Read the scenes of Part ${idx + 1}`}
+                  >
+                    Part {idx + 1}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="tools-field">
+              <label>Scenes</label>
+              <div className="tools-multi-select banks-stacked">
+                {[[0, 1, 2, 3, 4, 5, 6, 7], [8, 9, 10, 11, 12, 13, 14, 15]].map((row, rowIdx) => (
+                  <div className="tools-track-row-buttons" key={rowIdx}>
+                    {row.map((idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={`tools-multi-btn pattern-btn ${sourceSceneIndices.includes(idx) ? "selected" : ""}`}
+                        onClick={(e) => selectSourceScene(idx, e)}
+                        title={`Scene ${idx + 1}${MULTI_SELECT_HINT}`}
+                      >
+                        {idx + 1}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+                <div className="tools-select-actions">
+                  <button type="button" onClick={() => setSourceSceneSelection({ selection: [], anchor: null })}>None</button>
+                  <button type="button" onClick={() => setSourceSceneSelection({ selection: Array.from({ length: 16 }, (_, i) => i), anchor: 0 })}>All</button>
+                </div>
+              </div>
+            </div>
+            </>
           )}
 
           {/* Bank selector for copy_parts */}
@@ -2179,6 +2302,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             {operation === "copy_parts" && (
               <p>Copies Part sound design (machines, amps, LFOs, FX).</p>
             )}
+            {operation === "copy_scenes" && (
+              <p>Copies individual scenes (the parameter locks a scene holds, plus its track levels) between Parts and banks.</p>
+            )}
             {operation === "copy_patterns" && (
               <p>Copies pattern step data (trigs, parameter locks) with configurable Part assignment and track scope.</p>
             )}
@@ -2816,6 +2942,105 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
           )}
 
           {/* Bank selector for copy_parts - multi-select */}
+          {operation === "copy_scenes" && (
+            <>
+            <div className="tools-field">
+              <label>Banks</label>
+              <div className="tools-multi-select banks-stacked">
+                {[[0, 1, 2, 3, 4, 5, 6, 7], [8, 9, 10, 11, 12, 13, 14, 15]].map((row, rowIdx) => (
+                  <div className="tools-track-row-buttons" key={rowIdx}>
+                    {row.map((idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={`tools-multi-btn bank-btn ${sceneDestBankIndices.includes(idx) ? "selected" : ""}`}
+                        onClick={() => sceneDestBankIndices.includes(idx)
+                          ? setSceneDestBankIndices(sceneDestBankIndices.filter(i => i !== idx))
+                          : setSceneDestBankIndices([...sceneDestBankIndices, idx].sort((a, b) => a - b))}
+                        title={`Bank ${String.fromCharCode(65 + idx)} (${idx + 1})`}
+                      >
+                        {String.fromCharCode(65 + idx)}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="tools-field">
+              <label>Parts</label>
+              <div className="tools-track-row-buttons">
+                {[0, 1, 2, 3].map((idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className={`tools-multi-btn ${sceneDestPartIndices.includes(idx) ? "selected" : ""}`}
+                    onClick={() => sceneDestPartIndices.includes(idx)
+                      ? setSceneDestPartIndices(sceneDestPartIndices.filter(i => i !== idx))
+                      : setSceneDestPartIndices([...sceneDestPartIndices, idx].sort((a, b) => a - b))}
+                    title={`Put the scenes into Part ${idx + 1}`}
+                  >
+                    {idx + 1}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="tools-field">
+              <label>Scenes</label>
+              <div className="tools-multi-select banks-stacked">
+                {[[0, 1, 2, 3, 4, 5, 6, 7], [8, 9, 10, 11, 12, 13, 14, 15]].map((row, rowIdx) => (
+                  <div className="tools-track-row-buttons" key={rowIdx}>
+                    {row.map((idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        className={`tools-multi-btn pattern-btn ${destSceneIndices.includes(idx) ? "selected" : ""}`}
+                        onClick={() => {
+                          // Several source scenes copy pairwise, so the destination
+                          // holds exactly as many: clicking one starts a run
+                          if (sourceSceneIndices.length > 1) {
+                            setDestSceneIndices(destRangeFrom(idx, sourceSceneIndices.length, 16));
+                          } else {
+                            setDestSceneIndices((prev) => prev.includes(idx)
+                              ? prev.filter(i => i !== idx)
+                              : [...prev, idx].sort((a, b) => a - b));
+                          }
+                        }}
+                        title={sourceSceneIndices.length > 1
+                          ? `Start a run of ${sourceSceneIndices.length} scenes at scene ${idx + 1}`
+                          : `Scene ${idx + 1}`}
+                      >
+                        {idx + 1}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              {sourceSceneIndices.length > 1 && (
+                <div className="tools-hint">
+                  {sourceSceneIndices.map(i => i + 1).join(", ")} to {destSceneIndices.map(i => i + 1).join(", ")}
+                </div>
+              )}
+            </div>
+
+            <div className="tools-field">
+              <label className="tools-checkbox">
+                <input
+                  type="checkbox"
+                  checked={copySceneCrossfader}
+                  onChange={(e) => setCopySceneCrossfader(e.target.checked)}
+                />
+                Also move the crossfader ends
+              </label>
+              <div className="tools-hint">
+                Which two scenes the fader sits between is the Part's own setting, not
+                part of a scene, so it stays as it is unless this is on.
+              </div>
+            </div>
+            </>
+          )}
+
           {operation === "copy_parts" && (
             <div className="tools-field">
               <label>Banks</label>
@@ -3845,7 +4070,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
         <button
           className="tools-execute-btn"
           onClick={executeOperation}
-          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndices.length === 0) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_bank" && sourceBankIndices.length > 1 && destBankIndices.length !== sourceBankIndices.length) || (operation === "copy_bank" && copySamples && slotValidation !== null && !slotValidation.is_valid) || (operation === "copy_bank" && copySamples && slotValidation !== null && slotValidation.flex_memory_warning !== null) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destPartBankIndices.length === 0) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceBankIndex === -1) || (operation === "copy_tracks" && sourceTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex === -2) || (operation === "copy_tracks" && destTrackBankIndices.length === 0) || (operation === "copy_tracks" && destTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex !== -1 && destTrackPartIndices.length === 0) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destPatternBankIndices.length === 0) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && sourcePatternIndices.length > 1 && destPatternIndices.length !== sourcePatternIndices.length) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && patternsTrackIndices.length === 0) || (operation === "copy_sample_slots" && sourceSampleIndices.length + destSampleStart > 128) || (operation === "copy_sample_slots" && !copyAssignments && !copyAttributes) || (operation === "copy_sample_slots" && copyAttributes && selectedAttributes.length === 0 && !copyAssignments)}
+          disabled={isExecuting || (operation === "copy_bank" && sourceBankIndices.length === 0) || (operation === "copy_bank" && destBankIndices.length === 0) || (operation === "copy_bank" && sourceBankIndices.length > 1 && destBankIndices.length !== sourceBankIndices.length) || (operation === "copy_bank" && copySamples && slotValidation !== null && !slotValidation.is_valid) || (operation === "copy_bank" && copySamples && slotValidation !== null && slotValidation.flex_memory_warning !== null) || (operation === "copy_scenes" && sourceBankIndex === -1) || (operation === "copy_scenes" && sourceSceneIndices.length === 0) || (operation === "copy_scenes" && sceneDestBankIndices.length === 0) || (operation === "copy_scenes" && sceneDestPartIndices.length === 0) || (operation === "copy_scenes" && destSceneIndices.length === 0) || (operation === "copy_scenes" && sourceSceneIndices.length > 1 && destSceneIndices.length !== sourceSceneIndices.length) || (operation === "copy_parts" && sourceBankIndex === -1) || (operation === "copy_parts" && destPartBankIndices.length === 0) || (operation === "copy_parts" && sourcePartIndices.length === 0) || (operation === "copy_parts" && destPartIndices.length === 0) || (operation === "copy_tracks" && sourceBankIndex === -1) || (operation === "copy_tracks" && sourceTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex === -2) || (operation === "copy_tracks" && destTrackBankIndices.length === 0) || (operation === "copy_tracks" && destTrackIndices.length === 0) || (operation === "copy_tracks" && sourcePartIndex !== -1 && destTrackPartIndices.length === 0) || (operation === "copy_patterns" && sourceBankIndex === -1) || (operation === "copy_patterns" && sourcePatternIndices.length === 0) || (operation === "copy_patterns" && destPatternBankIndices.length === 0) || (operation === "copy_patterns" && destPatternIndices.length === 0) || (operation === "copy_patterns" && sourcePatternIndices.length > 1 && destPatternIndices.length !== sourcePatternIndices.length) || (operation === "copy_patterns" && partAssignmentMode === "select_specific" && destPart === -1) || (operation === "copy_patterns" && trackMode === "specific" && patternsTrackIndices.length === 0) || (operation === "copy_sample_slots" && sourceSampleIndices.length + destSampleStart > 128) || (operation === "copy_sample_slots" && !copyAssignments && !copyAttributes) || (operation === "copy_sample_slots" && copyAttributes && selectedAttributes.length === 0 && !copyAssignments)}
           title={
             isExecuting ? "Operation in progress..." :
             (operation === "copy_bank" && sourceBankIndices.length === 0 && destBankIndices.length === 0) ? "Select source and destination banks" :
@@ -3853,6 +4078,12 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             (operation === "copy_bank" && destBankIndices.length === 0) ? "Select at least one destination bank" :
             (operation === "copy_bank" && sourceBankIndices.length > 1 && destBankIndices.length !== sourceBankIndices.length) ? `Select ${sourceBankIndices.length} destination banks, one per source bank` :
             (operation === "copy_bank" && copySamples && slotValidation !== null && !slotValidation.is_valid) || (operation === "copy_bank" && copySamples && slotValidation !== null && slotValidation.flex_memory_warning !== null) ? (slotValidation.error_message || "Not enough free slots in destination project") :
+            (operation === "copy_scenes" && sourceBankIndex === -1) ? "Select a source bank" :
+            (operation === "copy_scenes" && sourceSceneIndices.length === 0) ? "Select at least one scene to copy" :
+            (operation === "copy_scenes" && sceneDestBankIndices.length === 0) ? "Select at least one destination bank" :
+            (operation === "copy_scenes" && sceneDestPartIndices.length === 0) ? "Select at least one destination part" :
+            (operation === "copy_scenes" && destSceneIndices.length === 0) ? "Select where the scenes should land" :
+            (operation === "copy_scenes" && sourceSceneIndices.length > 1 && destSceneIndices.length !== sourceSceneIndices.length) ? `Select ${sourceSceneIndices.length} destination scenes, one per scene copied` :
             (operation === "copy_parts" && sourceBankIndex === -1 && destPartBankIndices.length === 0) ? "Select source and destination banks" :
             (operation === "copy_parts" && sourceBankIndex === -1) ? "Select a source bank" :
             (operation === "copy_parts" && destPartBankIndices.length === 0) ? "Select at least one destination bank" :

@@ -340,3 +340,4 @@ Up is more, down is less, throughout.
 | PE232 | Values | Read-only outside Edit mode | Drag a value without Edit mode | Nothing changes |
 | PE233 | Values | The widget drags too | Drag a parameter's knob rather than its readout | The value follows the drag |
 
+| PE234 | Values | A click on a two-setting field still flips it | Click SLIC on the SRC page | It switches ON, and again OFF: a click on a toggle inside a draggable field is a click, not a drag |

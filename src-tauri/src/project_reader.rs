@@ -7784,6 +7784,119 @@ pub fn copy_bank(
     Ok(result)
 }
 
+/// Copies scenes from one Part into others, leaving everything else as it is.
+///
+/// A scene is a snapshot the crossfader morphs towards, and it lives inside a Part
+/// beside the machines, the parameters and the effects. Copying the Part carries all
+/// of that; this carries only the scenes, so a Part keeps the sound it has and gains
+/// the movements of another.
+///
+/// Two things travel per scene, because the device stores them apart: the per-track
+/// locks, and the crossfader level the scene sets. Which scenes the fader sits
+/// between is Part state rather than scene data, so it only travels when asked for.
+#[allow(clippy::too_many_arguments)]
+pub fn copy_scenes(
+    source_project: &str,
+    source_bank_index: u8,
+    source_part_index: u8,
+    source_scene_indices: Vec<u8>,
+    dest_project: &str,
+    dest_bank_index: u8,
+    dest_part_indices: Vec<u8>,
+    dest_scene_indices: Vec<u8>,
+    copy_crossfader: bool,
+) -> Result<(), String> {
+    if source_bank_index > 15 || dest_bank_index > 15 {
+        return Err("Bank index must be between 0 and 15".to_string());
+    }
+    if source_part_index > 3 || dest_part_indices.iter().any(|p| *p > 3) {
+        return Err("Part indices must be between 0 and 3".to_string());
+    }
+    if dest_part_indices.is_empty() {
+        return Err("Choose at least one destination Part".to_string());
+    }
+    if source_scene_indices.is_empty() || dest_scene_indices.is_empty() {
+        return Err("Choose at least one scene".to_string());
+    }
+    if source_scene_indices
+        .iter()
+        .chain(dest_scene_indices.iter())
+        .any(|s| *s > 15)
+    {
+        return Err("Scene indices must be between 0 and 15".to_string());
+    }
+    // Either each source scene has a destination of its own, or one scene is being put
+    // into several - anything else has no reading
+    if source_scene_indices.len() != 1 && source_scene_indices.len() != dest_scene_indices.len() {
+        return Err(
+            "Copy one scene to several, or the same number of scenes to each other".to_string(),
+        );
+    }
+
+    /// The device writes `.work` while a project is open and `.strd` once it is saved,
+    /// so a bank is whichever of the two is there.
+    fn bank_at(project: &str, bank_index: u8) -> Result<PathBuf, String> {
+        let dir = Path::new(project);
+        for extension in ["work", "strd"] {
+            let candidate = dir.join(format!("bank{:02}.{}", bank_index + 1, extension));
+            if candidate.exists() {
+                return Ok(candidate);
+            }
+        }
+        Err(format!("Bank {} not found", bank_index + 1))
+    }
+
+    let source_bank_path = bank_at(source_project, source_bank_index)?;
+    let source_bank = BankFile::from_data_file(&source_bank_path)
+        .map_err(|e| format!("Failed to read source bank: {:?}", e))?;
+
+    let dest_bank_path = bank_at(dest_project, dest_bank_index)?;
+    let mut dest_bank = BankFile::from_data_file(&dest_bank_path)
+        .map_err(|e| format!("Failed to read destination bank: {:?}", e))?;
+
+    let taken = &source_bank.parts.unsaved.0[source_part_index as usize];
+    let scenes: Vec<_> = dest_scene_indices
+        .iter()
+        .enumerate()
+        .map(|(at, dest_scene)| {
+            let source_scene = if source_scene_indices.len() == 1 {
+                source_scene_indices[0]
+            } else {
+                source_scene_indices[at]
+            };
+            (source_scene as usize, *dest_scene as usize)
+        })
+        .collect();
+
+    for dest_part in &dest_part_indices {
+        let dest_part = *dest_part as usize;
+        for (from, to) in &scenes {
+            // Both copies: the device's Reload Part goes back to the saved one, and a
+            // copy the user asked for should not be what reloading throws away
+            for part in [
+                &mut dest_bank.parts.unsaved.0[dest_part],
+                &mut dest_bank.parts.saved.0[dest_part],
+            ] {
+                part.scenes[*to] = taken.scenes[*from];
+                part.scene_xlvs[*to] = taken.scene_xlvs[*from];
+            }
+        }
+        if copy_crossfader {
+            for part in [
+                &mut dest_bank.parts.unsaved.0[dest_part],
+                &mut dest_bank.parts.saved.0[dest_part],
+            ] {
+                part.active_scenes = taken.active_scenes;
+            }
+        }
+    }
+
+    dest_bank
+        .to_data_file(&dest_bank_path)
+        .map_err(|e| format!("Failed to write destination bank: {:?}", e))?;
+    Ok(())
+}
+
 /// Copy specific Parts from one bank to another.
 /// Parts contain all track sound design parameters (machines, amps, LFOs, FX).
 ///
@@ -19194,6 +19307,386 @@ mod tests {
             let scenes = read_scenes(&project.path, "A", 0).unwrap();
             assert_eq!(scenes.scenes.len(), 16);
             assert!(!scenes.scene_a_muted && !scenes.scene_b_muted);
+        }
+
+        /// Putting one Part's scenes into another, without its sound coming too.
+        ///
+        /// Copying the Part carries the machines, the parameters and the effects as
+        /// well. This carries the movements only, so a Part keeps what it sounds like
+        /// and gains what another one does.
+        mod copying_scenes {
+            use super::*;
+
+            /// Gives a scene something to recognise it by, and answers what it set.
+            fn mark(project: &str, part: u8, scene: u8, value: u8) {
+                let mut tracks = read_scenes(project, "A", part).unwrap().scenes[scene as usize]
+                    .tracks
+                    .clone();
+                tracks[0].amp[3] = Some(value);
+                save_scene(project, "A", part, scene, tracks).unwrap();
+            }
+
+            fn amp_vol(project: &str, bank: &str, part: u8, scene: u8) -> Option<u8> {
+                read_scenes(project, bank, part).unwrap().scenes[scene as usize].tracks[0].amp[3]
+            }
+
+            #[test]
+            fn test_a_scene_lands_where_it_was_sent() {
+                let project = TestProject::new();
+                mark(&project.path, 0, 0, 100);
+
+                copy_scenes(
+                    &project.path,
+                    0,
+                    0,
+                    vec![0],
+                    &project.path,
+                    0,
+                    vec![1],
+                    vec![5],
+                    false,
+                )
+                .unwrap();
+
+                assert_eq!(amp_vol(&project.path, "A", 1, 5), Some(100));
+            }
+
+            #[test]
+            fn test_the_scene_it_came_from_is_left_alone() {
+                let project = TestProject::new();
+                mark(&project.path, 0, 0, 100);
+
+                copy_scenes(
+                    &project.path,
+                    0,
+                    0,
+                    vec![0],
+                    &project.path,
+                    0,
+                    vec![1],
+                    vec![5],
+                    false,
+                )
+                .unwrap();
+
+                assert_eq!(amp_vol(&project.path, "A", 0, 0), Some(100));
+            }
+
+            #[test]
+            fn test_one_scene_can_go_to_several() {
+                let project = TestProject::new();
+                mark(&project.path, 0, 0, 100);
+
+                copy_scenes(
+                    &project.path,
+                    0,
+                    0,
+                    vec![0],
+                    &project.path,
+                    0,
+                    vec![1],
+                    vec![2, 3, 4],
+                    false,
+                )
+                .unwrap();
+
+                for scene in [2, 3, 4] {
+                    assert_eq!(
+                        amp_vol(&project.path, "A", 1, scene),
+                        Some(100),
+                        "scene {}",
+                        scene
+                    );
+                }
+            }
+
+            #[test]
+            fn test_several_scenes_pair_up_in_order() {
+                let project = TestProject::new();
+                mark(&project.path, 0, 0, 100);
+                mark(&project.path, 0, 1, 60);
+
+                copy_scenes(
+                    &project.path,
+                    0,
+                    0,
+                    vec![0, 1],
+                    &project.path,
+                    0,
+                    vec![1],
+                    vec![8, 9],
+                    false,
+                )
+                .unwrap();
+
+                assert_eq!(amp_vol(&project.path, "A", 1, 8), Some(100));
+                assert_eq!(amp_vol(&project.path, "A", 1, 9), Some(60));
+            }
+
+            #[test]
+            fn test_it_reaches_every_part_asked_for() {
+                let project = TestProject::new();
+                mark(&project.path, 0, 0, 100);
+
+                copy_scenes(
+                    &project.path,
+                    0,
+                    0,
+                    vec![0],
+                    &project.path,
+                    0,
+                    vec![1, 2, 3],
+                    vec![0],
+                    false,
+                )
+                .unwrap();
+
+                for part in [1, 2, 3] {
+                    assert_eq!(
+                        amp_vol(&project.path, "A", part, 0),
+                        Some(100),
+                        "part {}",
+                        part
+                    );
+                }
+            }
+
+            /// The crossfader level a scene sets is stored apart from its locks, so it
+            /// has to be carried deliberately or a copied scene arrives without it.
+            #[test]
+            fn test_the_crossfader_level_travels_with_the_scene() {
+                let project = TestProject::new();
+                let mut tracks = read_scenes(&project.path, "A", 0).unwrap().scenes[0]
+                    .tracks
+                    .clone();
+                tracks[0].xlv = Some(127);
+                save_scene(&project.path, "A", 0, 0, tracks).unwrap();
+
+                copy_scenes(
+                    &project.path,
+                    0,
+                    0,
+                    vec![0],
+                    &project.path,
+                    0,
+                    vec![1],
+                    vec![4],
+                    false,
+                )
+                .unwrap();
+
+                assert_eq!(
+                    read_scenes(&project.path, "A", 1).unwrap().scenes[4].tracks[0].xlv,
+                    Some(127)
+                );
+            }
+
+            #[test]
+            fn test_the_part_keeps_what_it_sounds_like() {
+                let project = TestProject::new();
+                mark(&project.path, 0, 0, 100);
+                let before = read_parts_data(&project.path, "A").unwrap().parts[1]
+                    .machines
+                    .clone();
+
+                copy_scenes(
+                    &project.path,
+                    0,
+                    0,
+                    vec![0],
+                    &project.path,
+                    0,
+                    vec![1],
+                    vec![0],
+                    false,
+                )
+                .unwrap();
+
+                let after = read_parts_data(&project.path, "A").unwrap().parts[1]
+                    .machines
+                    .clone();
+                assert_eq!(format!("{:?}", before), format!("{:?}", after));
+            }
+
+            #[test]
+            fn test_the_fader_ends_stay_put_unless_asked_for() {
+                let project = TestProject::new();
+                save_crossfader(&project.path, "A", 0, 3, 7).unwrap();
+                let before = {
+                    let scenes = read_scenes(&project.path, "A", 1).unwrap();
+                    (scenes.scene_a, scenes.scene_b)
+                };
+
+                copy_scenes(
+                    &project.path,
+                    0,
+                    0,
+                    vec![0],
+                    &project.path,
+                    0,
+                    vec![1],
+                    vec![0],
+                    false,
+                )
+                .unwrap();
+
+                let after = read_scenes(&project.path, "A", 1).unwrap();
+                assert_eq!((after.scene_a, after.scene_b), before);
+            }
+
+            #[test]
+            fn test_the_fader_ends_travel_when_asked_for() {
+                let project = TestProject::new();
+                save_crossfader(&project.path, "A", 0, 3, 7).unwrap();
+
+                copy_scenes(
+                    &project.path,
+                    0,
+                    0,
+                    vec![0],
+                    &project.path,
+                    0,
+                    vec![1],
+                    vec![0],
+                    true,
+                )
+                .unwrap();
+
+                let after = read_scenes(&project.path, "A", 1).unwrap();
+                assert_eq!((after.scene_a, after.scene_b), (3, 7));
+            }
+
+            /// The device's own Reload Part goes back to the saved copy, so a copy the
+            /// user asked for must not be what reloading throws away.
+            #[test]
+            fn test_a_copy_survives_the_device_reloading_the_part() {
+                let project = TestProject::new();
+                mark(&project.path, 0, 0, 100);
+                // Reload Part needs a saved copy to go back to, so the Part is given one
+                commit_part_data(&project.path, "A", 1).unwrap();
+
+                copy_scenes(
+                    &project.path,
+                    0,
+                    0,
+                    vec![0],
+                    &project.path,
+                    0,
+                    vec![1],
+                    vec![0],
+                    false,
+                )
+                .unwrap();
+                reload_part_data(&project.path, "A", 1).unwrap();
+
+                assert_eq!(amp_vol(&project.path, "A", 1, 0), Some(100));
+            }
+
+            #[test]
+            fn test_it_refuses_a_pairing_with_no_reading() {
+                let project = TestProject::new();
+                let refused = copy_scenes(
+                    &project.path,
+                    0,
+                    0,
+                    vec![0, 1, 2],
+                    &project.path,
+                    0,
+                    vec![1],
+                    vec![4, 5],
+                    false,
+                );
+                assert!(refused.is_err());
+            }
+
+            #[test]
+            fn test_it_refuses_nothing_to_copy() {
+                let project = TestProject::new();
+                assert!(copy_scenes(
+                    &project.path,
+                    0,
+                    0,
+                    vec![],
+                    &project.path,
+                    0,
+                    vec![1],
+                    vec![0],
+                    false,
+                )
+                .is_err());
+                assert!(copy_scenes(
+                    &project.path,
+                    0,
+                    0,
+                    vec![0],
+                    &project.path,
+                    0,
+                    vec![],
+                    vec![0],
+                    false,
+                )
+                .is_err());
+            }
+
+            #[test]
+            fn test_it_refuses_what_the_device_has_no_room_for() {
+                let project = TestProject::new();
+                assert!(copy_scenes(
+                    &project.path,
+                    0,
+                    0,
+                    vec![16],
+                    &project.path,
+                    0,
+                    vec![1],
+                    vec![0],
+                    false,
+                )
+                .is_err());
+                assert!(copy_scenes(
+                    &project.path,
+                    0,
+                    4,
+                    vec![0],
+                    &project.path,
+                    0,
+                    vec![1],
+                    vec![0],
+                    false,
+                )
+                .is_err());
+                assert!(copy_scenes(
+                    &project.path,
+                    16,
+                    0,
+                    vec![0],
+                    &project.path,
+                    0,
+                    vec![1],
+                    vec![0],
+                    false,
+                )
+                .is_err());
+            }
+
+            #[test]
+            fn test_it_refuses_a_bank_that_is_not_there() {
+                let project = TestProject::new();
+                std::fs::remove_file(std::path::Path::new(&project.path).join("bank02.work"))
+                    .unwrap();
+                assert!(copy_scenes(
+                    &project.path,
+                    0,
+                    0,
+                    vec![0],
+                    &project.path,
+                    1,
+                    vec![1],
+                    vec![0],
+                    false,
+                )
+                .is_err());
+            }
         }
 
         #[test]
