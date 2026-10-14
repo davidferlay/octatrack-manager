@@ -230,3 +230,6 @@ is shown and set on its own and never touches what a scene holds.
 | SC162 | Randomize | Leaving without running | Press Escape, click the backdrop, press the header's close button, or press Cancel | The modal closes and nothing was written |
 | SC163 | Randomize | Which parameters are held does not change | Run it in any configuration | A scene holds exactly the parameters it held before; only values moved |
 | SC164 | Randomize | The device agrees | Randomize with bounds, save, then open the project on the device | The scenes read back the values the app showed |
+| SC165 | Scope | Audio tracks only | Open the Scenes page on a Part with MIDI tracks in use | Only T1-T8 are listed. The device stores scene data for the 8 audio tracks only, so there is nothing to show or edit for M1-M8 |
+| SC166 | Scope | Randomize does not reach MIDI | Open the Randomize modal with every scene and parameter selected | No MIDI track appears in the parameter list, and running it leaves every MIDI track's parameters as they were |
+| SC167 | Scope | Copy Scenes does not reach MIDI | Copy scenes between Parts | The destination Part's MIDI tracks are unchanged |

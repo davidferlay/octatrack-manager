@@ -10,7 +10,9 @@ It can be found in the Tools tab of the project page.
 
 ## What a scene is
 
-Each Part holds 16 scenes. A scene is a set of parameter locks: for every track it can hold a value for any parameter of the machine, LFO, AMP, FX1 and FX2 pages, plus an XLV setting that mutes the track after its effects. Anything the scene does not hold is left at the Part's own value.
+Each Part holds 16 scenes. A scene is a set of parameter locks: for every audio track it can hold a value for any parameter of the machine, LFO, AMP, FX1 and FX2 pages, plus an XLV setting that mutes the track after its effects. Anything the scene does not hold is left at the Part's own value.
+
+Scenes are an audio-track thing. The device stores scene data for the 8 audio tracks only, so the MIDI tracks are untouched by any of this - a scene cannot hold a MIDI parameter, and nothing here can put one there.
 
 Two of the 16 are assigned to the crossfader, one to each end, and moving the fader morphs between them. Which two those are is a setting of the Part rather than of a scene, so it is not something this tool moves: the destination Part keeps pointing the fader wherever it pointed before.
 
@@ -43,7 +45,7 @@ Execute stays unavailable while either side is missing a selection, and its tool
 
 ## Data copied
 
-- Every parameter lock the scene holds, across the machine, LFO, AMP, FX1 and FX2 pages of all 8 audio and 8 MIDI tracks.
+- Every parameter lock the scene holds, across the machine, LFO, AMP, FX1 and FX2 pages of the 8 audio tracks.
 - The XLV setting each track has in that scene.
 
 Both the saved and the unsaved (working) state of the destination Part are written, so pressing Reload Part on the device keeps the copied scene rather than throwing it away.
