@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "../App.css";
 import { filterProjects } from "../utils/filterProjects";
+import { loadBookmarks, mergeBookmarks } from "../utils/bookmarks";
 import { useSearchShortcut } from "../hooks/useSearchShortcut";
 import { useEscapeClose } from "../hooks/useEscapeClose";
 import type { OctatrackLocation, OctatrackProject } from "../types/projectManagement";
@@ -108,9 +109,41 @@ export function ProjectSelectorModal({
     () => (needle ? browsedProjects.filter((p) => p.name.toLowerCase().includes(needle)) : browsedProjects),
     [browsedProjects, needle],
   );
+  /*
+   * The projects pinned on the home page, offered here too: picking a destination
+   * is the same "which project did I mean" question, and the answer is usually one
+   * of the few the user already said they care about.
+   *
+   * Read once on open rather than held in state - nothing in this modal changes a
+   * bookmark, and it is mounted fresh each time the picker is opened. Names come
+   * from the current scan where it found the project, so a rename shows up here.
+   */
+  const shownBookmarks = useMemo(() => {
+    const discovered = [
+      ...locations.flatMap((loc) =>
+        loc.sets.flatMap((set) =>
+          set.projects.map((p) => ({
+            path: p.path, name: p.name, setPath: set.path, setName: set.name,
+          })),
+        ),
+      ),
+      ...standaloneProjects.map((p) => ({
+        path: p.path,
+        name: p.name,
+        setPath: p.path.substring(0, p.path.lastIndexOf('/')),
+        setName: 'Individual Projects',
+      })),
+    ];
+    return mergeBookmarks(loadBookmarks(), discovered).filter(
+      // The current project has a card of its own in the header row
+      (b) => b.path !== currentProjectPath && (!needle || b.name.toLowerCase().includes(needle)),
+    );
+  }, [locations, standaloneProjects, currentProjectPath, needle]);
+
   const currentMatches = !needle || currentProjectName.toLowerCase().includes(needle);
   const nothingMatches = searchActive && !currentMatches
     && shownLocations.length === 0 && shownStandalone.length === 0
+    && shownBookmarks.length === 0
     && shownBrowsed.filter((p) => p.path !== currentProjectPath).length === 0;
 
   // Expand the groups while a search is running, and put the shape back when it
@@ -226,6 +259,29 @@ export function ProjectSelectorModal({
                 </div>
               </div>
             </div>
+
+            {shownBookmarks.length > 0 && (
+              <div className="project-selector-section project-selector-bookmarks">
+                <h4>
+                  <i className="fas fa-bookmark"></i> Bookmarked Projects
+                </h4>
+                <div className="projects-grid">
+                  {shownBookmarks.map((bookmark) => (
+                    <div
+                      key={bookmark.path}
+                      className={`project-card project-selector-card ${value === bookmark.path ? 'selected' : ''}`}
+                      onClick={() => onSelect(bookmark.path)}
+                      title={bookmark.path}
+                    >
+                      <div className="project-name">{bookmark.name}</div>
+                      <div className="project-info">
+                        <span className="bookmarked-set">{bookmark.setName || 'Standalone'}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Manual Browse: every project found under the browsed folder,
                 in a collapsible full-width section below the header */}

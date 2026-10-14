@@ -5157,6 +5157,18 @@ th.col-usage .header-content .sort-indicator {
 }
 
 
+/* The heading reads like every other section's; only the icon carries the orange
+   that marks this as the same list the home page pins at the top. */
+.project-selector-bookmarks h4 i {
+  margin-right: 0.4rem;
+  color: var(--elektron-orange);
+}
+
+/* The card carries a second line here, which the selector cards otherwise do not */
+.project-selector-card .project-name + .project-info {
+  margin-top: 0.4rem;
+}
+
 .project-selector-section .set-card {
   margin-bottom: 0.75rem;
   padding: 1rem 1rem 1rem 1rem;

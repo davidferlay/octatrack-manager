@@ -19,7 +19,9 @@ sidebar_position: 8
 
 Both panes have their own project selector, and both open the same picker. The source defaults to the project you are viewing, so leaving it alone gives the familiar behavior; pointing it at another project lets you pull banks out of a project without opening it first.
 
-The picker lists the current project and every project the app already knows about. Three buttons extend the list:
+The picker lists the current project and every project the app already knows about. Anything bookmarked on the project list page is listed too, in its own **Bookmarked Projects** section near the top, with the Set each one belongs to - usually the quickest way to reach a project you work on often. A bookmark on a drive that is not plugged in stays listed under the name it was bookmarked with.
+
+Three buttons extend the list:
 
 - **Rescan for Projects:** Refreshes the known locations, like the Refresh button on the home page.
 - **Browse...:** Pick any folder — it is scanned recursively for Octatrack projects, exactly like **Browse** on the home page. If the folder is itself a project it is selected directly; otherwise every project found under it appears in a collapsible **Manual Browse** section for you to pick from.

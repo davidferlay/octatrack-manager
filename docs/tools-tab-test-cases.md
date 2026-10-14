@@ -23,6 +23,15 @@
 | SM100 | Destination Modal | Created project stays selectable | After SM98, reopen the destination picker | The new project is listed (with the manually browsed ones) and can be selected again |
 | SM101 | Destination Modal | Cancelling the folder picker | Click "New Project...", then cancel the folder dialog | No name prompt appears, nothing is created, and the picker stays open |
 | SM102 | Destination Modal | Duplicate name in the chosen folder | Use "New Project..." twice on the same folder with the same name | The second attempt is refused with an "already exists" error and nothing is overwritten |
+| BMK-1 | Destination Modal | Bookmarks are offered | Bookmark a project on the project list page, then open the destination picker | A "Bookmarked Projects" section sits under the header row, listing it |
+| BMK-2 | Destination Modal | The Set is named | Look at a bookmark card in the picker | Under the name is the Set it belongs to, or "Standalone" when it is in none |
+| BMK-3 | Destination Modal | Picking one | Click a bookmark card | The picker closes and that project becomes the destination |
+| BMK-4 | Source Modal | Source picker too | Open the source picker | The same section is there |
+| BMK-5 | Destination Modal | The current project is not repeated | Bookmark the project you are viewing, then open the picker | It appears once, as "Current Project", and not again among the bookmarks |
+| BMK-6 | Destination Modal | No bookmarks | With nothing bookmarked, open the picker | There is no "Bookmarked Projects" section at all |
+| BMK-7 | Destination Modal | Search | Type a bookmarked project's name into the picker's search | The section narrows to it, and the "No projects match" message does not appear even when nothing else matches |
+| BMK-8 | Destination Modal | A renamed project | Rename a bookmarked project, then open the picker | It is listed under its new name |
+| BMK-9 | Destination Modal | A card that is not plugged in | Bookmark a project on removable media, unplug it, open the picker | It is still listed, under the name it was bookmarked with |
 | SM92 | Copy Banks | Source None / All row | Look under the source bank grid | A None / All row is present, matching the destination grid's |
 | SM93 | Copy Banks | Source All selects every existing bank | Click All in the source bank row | Every bank the source project has is selected (never one that is not on disk), All lights up, and the hint reads "N banks - destination locked to N consecutive banks" |
 | SM94 | Copy Banks | Source All is a toggle | Click All twice | The selection is emptied again |

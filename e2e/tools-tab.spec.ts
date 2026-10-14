@@ -5036,3 +5036,105 @@ test.describe('Tools Tab - Copy Scenes', () => {
 })
 
 
+
+
+test.describe('Tools Tab - Bookmarked projects in the picker', () => {
+  const BOOKMARKS = [
+    { path: '/test/other-project', name: 'STALE NAME', setPath: '/test/location/Set1', setName: 'Set1' },
+    { path: '/media/CF/LiveSet/OnACard', name: 'OnACard', setPath: '/media/CF/LiveSet', setName: 'LiveSet' },
+  ]
+
+  async function openPicker(
+    page: import('@playwright/test').Page,
+    pane: 'source' | 'dest',
+    bookmarks: unknown[] = BOOKMARKS,
+  ) {
+    await setupTauriMocks(page, { withOtherProject: true })
+    await page.addInitScript((stored) => {
+      localStorage.setItem('otm.project-bookmarks', JSON.stringify(stored))
+    }, bookmarks)
+    await page.goto('/#/project?path=/test/project&name=TestProject')
+    await page.waitForTimeout(1000)
+    await page.locator('.header-tab', { hasText: 'Tools' }).click()
+    await page.waitForTimeout(500)
+    await page.locator(`.tools-${pane}-panel .tools-project-selector-btn`).click()
+    await page.waitForTimeout(400)
+  }
+
+  const section = (page: import('@playwright/test').Page) =>
+    page.locator('.project-selector-bookmarks')
+
+  test('the destination picker offers them', async ({ page }) => {
+    await openPicker(page, 'dest')
+    await expect(section(page).locator('h4')).toHaveText('Bookmarked Projects')
+    expect(await section(page).locator('.project-name').allTextContents())
+      .toEqual(['STALE NAME', 'OnACard'])
+  })
+
+  test('each one says which Set it is in', async ({ page }) => {
+    await openPicker(page, 'dest')
+    expect(await section(page).locator('.bookmarked-set').allTextContents())
+      .toEqual(['Set1', 'LiveSet'])
+  })
+
+  test('picking one sets the destination project', async ({ page }) => {
+    await openPicker(page, 'dest')
+    await section(page).locator('.project-selector-card', { hasText: 'STALE NAME' }).click()
+    await page.waitForTimeout(400)
+    await expect(page.locator('.modal-overlay')).toHaveCount(0)
+    // Nothing was scanned, so the pane names the project after its directory
+    await expect(page.locator('.tools-dest-panel .tools-project-selector-name'))
+      .toHaveText('other-project')
+  })
+
+  test('the source picker offers them too', async ({ page }) => {
+    await openPicker(page, 'source')
+    await expect(section(page)).toBeVisible()
+  })
+
+  test('the current project is not repeated among them', async ({ page }) => {
+    await openPicker(page, 'dest', [
+      { path: '/test/project', name: 'TestProject', setPath: '/test/location/Set1', setName: 'Set1' },
+      ...BOOKMARKS,
+    ])
+    // It already has its own card in the header row
+    expect(await section(page).locator('.project-name').allTextContents())
+      .toEqual(['STALE NAME', 'OnACard'])
+    await expect(page.locator('.project-selector-current .project-name')).toHaveText('TestProject')
+  })
+
+  test('no bookmarks, no section', async ({ page }) => {
+    await openPicker(page, 'dest', [])
+    await expect(section(page)).toHaveCount(0)
+  })
+
+  test('the search narrows them, and a bookmark alone counts as a match', async ({ page }) => {
+    await openPicker(page, 'dest')
+    await page.locator('.project-selector-search input').fill('OnACard')
+    await page.waitForTimeout(300)
+    expect(await section(page).locator('.project-name').allTextContents()).toEqual(['OnACard'])
+    // Nothing else matches, but the picker must not claim there are no matches
+    await expect(page.locator('.no-matches')).toHaveCount(0)
+  })
+
+  test('a name goes stale until a scan finds the project again', async ({ page }) => {
+    await openPicker(page, 'dest')
+    // Nothing has been scanned yet, so the stored name is all there is
+    await expect(section(page).locator('.project-name').first()).toHaveText('STALE NAME')
+
+    await page.locator('.project-selector-actions button', { hasText: 'Rescan' }).click()
+    await page.waitForTimeout(600)
+    // The scan found it under a different name, which is the one to show
+    await expect(section(page).locator('.project-name').first()).toHaveText('OtherProject')
+  })
+
+  test('one that the scan never found is still offered', async ({ page }) => {
+    await openPicker(page, 'dest')
+    await page.locator('.project-selector-actions button', { hasText: 'Rescan' }).click()
+    await page.waitForTimeout(600)
+    // A project on a card that is not plugged in right now keeps its stored name
+    expect(await section(page).locator('.project-name').allTextContents())
+      .toEqual(['OtherProject', 'OnACard'])
+  })
+})
+
