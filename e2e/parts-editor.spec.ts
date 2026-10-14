@@ -2782,11 +2782,11 @@ test.describe('Scenes', () => {
 
     test('is refused on a scene that holds nothing', async ({ page }) => {
       await page.locator('.scene-card').nth(8).click()
-      await expect(page.getByRole('button', { name: 'Randomize' })).toBeDisabled()
+      await expect(page.getByRole('button', { name: 'Randomize', exact: true })).toBeDisabled()
     })
 
     test('gives every held value a new one, and holds the same parameters', async ({ page }) => {
-      await page.getByRole('button', { name: 'Randomize' }).click()
+      await page.getByRole('button', { name: 'Randomize', exact: true }).click()
 
       await expect
         .poll(async () => (await getInvokeCalls(page, 'save_scene')).length)
@@ -2802,7 +2802,7 @@ test.describe('Scenes', () => {
     test('stays inside each parameter own range', async ({ page }) => {
       const seen = new Set<number>()
       for (let i = 0; i < 8; i++) {
-        await page.getByRole('button', { name: 'Randomize' }).click()
+        await page.getByRole('button', { name: 'Randomize', exact: true }).click()
         await expect
           .poll(async () => (await getInvokeCalls(page, 'save_scene')).length)
           .toBe(i + 1)
@@ -2815,6 +2815,232 @@ test.describe('Scenes', () => {
       }
       // Eight rolls of a 128-value parameter landing on one number is not randomness
       expect(seen.size).toBeGreaterThan(1)
+    })
+  })
+
+  /**
+   * The same reroll with the dial turned down: which scenes, which parameters, and
+   * how far anything may move. The plain Randomize button stays beside it, because
+   * one click with no questions asked is the common case.
+   */
+  test.describe('randomising within bounds', () => {
+    const dialog = (page: Page) => page.locator('.scene-randomize-modal')
+    const go = (page: Page) => dialog(page).getByRole('button', { name: 'Randomize' })
+    /**
+     * Rolls always land on the bottom of whatever window they are given.
+     *
+     * Set on the live page rather than with addInitScript, which only reaches the
+     * next navigation - and the suite has already navigated by the time a test runs.
+     */
+    const noChance = (page: Page) => page.evaluate(() => { Math.random = () => 0 })
+
+    const open = async (page: Page) => {
+      await page.locator('.mode-toggle').click()
+      await page.locator('.scene-randomize-more').click()
+      await expect(dialog(page)).toBeVisible()
+    }
+
+    /** The scene grid is behind "Selected Scenes"; the common case needs no grid. */
+    const pickScenes = async (page: Page) => {
+      await dialog(page).locator('.tools-toggle-btn', { hasText: 'Selected Scenes' }).click()
+      await expect(dialog(page).locator('.tools-multi-select')).toBeVisible()
+    }
+
+    test('it is one control with two halves', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      const split = page.locator('.scene-split')
+      await expect(split.locator('.scene-split-main')).toHaveText('Randomize')
+      await expect(split.locator('.scene-randomize-more')).toHaveAttribute(
+        'aria-label', 'Randomize with bounds')
+      // No second word anywhere: the gear is what distinguishes them
+      await expect(page.locator('.scene-action', { hasText: /^Randomize$/ })).toHaveCount(1)
+    })
+
+    test('neither half is offered outside Edit mode', async ({ page }) => {
+      await expect(page.locator('.scene-split')).toHaveCount(0)
+      await expect(page.locator('.scene-randomize-more')).toHaveCount(0)
+    })
+
+    test('it opens on the current scene, with no grid to read', async ({ page }) => {
+      await open(page)
+      await expect(dialog(page).locator('.tools-toggle-btn', { hasText: 'Current Scene' }))
+        .toHaveClass(/selected/)
+      await expect(dialog(page).locator('.tools-multi-select')).toHaveCount(0)
+      // Scene 1 holds AMP VOL and XLV on track 1
+      await expect(dialog(page).locator('.scene-randomize-count')).toHaveText('2 of 2')
+      await expect(dialog(page).locator('.scene-randomize-param.on')).toHaveCount(2)
+    })
+
+    test('the grid appears once scenes are being picked', async ({ page }) => {
+      await open(page)
+      await pickScenes(page)
+      const scenes = dialog(page).locator('.tools-multi-btn.pattern-btn:not(.tools-select-all)')
+      await expect(scenes).toHaveCount(16)
+      await expect(scenes.filter({ hasText: /^1$/ })).toHaveClass(/selected/)
+    })
+
+    test('the bounds slider explains itself on hover', async ({ page }) => {
+      await open(page)
+      await expect(dialog(page).locator('.tools-dual-range-slider'))
+        .toHaveAttribute('title', /same slice of every parameter/)
+      await dialog(page).locator('.tools-toggle-btn', { hasText: 'Drift' }).click()
+      await expect(dialog(page).locator('.tools-dual-range-slider'))
+        .toHaveAttribute('title', /How far a value may move/)
+    })
+
+    test('it names the pages the parameters belong to', async ({ page }) => {
+      await open(page)
+      expect(await dialog(page).locator('.scene-randomize-page-head').allTextContents())
+        .toEqual(['\u25a0AMP', '\u25a0XLV'])
+    })
+
+    test('a window rerolls inside its slice of each range', async ({ page }) => {
+      await open(page)
+      await noChance(page)
+      await go(page).click()
+
+      await expect.poll(async () => (await getInvokeCalls(page, 'save_scene')).length).toBe(1)
+      const call = (await getInvokeCalls(page, 'save_scene'))[0]
+      expect(call.args.sceneId).toBe(0)
+      // The bottom of a full-range window, which is where a roll of zero lands
+      expect(call.args.tracks[0].amp[3]).toBe(0)
+    })
+
+    test('it says how much it changed', async ({ page }) => {
+      await open(page)
+      await go(page).click()
+      await expect(page.locator('.toast-notification.tip'))
+        .toContainText('2 values randomized across 1 scene')
+    })
+
+    test('and closes once it has run', async ({ page }) => {
+      await open(page)
+      await go(page).click()
+      await expect(dialog(page)).toHaveCount(0)
+    })
+
+    test('several scenes are rerolled, one write each', async ({ page }) => {
+      await open(page)
+      await pickScenes(page)
+      // Scene 3 holds parameters too; scene 2 holds none
+      await dialog(page).locator('.tools-multi-btn.pattern-btn', { hasText: /^3$/ }).click()
+      await go(page).click()
+
+      await expect.poll(async () => (await getInvokeCalls(page, 'save_scene')).length).toBe(2)
+      expect((await getInvokeCalls(page, 'save_scene')).map(c => c.args.sceneId))
+        .toEqual([0, 2])
+    })
+
+    test('a scene holding none of the picked parameters is not written', async ({ page }) => {
+      await open(page)
+      await pickScenes(page)
+      // Scene 9 is empty, so adding it to the selection gives it nothing to reroll
+      await dialog(page).locator('.tools-multi-btn.pattern-btn', { hasText: /^9$/ }).click()
+      await go(page).click()
+
+      await expect.poll(async () => (await getInvokeCalls(page, 'save_scene')).length).toBe(1)
+      expect((await getInvokeCalls(page, 'save_scene'))[0].args.sceneId).toBe(0)
+    })
+
+    test('turning a page off leaves its values alone', async ({ page }) => {
+      await open(page)
+      await noChance(page)
+      await dialog(page).locator('.scene-randomize-page-head', { hasText: 'AMP' }).click()
+      await expect(dialog(page).locator('.scene-randomize-count')).toHaveText('1 of 2')
+      await go(page).click()
+
+      await expect.poll(async () => (await getInvokeCalls(page, 'save_scene')).length).toBe(1)
+      const track = (await getInvokeCalls(page, 'save_scene'))[0].args.tracks[0]
+      // AMP VOL kept what it held; XLV took the bottom of its range
+      expect(track.amp[3]).toBe(100)
+      expect(track.xlv).toBe(0)
+    })
+
+    test('a page turned off and on again is back in', async ({ page }) => {
+      await open(page)
+      const amp = dialog(page).locator('.scene-randomize-page-head', { hasText: 'AMP' })
+      await amp.click()
+      await amp.click()
+      await expect(dialog(page).locator('.scene-randomize-count')).toHaveText('2 of 2')
+    })
+
+    test('one parameter can be dropped on its own', async ({ page }) => {
+      await open(page)
+      await noChance(page)
+      await dialog(page).locator('.scene-randomize-param', { hasText: 'VOL' }).click()
+      await expect(dialog(page).locator('.scene-randomize-count')).toHaveText('1 of 2')
+      await go(page).click()
+
+      await expect.poll(async () => (await getInvokeCalls(page, 'save_scene')).length).toBe(1)
+      expect((await getInvokeCalls(page, 'save_scene'))[0].args.tracks[0].amp[3]).toBe(100)
+    })
+
+    test('with nothing picked there is nothing to run', async ({ page }) => {
+      await open(page)
+      await dialog(page).locator('.scene-randomize-param').first().click()
+      await dialog(page).locator('.scene-randomize-param').last().click()
+      await expect(go(page)).toBeDisabled()
+      await expect(go(page)).toHaveAttribute('title', 'Nothing selected to reroll')
+    })
+
+    test('with no scene picked there is nothing to run', async ({ page }) => {
+      await open(page)
+      await pickScenes(page)
+      await dialog(page).locator('.tools-select-actions button', { hasText: 'None' }).click()
+      await expect(go(page)).toBeDisabled()
+      await expect(dialog(page)).toContainText('Pick a scene first')
+    })
+
+    test('All takes every scene, and the parameters follow', async ({ page }) => {
+      await open(page)
+      await pickScenes(page)
+      await dialog(page).locator('.tools-select-actions button', { hasText: 'All' }).click()
+      // Every parameter any scene of this Part holds is now in scope
+      await expect(dialog(page).locator('.scene-randomize-count')).not.toHaveText('2 of 2')
+    })
+
+    test('drift keeps a value near where it was', async ({ page }) => {
+      await open(page)
+      await noChance(page)
+      await dialog(page).locator('.tools-toggle-btn', { hasText: 'Drift' }).click()
+      await expect(dialog(page)).toContainText('Within 15%')
+      await go(page).click()
+
+      await expect.poll(async () => (await getInvokeCalls(page, 'save_scene')).length).toBe(1)
+      // 15% of 0-127 is 19, and a roll of zero takes the bottom of that reach
+      expect((await getInvokeCalls(page, 'save_scene'))[0].args.tracks[0].amp[3]).toBe(81)
+    })
+
+    test('Escape closes it, changing nothing', async ({ page }) => {
+      await open(page)
+      await page.keyboard.press('Escape')
+      await expect(dialog(page)).toHaveCount(0)
+      expect(await getInvokeCalls(page, 'save_scene')).toHaveLength(0)
+    })
+
+    test('a click on the backdrop closes it', async ({ page }) => {
+      await open(page)
+      await page.locator('.modal-overlay').click({ position: { x: 5, y: 5 } })
+      await expect(dialog(page)).toHaveCount(0)
+    })
+
+    test('the close button closes it', async ({ page }) => {
+      await open(page)
+      await dialog(page).locator('.modal-close').click()
+      await expect(dialog(page)).toHaveCount(0)
+      expect(await getInvokeCalls(page, 'save_scene')).toHaveLength(0)
+    })
+
+    test('it is titled', async ({ page }) => {
+      await open(page)
+      await expect(dialog(page).locator('.modal-header h3')).toHaveText('Randomize')
+    })
+
+    test('Cancel closes it', async ({ page }) => {
+      await open(page)
+      await dialog(page).getByRole('button', { name: 'Cancel' }).click()
+      await expect(dialog(page)).toHaveCount(0)
+      expect(await getInvokeCalls(page, 'save_scene')).toHaveLength(0)
     })
   })
 
@@ -4372,6 +4598,12 @@ test.describe('Parts Editor - Nothing overflows sideways', () => {
     }
   })
 })
+
+
+
+
+
+
 
 
 

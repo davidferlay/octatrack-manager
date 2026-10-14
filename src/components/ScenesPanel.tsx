@@ -6,7 +6,10 @@ import { FieldSpec, clampToSpec } from '../utils/partFieldSpecs';
 import { fieldHelp, helpTitle } from '../utils/partFieldHelp';
 import {
   Slot, SceneTrackLocks, ScenesResponse, slotsForTrack, emptyTracks, countLocks,
+  sceneAssignments, AssignmentRow,
 } from './sceneModel';
+import { randomizedTracks, type RandomizeBounds } from './sceneRandomize';
+import { SceneRandomizeModal } from './SceneRandomizeModal';
 import { SceneValue } from './SceneValue';
 
 export type { ScenesResponse } from './sceneModel';
@@ -88,6 +91,7 @@ export function ScenesPanel({
   // project page remembers is used as it is rather than clamped or reset
   const selected = selectedScene;
   const [showAll, setShowAll] = useState(false);
+  const [randomizeOpen, setRandomizeOpen] = useState(false);
   const [clipboard, setClipboard] = useState<{ from: number; tracks: SceneTrackLocks[] } | null>(null);
   // One track's worth, kept apart from the whole-scene clipboard so taking a copy of
   // one track does not throw away a scene already copied
@@ -394,6 +398,37 @@ export function ScenesPanel({
     showTip(`Scene ${scene.scene_id + 1} randomized, within each parameter's own range`);
   }, [data, scene, writeScene, showTip]);
 
+  /** Every parameter this Part holds, which is what the popover offers to reroll. */
+  const assignments = useMemo(() => (data ? sceneAssignments(data) : []), [data]);
+
+  /**
+   * The same reroll, over whichever scenes and parameters were picked.
+   *
+   * One write per scene, because that is how a scene is written - the popover's job
+   * was only to decide which values move and how far.
+   */
+  const randomiseWithin = useCallback((
+    scenes: number[], rows: AssignmentRow[], bounds: RandomizeBounds,
+  ) => {
+    if (!data) return;
+    let values = 0;
+    let touched = 0;
+    for (const id of scenes) {
+      const subject = data.scenes[id];
+      if (!subject) continue;
+      const { tracks, changed } = randomizedTracks(subject, rows, bounds);
+      if (changed === 0) continue;
+      writeScene(id, tracks);
+      values += changed;
+      touched++;
+    }
+    setRandomizeOpen(false);
+    showTip(values === 0
+      ? 'Nothing to randomize: those scenes hold none of the parameters picked'
+      : `${values} value${values > 1 ? 's' : ''} randomized across `
+        + `${touched} scene${touched > 1 ? 's' : ''}`);
+  }, [data, writeScene, showTip]);
+
   /**
    * Changes one parameter of any scene, which is what the matrix and the comparison
    * edit: they show the whole Part at once, so the scene is part of the address
@@ -528,6 +563,14 @@ export function ScenesPanel({
 
   return (
     <div className={`scenes-panel bank-card ${commits.modifiedPartIds.size > 0 ? 'edit-mode' : ''}`}>
+      {randomizeOpen && (
+        <SceneRandomizeModal
+          rows={assignments}
+          selected={selected}
+          onApply={randomiseWithin}
+          onClose={() => setRandomizeOpen(false)}
+        />
+      )}
       <div className="bank-card-header">
         {/* Name and write controls together, so the header is three columns and the
             fader can have the middle one to itself */}
@@ -661,14 +704,27 @@ export function ScenesPanel({
               >
                 Clear
               </button>
-              <button
-                className="scene-action"
-                disabled={scene.locked_count === 0}
-                onClick={randomise}
-                title="Give every value this scene holds a new one at random, within each parameter's own range. Which parameters it holds stays as it is."
-              >
-                Randomize
-              </button>
+              {/* One button at rest, two under the pointer: the plain reroll, and
+                  the same thing with the dial turned down beside it. */}
+              <div className="scene-split">
+                <button
+                  className="scene-action scene-split-main"
+                  disabled={scene.locked_count === 0}
+                  onClick={randomise}
+                  title="Give every value this scene holds a new one at random, within each parameter's own range. Which parameters it holds stays as it is."
+                >
+                  Randomize
+                </button>
+                <button
+                  className={`scene-action scene-split-more scene-randomize-more ${randomizeOpen ? 'on' : ''}`}
+                  aria-label="Randomize with bounds"
+                  aria-expanded={randomizeOpen}
+                  onClick={() => setRandomizeOpen(true)}
+                  title="Randomize with bounds: pick the scenes, the parameters, and how far each value may move"
+                >
+                  <i className="fas fa-cog" aria-hidden="true"></i>
+                </button>
+              </div>
               <button
                 className="scene-action"
                 disabled={data.scene_a === data.scene_b}

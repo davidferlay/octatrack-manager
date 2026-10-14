@@ -1008,3 +1008,216 @@
   opacity: 1;
   pointer-events: auto;
 }
+
+/* Randomize with bounds
+   ------------------------------------------------------------------------- */
+
+.scene-action.on {
+  border-color: var(--elektron-orange);
+  color: var(--elektron-orange);
+}
+
+/* One button at rest, two halves under the pointer: the divider and the hover
+   highlight only appear once the pointer is on it, so the pair reads as one
+   control until there is a reason to tell them apart. */
+.scene-split {
+  display: inline-flex;
+}
+
+.scene-split .scene-action {
+  border-radius: 0;
+}
+
+.scene-split-main {
+  border-top-left-radius: 3px;
+  border-bottom-left-radius: 3px;
+  border-right: none;
+}
+
+.scene-split-more {
+  border-top-right-radius: 3px;
+  border-bottom-right-radius: 3px;
+  border-left: 1px solid transparent;
+  padding-left: 7px;
+  padding-right: 7px;
+  color: var(--elektron-text-secondary);
+}
+
+.scene-split:hover .scene-split-more {
+  border-left-color: #555;
+}
+
+.scene-split-more:hover:not(:disabled),
+.scene-split-more.on {
+  color: var(--elektron-orange);
+}
+
+/* The header every other modal wears: an orange glyph, the name, and a quiet line
+   beside it saying what is in scope. */
+.scene-randomize-header {
+  gap: 0.5rem;
+}
+
+.modal-header.scene-randomize-header h3 {
+  flex-shrink: 0;
+  margin: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+.scene-randomize-header-info {
+  margin-right: auto;
+  font-size: 0.85rem;
+  color: var(--elektron-text-secondary);
+  position: relative;
+  top: 1px;
+  white-space: nowrap;
+}
+
+.modal-content.scene-randomize-modal {
+  max-width: 820px;
+  width: 94%;
+}
+
+/* Landscape: the bounds and the scenes on one side, the parameter list filling
+   the other, so the list has the room it needs without a tall modal. */
+.scene-randomize-body {
+  display: grid;
+  grid-template-columns: 290px 1fr;
+  gap: 18px;
+  align-items: start;
+  text-align: left;
+}
+
+.scene-randomize-column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.scene-randomize-params-column {
+  align-self: stretch;
+}
+
+.scene-randomize-params-column .scene-randomize-field {
+  height: 100%;
+}
+
+.scene-randomize-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.scene-randomize-field > label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--elektron-text-secondary);
+}
+
+.scene-randomize-count {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  font-size: 11px;
+}
+
+.scene-randomize-hint {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--elektron-text-secondary);
+}
+
+/* The parameters, as a list of pages that can be taken whole or picked through. */
+.scene-randomize-params {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  max-height: 330px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid #333;
+  border-radius: 3px;
+}
+
+.scene-randomize-page-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--elektron-text-secondary);
+}
+
+.scene-randomize-page-head.on {
+  color: var(--elektron-text-primary);
+}
+
+.scene-randomize-tick {
+  font-size: 10px;
+  width: 10px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.scene-randomize-page-params {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 0 0 16px;
+}
+
+.scene-randomize-param {
+  padding: 3px 7px;
+  font-size: 11px;
+  font-family: inherit;
+  background: #2b2b2b;
+  color: var(--elektron-text-primary);
+  border: 1px solid #4a4a4a;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.scene-randomize-param:hover {
+  border-color: var(--elektron-orange);
+}
+
+/* Left out: hollow and dimmed against the filled chips that are in. */
+.scene-randomize-param:not(.on) {
+  background: transparent;
+  border-color: #333;
+  color: var(--elektron-text-secondary);
+  opacity: 0.5;
+}
+
+.scene-randomize-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
+.scene-randomize-go {
+  border-color: var(--elektron-orange);
+  color: var(--elektron-orange);
+}
+
+.scene-randomize-go:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

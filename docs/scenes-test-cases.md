@@ -198,3 +198,33 @@ is shown and set on its own and never touches what a scene holds.
 | SC140 | Values | Drag a scene value | In Edit mode, drag a scene value up or down | It follows the drag, as the Parts values do |
 | SC141 | Grid | A swipe does not change the scene | Drag across the scene grid | The chosen scene stays put; only the wheel moves it |
 
+| SC142 | Randomize | One control, two halves | Enter Edit mode and read the actions row | "Randomize" carries a gear at its right edge. At rest the pair reads as one button; hovering shows the divider and highlights whichever half is under the pointer. Neither appears outside Edit mode |
+| SC142b | Randomize | The halves do different things | Click the word, then the gear | The word rerolls straight away; the gear opens the modal |
+| SC143 | Randomize | The plain one is unchanged | Press "Randomize" | It rerolls every value the selected scene holds, full range, with no questions asked |
+| SC144 | Randomize | A modal opens | Press the gear | A modal titled "Randomize" opens over the page, wider than it is tall, with a close button in its header. Bounds and Scenes sit on the left, the parameter list fills the right |
+| SC144b | Randomize | The header reads like the others | Look at the modal header | An orange glyph, the name, then a quiet line saying how many parameters in how many scenes, and the close button at the right - the same shape as the Missing Samples header. No rule under the title |
+| SC144c | Randomize | The header count follows the choices | Add scenes or untick parameters | The line beside the title keeps up with what is about to run |
+| SC145 | Randomize | Where it starts | Open it | Bounds is on Window at 0% to 100%, Scenes is on "Current Scene" with no grid shown, and every parameter that scene holds is in |
+| SC145b | Randomize | The grid is kept out of the way | Press "Selected Scenes", then "Current Scene" again | The sixteen-scene grid appears and disappears with the choice, and the current scene is what gets rerolled while it is hidden |
+| SC146 | Randomize | Parameters are grouped by page | Open it on a scene holding several pages | Each page it holds is a heading - SRC, AMP, LFO, the effects named for what is loaded, XLV - with that page's parameters under it, named by track |
+| SC147 | Randomize | A window slices each range | Set the window to roughly the top half, run it several times, and read the values | Each value lands in the top half of its own range, whatever that range is: a 0-127 level and a -64-63 LFO speed both move to their own upper halves |
+| SC147b | Randomize | The sliders explain themselves | Hover either bounds slider | A tooltip says what that mode does; neither explanation takes up room in the modal |
+| SC148 | Randomize | A narrow window | Set both handles together and run it | Every value lands on that one point of its range |
+| SC149 | Randomize | The handles cannot cross | Drag the low handle past the high one | It stops at the other handle rather than passing it |
+| SC150 | Randomize | Drift moves a value a little | Switch to Drift, set a small amount, and run it | Each value ends near where it was, not somewhere else in its range |
+| SC151 | Randomize | Drift of nothing | Set Drift to 0% and run it | Nothing changes |
+| SC152 | Randomize | Drift respects the ends | Drift a value that already sits at the top of its range | It stays inside the range; nothing wraps around or is refused |
+| SC153 | Randomize | Values stay legal | Randomize a parameter with gaps in its range, in either mode, several times | Every value is one the device's own encoder would produce |
+| SC154 | Randomize | Several scenes at once | Press "Selected Scenes", pick 1, 3 and 5, and run it | All three are rerolled, and the badge names how many values across how many scenes |
+| SC155 | Randomize | A scene holding nothing | Add an empty scene to the selection and run it | It is left alone and is not counted in the badge |
+| SC156 | Randomize | All scenes | Press "Selected Scenes", then All under the grid | Every scene is picked, and the parameter list grows to everything any scene of the Part holds |
+| SC157 | Randomize | A whole page off | Untick a page heading and run it | None of that page's values change; the others do |
+| SC158 | Randomize | One parameter off | Untick a single parameter and run it | That one keeps its value; the rest are rerolled |
+| SC158b | Randomize | In and out are told apart quietly | Look at a list with one parameter unticked | The ones in are plain filled chips; the one out is hollow and dimmed. The list is not a block of orange when everything is in |
+| SC158c | Randomize | The list lines up | Read down the parameter list | Each page's chips start under its name, not under its tick |
+| SC159 | Randomize | Part of a page | Untick one parameter of a page | The page heading shows it is partly on, and ticking the heading brings the whole page back |
+| SC160 | Randomize | Nothing to run | Untick every parameter, or press None under the scene grid | "Randomize" in the modal is refused, and says why |
+| SC161 | Randomize | It closes when it has run | Run it | The modal closes and the badge names what changed |
+| SC162 | Randomize | Leaving without running | Press Escape, click the backdrop, press the header's close button, or press Cancel | The modal closes and nothing was written |
+| SC163 | Randomize | Which parameters are held does not change | Run it in any configuration | A scene holds exactly the parameters it held before; only values moved |
+| SC164 | Randomize | The device agrees | Randomize with bounds, save, then open the project on the device | The scenes read back the values the app showed |
