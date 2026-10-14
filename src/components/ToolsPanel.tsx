@@ -255,9 +255,15 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   const [destTrackIndices, setDestTrackIndices] = useState<number[]>([]);
   const [sceneDestBankIndices, setSceneDestBankIndices] = useState<number[]>([0]);
   const [sceneDestPartIndices, setSceneDestPartIndices] = useState<number[]>([0]);
+  const toggleSceneDestPart = useCallback((idx: number) => {
+    setSceneDestPartIndices((prev) => prev.includes(idx)
+      ? prev.filter(i => i !== idx)
+      : [...prev, idx].sort((a, b) => a - b));
+  }, []);
   const [destSceneIndices, setDestSceneIndices] = useState<number[]>([0]);
   /** Which scenes the fader sits between is Part state, not scene data, so it is asked for. */
-  const [copySceneCrossfader, setCopySceneCrossfader] = useState<boolean>(false);
+  // Several scenes copy pairwise, so the destination holds exactly as many
+  const sceneRunLocked = sourceSceneIndices.length > 1;
   const [destSampleStart, setDestSampleStart] = useState<number>(savedSettings.destSampleStart ?? 0);
 
   // Operation-specific options
@@ -1323,7 +1329,6 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
               destBankIndex: bankIdx,
               destPartIndices: sceneDestPartIndices,
               destSceneIndices,
-              copyCrossfader: copySceneCrossfader,
             });
           }
           const scenes = sourceSceneIndices.length;
@@ -1598,18 +1603,47 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
             <div className="tools-field">
               <label>Part</label>
-              <div className="tools-toggle-group">
-                {[0, 1, 2, 3].map((idx) => (
+              {/* The cross the device draws, as everywhere else a Part is picked */}
+              <div className="tools-part-cross">
+                <div className="tools-part-cross-row">
                   <button
-                    key={idx}
                     type="button"
-                    className={`tools-toggle-btn ${sceneSourcePartIndex === idx ? "selected" : ""}`}
-                    onClick={() => setSceneSourcePartIndex(idx)}
-                    title={`Read the scenes of Part ${idx + 1}`}
+                    className={`tools-toggle-btn part-btn ${sceneSourcePartIndex === 0 ? "selected" : ""}`}
+                    onClick={() => setSceneSourcePartIndex(0)}
+                    title="Read the scenes of Part 1"
                   >
-                    Part {idx + 1}
+                    1
                   </button>
-                ))}
+                </div>
+                <div className="tools-part-cross-row">
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn part-btn ${sceneSourcePartIndex === 3 ? "selected" : ""}`}
+                    onClick={() => setSceneSourcePartIndex(3)}
+                    title="Read the scenes of Part 4"
+                  >
+                    4
+                  </button>
+                  <span className="tools-part-cross-spacer"></span>
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn part-btn ${sceneSourcePartIndex === 1 ? "selected" : ""}`}
+                    onClick={() => setSceneSourcePartIndex(1)}
+                    title="Read the scenes of Part 2"
+                  >
+                    2
+                  </button>
+                </div>
+                <div className="tools-part-cross-row">
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn part-btn ${sceneSourcePartIndex === 2 ? "selected" : ""}`}
+                    onClick={() => setSceneSourcePartIndex(2)}
+                    title="Read the scenes of Part 3"
+                  >
+                    3
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1632,8 +1666,24 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   </div>
                 ))}
                 <div className="tools-select-actions">
-                  <button type="button" onClick={() => setSourceSceneSelection({ selection: [], anchor: null })}>None</button>
-                  <button type="button" onClick={() => setSourceSceneSelection({ selection: Array.from({ length: 16 }, (_, i) => i), anchor: 0 })}>All</button>
+                  <button
+                    type="button"
+                    className="tools-multi-btn pattern-btn tools-select-all"
+                    onClick={() => setSourceSceneSelection({ selection: [], anchor: null })}
+                    title="Deselect all scenes"
+                  >
+                    None
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-multi-btn pattern-btn tools-select-all ${sourceSceneIndices.length === 16 ? "selected" : ""}`}
+                    onClick={() => setSourceSceneSelection(sourceSceneIndices.length === 16
+                      ? { selection: [], anchor: null }
+                      : { selection: Array.from({ length: 16 }, (_, i) => i), anchor: 0 })}
+                    title="Select all scenes"
+                  >
+                    All
+                  </button>
                 </div>
               </div>
             </div>
@@ -2969,20 +3019,54 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
 
             <div className="tools-field">
               <label>Parts</label>
-              <div className="tools-track-row-buttons">
-                {[0, 1, 2, 3].map((idx) => (
+              {/* The same cross as the source, several at a time */}
+              <div className="tools-part-cross">
+                <div className="tools-part-cross-row">
                   <button
-                    key={idx}
                     type="button"
-                    className={`tools-multi-btn ${sceneDestPartIndices.includes(idx) ? "selected" : ""}`}
-                    onClick={() => sceneDestPartIndices.includes(idx)
-                      ? setSceneDestPartIndices(sceneDestPartIndices.filter(i => i !== idx))
-                      : setSceneDestPartIndices([...sceneDestPartIndices, idx].sort((a, b) => a - b))}
-                    title={`Put the scenes into Part ${idx + 1}`}
+                    className={`tools-toggle-btn part-btn ${sceneDestPartIndices.includes(0) ? "selected" : ""}`}
+                    onClick={() => toggleSceneDestPart(0)}
+                    title="Put the scenes into Part 1"
                   >
-                    {idx + 1}
+                    1
                   </button>
-                ))}
+                </div>
+                <div className="tools-part-cross-row">
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn part-btn ${sceneDestPartIndices.includes(3) ? "selected" : ""}`}
+                    onClick={() => toggleSceneDestPart(3)}
+                    title="Put the scenes into Part 4"
+                  >
+                    4
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn part-btn part-all ${sceneDestPartIndices.length === 4 ? "selected" : ""}`}
+                    onClick={() => setSceneDestPartIndices(sceneDestPartIndices.length === 4 ? [] : [0, 1, 2, 3])}
+                    title="Select all Parts"
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn part-btn ${sceneDestPartIndices.includes(1) ? "selected" : ""}`}
+                    onClick={() => toggleSceneDestPart(1)}
+                    title="Put the scenes into Part 2"
+                  >
+                    2
+                  </button>
+                </div>
+                <div className="tools-part-cross-row">
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn part-btn ${sceneDestPartIndices.includes(2) ? "selected" : ""}`}
+                    onClick={() => toggleSceneDestPart(2)}
+                    title="Put the scenes into Part 3"
+                  >
+                    3
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -3016,27 +3100,38 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     ))}
                   </div>
                 ))}
+                <div className="tools-select-actions">
+                  <button
+                    type="button"
+                    className="tools-multi-btn pattern-btn tools-select-all"
+                    onClick={() => setDestSceneIndices([])}
+                    title="Deselect all scenes"
+                  >
+                    None
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-multi-btn pattern-btn tools-select-all ${destSceneIndices.length === 16 ? "selected" : ""} ${sceneRunLocked ? "disabled" : ""}`}
+                    onClick={() => {
+                      if (sceneRunLocked) return;
+                      setDestSceneIndices(destSceneIndices.length === 16
+                        ? []
+                        : Array.from({ length: 16 }, (_, i) => i));
+                    }}
+                    disabled={sceneRunLocked}
+                    title={sceneRunLocked
+                      ? `Locked to ${sourceSceneIndices.length} scenes by the source selection`
+                      : "Select all scenes"}
+                  >
+                    All
+                  </button>
+                </div>
               </div>
               {sourceSceneIndices.length > 1 && (
                 <div className="tools-hint">
                   {sourceSceneIndices.map(i => i + 1).join(", ")} to {destSceneIndices.map(i => i + 1).join(", ")}
                 </div>
               )}
-            </div>
-
-            <div className="tools-field">
-              <label className="tools-checkbox">
-                <input
-                  type="checkbox"
-                  checked={copySceneCrossfader}
-                  onChange={(e) => setCopySceneCrossfader(e.target.checked)}
-                />
-                Also move the crossfader ends
-              </label>
-              <div className="tools-hint">
-                Which two scenes the fader sits between is the Part's own setting, not
-                part of a scene, so it stays as it is unless this is on.
-              </div>
             </div>
             </>
           )}

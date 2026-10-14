@@ -7793,7 +7793,8 @@ pub fn copy_bank(
 ///
 /// Two things travel per scene, because the device stores them apart: the per-track
 /// locks, and the crossfader level the scene sets. Which scenes the fader sits
-/// between is Part state rather than scene data, so it only travels when asked for.
+/// between is Part state rather than scene data, so it never travels: the destination
+/// Part keeps pointing the fader wherever it pointed before.
 #[allow(clippy::too_many_arguments)]
 pub fn copy_scenes(
     source_project: &str,
@@ -7804,7 +7805,6 @@ pub fn copy_scenes(
     dest_bank_index: u8,
     dest_part_indices: Vec<u8>,
     dest_scene_indices: Vec<u8>,
-    copy_crossfader: bool,
 ) -> Result<(), String> {
     if source_bank_index > 15 || dest_bank_index > 15 {
         return Err("Bank index must be between 0 and 15".to_string());
@@ -7879,14 +7879,6 @@ pub fn copy_scenes(
             ] {
                 part.scenes[*to] = taken.scenes[*from];
                 part.scene_xlvs[*to] = taken.scene_xlvs[*from];
-            }
-        }
-        if copy_crossfader {
-            for part in [
-                &mut dest_bank.parts.unsaved.0[dest_part],
-                &mut dest_bank.parts.saved.0[dest_part],
-            ] {
-                part.active_scenes = taken.active_scenes;
             }
         }
     }
@@ -19344,7 +19336,6 @@ mod tests {
                     0,
                     vec![1],
                     vec![5],
-                    false,
                 )
                 .unwrap();
 
@@ -19365,7 +19356,6 @@ mod tests {
                     0,
                     vec![1],
                     vec![5],
-                    false,
                 )
                 .unwrap();
 
@@ -19386,7 +19376,6 @@ mod tests {
                     0,
                     vec![1],
                     vec![2, 3, 4],
-                    false,
                 )
                 .unwrap();
 
@@ -19415,7 +19404,6 @@ mod tests {
                     0,
                     vec![1],
                     vec![8, 9],
-                    false,
                 )
                 .unwrap();
 
@@ -19437,7 +19425,6 @@ mod tests {
                     0,
                     vec![1, 2, 3],
                     vec![0],
-                    false,
                 )
                 .unwrap();
 
@@ -19471,7 +19458,6 @@ mod tests {
                     0,
                     vec![1],
                     vec![4],
-                    false,
                 )
                 .unwrap();
 
@@ -19498,7 +19484,6 @@ mod tests {
                     0,
                     vec![1],
                     vec![0],
-                    false,
                 )
                 .unwrap();
 
@@ -19509,7 +19494,7 @@ mod tests {
             }
 
             #[test]
-            fn test_the_fader_ends_stay_put_unless_asked_for() {
+            fn test_the_fader_ends_stay_put() {
                 let project = TestProject::new();
                 save_crossfader(&project.path, "A", 0, 3, 7).unwrap();
                 let before = {
@@ -19526,34 +19511,11 @@ mod tests {
                     0,
                     vec![1],
                     vec![0],
-                    false,
                 )
                 .unwrap();
 
                 let after = read_scenes(&project.path, "A", 1).unwrap();
                 assert_eq!((after.scene_a, after.scene_b), before);
-            }
-
-            #[test]
-            fn test_the_fader_ends_travel_when_asked_for() {
-                let project = TestProject::new();
-                save_crossfader(&project.path, "A", 0, 3, 7).unwrap();
-
-                copy_scenes(
-                    &project.path,
-                    0,
-                    0,
-                    vec![0],
-                    &project.path,
-                    0,
-                    vec![1],
-                    vec![0],
-                    true,
-                )
-                .unwrap();
-
-                let after = read_scenes(&project.path, "A", 1).unwrap();
-                assert_eq!((after.scene_a, after.scene_b), (3, 7));
             }
 
             /// The device's own Reload Part goes back to the saved copy, so a copy the
@@ -19574,7 +19536,6 @@ mod tests {
                     0,
                     vec![1],
                     vec![0],
-                    false,
                 )
                 .unwrap();
                 reload_part_data(&project.path, "A", 1).unwrap();
@@ -19594,7 +19555,6 @@ mod tests {
                     0,
                     vec![1],
                     vec![4, 5],
-                    false,
                 );
                 assert!(refused.is_err());
             }
@@ -19611,7 +19571,6 @@ mod tests {
                     0,
                     vec![1],
                     vec![0],
-                    false,
                 )
                 .is_err());
                 assert!(copy_scenes(
@@ -19623,7 +19582,6 @@ mod tests {
                     0,
                     vec![],
                     vec![0],
-                    false,
                 )
                 .is_err());
             }
@@ -19640,7 +19598,6 @@ mod tests {
                     0,
                     vec![1],
                     vec![0],
-                    false,
                 )
                 .is_err());
                 assert!(copy_scenes(
@@ -19652,7 +19609,6 @@ mod tests {
                     0,
                     vec![1],
                     vec![0],
-                    false,
                 )
                 .is_err());
                 assert!(copy_scenes(
@@ -19664,7 +19620,6 @@ mod tests {
                     0,
                     vec![1],
                     vec![0],
-                    false,
                 )
                 .is_err());
             }
@@ -19683,7 +19638,6 @@ mod tests {
                     1,
                     vec![1],
                     vec![0],
-                    false,
                 )
                 .is_err());
             }

@@ -892,7 +892,6 @@ async fn copy_scenes(
     dest_bank_index: u8,
     dest_part_indices: Vec<u8>,
     dest_scene_indices: Vec<u8>,
-    copy_crossfader: bool,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         project_reader::copy_scenes(
@@ -904,7 +903,6 @@ async fn copy_scenes(
             dest_bank_index,
             dest_part_indices,
             dest_scene_indices,
-            copy_crossfader,
         )
     })
     .await

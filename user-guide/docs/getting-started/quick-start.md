@@ -90,6 +90,7 @@ Available Operations:
 
 - **[Copy Banks](../features/copy-bank.md):** Copy an entire bank (all 4 Parts + 16 Patterns) with optional sample slot transfer and automatic remapping.
 - **[Copy Parts](../features/copy-parts.md):** Transfer Part sound design (machines, amps, LFOs, FX) between parts and banks.
+- **[Copy Scenes](../features/copy-scenes.md):** Move individual scenes between Parts, banks and projects, leaving each destination Part's sound design alone.
 - **[Copy Patterns](../features/copy-patterns.md):** Copy patterns with configurable Part assignment and track scope.
 - **[Copy Tracks](../features/copy-tracks.md):** Copy individual track data — sound design, pattern triggers, or both.
 - **[Copy Sample Slots](../features/copy-sample-slots.md):** Copy sample slot assignments with optional audio file transfer and Audio Pool management.

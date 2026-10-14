@@ -4784,14 +4784,13 @@ test.describe('Tools Tab - Copy Scenes', () => {
   const SOURCE = '.tools-source-panel'
   const DEST = '.tools-dest-panel'
 
-  // Both panes label a field "Scenes", and the crossfader hint mentions scenes
-  // too, so fields are picked by their own label and nothing else.
+  // Both panes label a field "Scenes", so fields are picked by their own label.
   const field = (page: import('@playwright/test').Page, pane: string, label: string) =>
     page.locator(`${pane} .tools-field`)
       .filter({ has: page.locator('label', { hasText: new RegExp(`^${label}$`) }) })
 
   const selected = async (scope: import('@playwright/test').Locator) =>
-    scope.locator('.selected').allTextContents()
+    scope.locator('.selected:not(.tools-select-all)').allTextContents()
 
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page)
@@ -4807,8 +4806,12 @@ test.describe('Tools Tab - Copy Scenes', () => {
     await page.evaluate(() => { (window as any).__copyCalls__ = [] })
     await page.locator('.tools-execute-btn').click()
     await page.waitForTimeout(800)
-    return page.evaluate(() =>
+    const calls = await page.evaluate(() =>
       ((window as any).__copyCalls__ ?? []).filter((c: any) => c.cmd === 'copy_scenes'))
+    // The result modal sits over the panel, so it goes before anything else is clicked
+    await page.keyboard.press('Escape')
+    await expect(page.locator('.modal-overlay')).toHaveCount(0)
+    return calls
   }
 
   test('the operation is offered and named Copy Scenes', async ({ page }) => {
@@ -4825,23 +4828,16 @@ test.describe('Tools Tab - Copy Scenes', () => {
     expect(await page.locator(`${SOURCE} .tools-field > label`).allTextContents())
       .toEqual(['Project', 'Bank', 'Part', 'Scenes'])
     expect(await page.locator(`${DEST} .tools-field > label`).allTextContents())
-      .toEqual(['Project', 'Banks', 'Parts', 'Scenes', 'Also move the crossfader ends'])
+      .toEqual(['Project', 'Banks', 'Parts', 'Scenes'])
   })
 
   test('it starts on Bank A, Part 1, Scene 1 both sides', async ({ page }) => {
     expect(await selected(field(page, SOURCE, 'Bank'))).toEqual(['A'])
-    expect(await selected(field(page, SOURCE, 'Part'))).toEqual(['Part 1'])
+    expect(await selected(field(page, SOURCE, 'Part'))).toEqual(['1'])
     expect(await selected(field(page, SOURCE, 'Scenes'))).toEqual(['1'])
     expect(await selected(field(page, DEST, 'Banks'))).toEqual(['A'])
     expect(await selected(field(page, DEST, 'Parts'))).toEqual(['1'])
     expect(await selected(field(page, DEST, 'Scenes'))).toEqual(['1'])
-  })
-
-  test('the crossfader ends stay put unless asked for', async ({ page }) => {
-    const box = page.locator(`${DEST} .tools-checkbox input`)
-    await expect(box).not.toBeChecked()
-    await expect(page.locator(`${DEST} .tools-field`).filter({ hasText: 'crossfader ends' }))
-      .toContainText("the Part's own setting")
   })
 
   test('executing the defaults copies scene 1 of Part 1 onto itself', async ({ page }) => {
@@ -4856,12 +4852,11 @@ test.describe('Tools Tab - Copy Scenes', () => {
       destBankIndex: 0,
       destPartIndices: [0],
       destSceneIndices: [0],
-      copyCrossfader: false,
     })
   })
 
   test('the source part travels, and it is not the part selector of Copy Parts', async ({ page }) => {
-    await field(page, SOURCE, 'Part').locator('.tools-toggle-btn', { hasText: 'Part 3' }).click()
+    await field(page, SOURCE, 'Part').locator('.part-btn', { hasText: /^3$/ }).click()
     await page.waitForTimeout(200)
     const calls = await execute(page)
     expect(calls[0].args.sourcePartIndex).toBe(2)
@@ -4869,18 +4864,11 @@ test.describe('Tools Tab - Copy Scenes', () => {
 
   test('several destination parts all receive the scene', async ({ page }) => {
     const parts = field(page, DEST, 'Parts')
-    await parts.locator('.tools-multi-btn', { hasText: /^3$/ }).click()
-    await parts.locator('.tools-multi-btn', { hasText: /^4$/ }).click()
+    await parts.locator('.part-btn', { hasText: /^3$/ }).click()
+    await parts.locator('.part-btn', { hasText: /^4$/ }).click()
     await page.waitForTimeout(200)
     const calls = await execute(page)
     expect(calls[0].args.destPartIndices).toEqual([0, 2, 3])
-  })
-
-  test('asking for the crossfader ends sends them', async ({ page }) => {
-    await page.locator(`${DEST} .tools-checkbox input`).check()
-    await page.waitForTimeout(200)
-    const calls = await execute(page)
-    expect(calls[0].args.copyCrossfader).toBe(true)
   })
 
   test('picking a second scene makes the destination a run of the same length', async ({ page }) => {
@@ -4920,6 +4908,42 @@ test.describe('Tools Tab - Copy Scenes', () => {
     expect(calls[0].args.destSceneIndices).toEqual([0, 4, 11])
   })
 
+  test('the destination has None and All too', async ({ page }) => {
+    const dest = field(page, DEST, 'Scenes')
+    await dest.locator('.tools-select-actions button', { hasText: 'All' }).click()
+    await page.waitForTimeout(200)
+    expect(await selected(dest)).toHaveLength(16)
+    const calls = await execute(page)
+    expect(calls[0].args.destSceneIndices).toHaveLength(16)
+
+    await dest.locator('.tools-select-actions button', { hasText: 'None' }).click()
+    await page.waitForTimeout(200)
+    expect(await selected(dest)).toEqual([])
+    await expect(page.locator('.tools-execute-btn')).toBeDisabled()
+  })
+
+  test('destination All is refused while a run is pairing up', async ({ page }) => {
+    await field(page, SOURCE, 'Scenes').locator('.tools-multi-btn.pattern-btn', { hasText: /^2$/ })
+      .click({ modifiers: ['Control'] })
+    await page.waitForTimeout(200)
+    const all = field(page, DEST, 'Scenes').locator('.tools-select-actions button', { hasText: 'All' })
+    await expect(all).toBeDisabled()
+    await expect(all).toHaveAttribute('title', 'Locked to 2 scenes by the source selection')
+  })
+
+  test('the Part cross selects several destinations at once', async ({ page }) => {
+    const parts = field(page, DEST, 'Parts')
+    await parts.locator('.part-all').click()
+    await page.waitForTimeout(200)
+    expect(await selected(parts)).toEqual(['1', '4', 'All', '2', '3'])
+    const calls = await execute(page)
+    expect(calls[0].args.destPartIndices).toEqual([0, 1, 2, 3])
+
+    await parts.locator('.part-all').click()
+    await page.waitForTimeout(200)
+    expect(await selected(parts)).toEqual([])
+  })
+
   test('None and All cover the source scenes', async ({ page }) => {
     const src = field(page, SOURCE, 'Scenes')
     await src.locator('.tools-select-actions button', { hasText: 'All' }).click()
@@ -4951,7 +4975,7 @@ test.describe('Tools Tab - Copy Scenes', () => {
     await page.waitForTimeout(200)
     await expect(execBtn).toBeEnabled()
 
-    await field(page, DEST, 'Parts').locator('.tools-multi-btn', { hasText: /^1$/ }).click()
+    await field(page, DEST, 'Parts').locator('.part-btn', { hasText: /^1$/ }).click()
     await page.waitForTimeout(200)
     await expect(execBtn).toBeDisabled()
     await expect(execBtn).toHaveAttribute('title', 'Select at least one destination part')
@@ -4969,7 +4993,7 @@ test.describe('Tools Tab - Copy Scenes', () => {
   })
 
   test('it reports what it copied', async ({ page }) => {
-    await field(page, DEST, 'Parts').locator('.tools-multi-btn', { hasText: /^2$/ }).click()
+    await field(page, DEST, 'Parts').locator('.part-btn', { hasText: /^2$/ }).click()
     await page.waitForTimeout(200)
     await page.locator('.tools-execute-btn').click()
     await page.waitForTimeout(800)
@@ -4977,3 +5001,4 @@ test.describe('Tools Tab - Copy Scenes', () => {
       .toHaveText('1 scene copied to 2 parts in 1 bank')
   })
 })
+

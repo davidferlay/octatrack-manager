@@ -1,5 +1,5 @@
 ---
-sidebar_position: 16
+sidebar_position: 17
 ---
 
 # Clear Project
@@ -62,5 +62,5 @@ The audio files themselves are left on disk. To remove files that no longer belo
 
 ## See also
 
-- [Copy Banks](./copy-bank.md), [Copy Parts](./copy-parts.md), [Copy Patterns](./copy-patterns.md), [Copy Tracks](./copy-tracks.md) - the operations this one undoes.
+- [Copy Banks](./copy-bank.md), [Copy Parts](./copy-parts.md), [Copy Scenes](./copy-scenes.md), [Copy Patterns](./copy-patterns.md), [Copy Tracks](./copy-tracks.md) - the operations this one undoes.
 - [Purge Unused Samples](./purge-unused-samples.md) - for removing audio files, rather than emptying slots.

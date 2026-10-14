@@ -346,22 +346,24 @@
 | **Copy Scenes** | | | | |
 | CSC-1 | Copy Scenes | The tool is offered | Open the Tools tab and read the operation list | "Copy Scenes" sits between "Copy Parts" and "Copy Patterns" |
 | CSC-2 | Copy Scenes | What it says it does | Select Copy Scenes | The description reads that it copies individual scenes - their parameter locks plus their track levels - between Parts and banks |
-| CSC-3 | Copy Scenes | Fields offered | Select Copy Scenes | Source asks Project, Bank, Part, Scenes; destination asks Project, Banks, Parts, Scenes and the crossfader checkbox |
-| CSC-4 | Copy Scenes | Starting point | Select Copy Scenes | Bank A, Part 1 and Scene 1 are selected on both sides, and the crossfader checkbox is off |
+| CSC-3 | Copy Scenes | Fields offered | Select Copy Scenes | Source asks Project, Bank, Part, Scenes; destination asks Project, Banks, Parts, Scenes |
+| CSC-4 | Copy Scenes | Starting point | Select Copy Scenes | Bank A, Part 1 and Scene 1 are selected on both sides |
+| CSC-4b | Copy Scenes | Part widget | Look at either Part field | It is the same cross as Copy Parts: 1 on top, 4 and 2 either side, 3 underneath. The destination has an All in the middle, the source does not |
 | CSC-5 | Copy Scenes | Unloaded banks refused | Look at the source Bank row on a project with only a few banks | The banks that do not exist are greyed out and cannot be picked |
 | CSC-6 | Copy Scenes | One scene copied | Copy Part 1 scene 1 onto Part 2 scene 5, then open Part 2 scene 5 on the Scenes grid | It holds the same locks and the same track levels as the source |
 | CSC-7 | Copy Scenes | The scene's own level travels | Copy a scene whose XLV differs from the destination's | The destination scene's XLV is the source's |
 | CSC-8 | Copy Scenes | The destination Part is otherwise untouched | Copy a scene into a Part with its own machines and FX | The Part keeps its machines, FX, LFOs and amp settings; only the chosen scene changed |
-| CSC-9 | Copy Scenes | Crossfader ends stay put by default | Copy a scene with the checkbox off | Which two scenes the fader sits between is unchanged in the destination Part |
-| CSC-10 | Copy Scenes | Crossfader ends travel when asked | Tick "Also move the crossfader ends" and copy | The destination Part's A and B ends are now the source Part's |
+| CSC-9 | Copy Scenes | Crossfader ends stay put | Copy a scene into a Part whose fader ends differ from the source's | Which two scenes the fader sits between is unchanged in the destination Part |
 | CSC-11 | Copy Scenes | Several scenes copy pairwise | Ctrl-click scenes 1, 2 and 3 as the source, then click destination scene 9 | The destination selects 9, 10 and 11, and a line underneath reads "1, 2, 3 to 9, 10, 11" |
 | CSC-12 | Copy Scenes | A run cannot pass scene 16 | With 2 source scenes, click destination scene 16 | The run is pulled back to scenes 15 and 16 |
 | CSC-13 | Copy Scenes | A run needs as many landing places | Select 2 source scenes while 1 destination scene is selected | Execute is disabled with the tooltip "Select 2 destination scenes, one per scene copied" |
 | CSC-14 | Copy Scenes | One source scene fans out | With a single source scene, click destination scenes 1, 5 and 12 | All three stay selected and all three receive the copy |
 | CSC-15 | Copy Scenes | Several destination Parts | Select destination Parts 1, 3 and 4 and copy | The scene lands in all three Parts of each selected bank |
+| CSC-15b | Copy Scenes | All four destination Parts | Press All in the middle of the destination cross | All four Parts light up; pressing it again clears them and disables Execute |
 | CSC-16 | Copy Scenes | Several destination banks | Select destination banks A and B and copy | Both banks receive the scene, and the summary names 2 banks |
 | CSC-17 | Copy Scenes | The source bank is written last | Copy Bank A scene 1 into banks A and B | Bank B receives the original scene, not the one Bank A ends up with |
-| CSC-18 | Copy Scenes | None and All | Press None then All on the source Scenes row | None clears the selection and disables Execute; All selects all 16 |
+| CSC-18 | Copy Scenes | None and All on both sides | Press None then All under either Scenes grid | Both grids have the row, styled like every other None / All in the Tools tab. None clears the selection, All selects all 16 |
+| CSC-18b | Copy Scenes | Destination All while pairing | Select 2 source scenes, then look at the destination All | It is disabled, with the tooltip "Locked to 2 scenes by the source selection" - a run needs exactly as many landing places |
 | CSC-19 | Copy Scenes | Each side must have a selection | Clear the source scenes, then the destination parts | Execute is disabled each time, and its tooltip names what is missing |
 | CSC-20 | Copy Scenes | Copying across projects | Pick a different source project, then copy | The scene is read from that project and written into the one on screen |
 | CSC-21 | Copy Scenes | Summary | Copy 1 scene into 2 Parts of 1 bank | The confirmation reads "1 scene copied to 2 parts in 1 bank" |

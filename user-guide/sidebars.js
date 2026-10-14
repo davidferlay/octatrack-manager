@@ -26,6 +26,7 @@ const sidebars = {
         'features/sample-slots',
         'features/copy-bank',
         'features/copy-parts',
+        'features/copy-scenes',
         'features/copy-patterns',
         'features/copy-tracks',
         'features/copy-sample-slots',
