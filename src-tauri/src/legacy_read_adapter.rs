@@ -340,8 +340,8 @@ fn is_inventory_audio_file(name: &str) -> bool {
         })
 }
 
-/// Root-relative paths of catalog-eligible audio files under a registered root.
-pub(crate) fn root_audio_inventory_paths(
+/// Root-relative paths of catalog-eligible WAV/AIF files under a registered root.
+pub(crate) fn registered_root_wav_inventory_paths(
     canonical_root: &Path,
 ) -> Result<HashSet<String>, StorageError> {
     let mut candidates = Vec::new();

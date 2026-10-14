@@ -3,7 +3,7 @@
 #![cfg_attr(not(test), allow(dead_code))]
 
 use crate::bank_validation::bank_parse_status;
-use crate::legacy_read_adapter::root_audio_inventory_paths;
+use crate::legacy_read_adapter::registered_root_wav_inventory_paths;
 use crate::project_structure_reader::read_contained_state_document_bytes;
 use ot_codec::parse_project_document;
 use ot_domain::project_structure::{BankIndex, MachineKind, PartIndex, PatternIndex, TrackIndex};
@@ -90,7 +90,7 @@ fn slot_assignment_lookup(
     canonical_root: &Path,
     project_relative_path: &RootRelativePath,
 ) -> Result<SlotStatusLookup, StorageError> {
-    let inventory_paths = root_audio_inventory_paths(canonical_root)?;
+    let inventory_paths = registered_root_wav_inventory_paths(canonical_root)?;
     let mut lookup = HashMap::new();
     for (role, extension) in [
         (StateDocumentRole::Working, "work"),
