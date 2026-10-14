@@ -3,23 +3,31 @@
 #![cfg_attr(not(test), allow(dead_code))]
 
 use crate::bank_validation::bank_parse_status;
-use crate::legacy_read_adapter::{join_relative, resolve_relative_for_read};
+use crate::legacy_read_adapter::root_audio_inventory_paths;
+use crate::project_structure_reader::read_contained_state_document_bytes;
 use ot_codec::parse_project_document;
 use ot_domain::project_structure::{BankIndex, MachineKind, PartIndex, PatternIndex, TrackIndex};
 use ot_domain::{
-    bank_machine_slot_to_pool_index, effective_sample_lock_track_length, locked_sample_slot_raw,
-    sample_lock_is_audible, track_slot_reference_from_machine, track_slot_reference_from_raw,
-    BankReferenceInventory, BankSampleReferenceObservation, PartStateRole, ReferenceCoverage,
-    ReferenceOrigin, RootRelativePath, SampleReferenceStatus, SampleSlotKind,
-    StateDocumentParseStatus, StateDocumentRole,
+    effective_sample_lock_track_length, locked_sample_slot_raw, sample_lock_is_audible,
+    track_slot_reference_from_machine, track_slot_reference_from_raw, BankReferenceInventory,
+    BankSampleReferenceObservation, PartStateRole, ReferenceCoverage, ReferenceOrigin,
+    RootRelativePath, SampleReferenceStatus, SampleSlotKind, StateDocumentParseStatus,
+    StateDocumentRole,
 };
 use ot_storage_ports::StorageError;
 use ot_tools_io::{BankFile, OctatrackFileIO};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::Path;
 
-type SlotStatusLookup =
-    HashMap<(SampleSlotKind, u16), (Option<RootRelativePath>, SampleReferenceStatus)>;
+type SlotStatusLookup = HashMap<
+    (StateDocumentRole, SampleSlotKind, u16),
+    (Option<RootRelativePath>, SampleReferenceStatus),
+>;
+
+const BANK_REREAD_MISSING: &str =
+    "BANK_REFERENCE_INVENTORY: parsed bank document missing on reread";
+const BANK_REREAD_DECODE: &str =
+    "BANK_REFERENCE_INVENTORY: parsed bank document could not be decoded on reread";
 
 pub(crate) fn build_bank_reference_inventory(
     canonical_root: &Path,
@@ -27,7 +35,7 @@ pub(crate) fn build_bank_reference_inventory(
     structure: &ot_domain::project_structure::ProjectStructure,
     observed_revision: u64,
 ) -> Result<BankReferenceInventory, StorageError> {
-    let slot_lookup = slot_assignment_lookup(canonical_root, project_relative_path, structure)?;
+    let slot_lookup = slot_assignment_lookup(canonical_root, project_relative_path)?;
     let track_eight_is_master = structure
         .project_state
         .as_ref()
@@ -39,15 +47,25 @@ pub(crate) fn build_bank_reference_inventory(
         if bank_doc.parse_status != StateDocumentParseStatus::Parsed {
             continue;
         }
-        let Some(bytes) = read_document_bytes(canonical_root, &bank_doc.source_relative_path)?
+        let Some(file_name) = bank_doc
+            .source_relative_path
+            .as_str()
+            .rsplit('/')
+            .next()
+            .filter(|name| !name.is_empty())
         else {
-            continue;
+            return Err(StorageError::new(BANK_REREAD_MISSING));
+        };
+        let Some(bytes) =
+            read_contained_state_document_bytes(canonical_root, project_relative_path, file_name)?
+        else {
+            return Err(StorageError::new(BANK_REREAD_MISSING));
         };
         let Ok(bank) = BankFile::from_bytes(&bytes) else {
-            continue;
+            return Err(StorageError::new(BANK_REREAD_DECODE));
         };
         if bank_parse_status(&bank) != StateDocumentParseStatus::Parsed {
-            continue;
+            return Err(StorageError::new(BANK_REREAD_DECODE));
         }
         append_bank_observations(
             bank_doc.bank,
@@ -71,82 +89,36 @@ pub(crate) fn build_bank_reference_inventory(
 fn slot_assignment_lookup(
     canonical_root: &Path,
     project_relative_path: &RootRelativePath,
-    structure: &ot_domain::project_structure::ProjectStructure,
 ) -> Result<SlotStatusLookup, StorageError> {
-    let inventory_paths = project_directory_inventory_paths(canonical_root, project_relative_path)?;
+    let inventory_paths = root_audio_inventory_paths(canonical_root)?;
     let mut lookup = HashMap::new();
-    let Some(state) = structure.project_state.as_ref() else {
-        return Ok(lookup);
-    };
-    if state.parse_status != StateDocumentParseStatus::Parsed {
-        return Ok(lookup);
-    }
-    let project_work = join_relative(project_relative_path, "project.work")?;
-    let Some(bytes) = read_document_bytes(canonical_root, &project_work)? else {
-        return Ok(lookup);
-    };
-    let parsed = parse_project_document(&bytes);
-    if parsed.parse_status != StateDocumentParseStatus::Parsed {
-        return Ok(lookup);
-    }
-    for assignment in parsed.regular_assignments {
-        let (path, status) = ot_domain::resolve_against_inventory(
-            project_relative_path,
-            &assignment.raw_path,
-            &inventory_paths,
-        );
-        lookup.insert(
-            (assignment.slot.kind(), assignment.slot.number()),
-            (path, status),
-        );
-    }
-    Ok(lookup)
-}
-
-fn project_directory_inventory_paths(
-    canonical_root: &Path,
-    project_relative_path: &RootRelativePath,
-) -> Result<HashSet<String>, StorageError> {
-    let project_dir = resolve_relative_for_read(canonical_root, project_relative_path)?;
-    let mut paths = HashSet::new();
-    if project_dir.is_dir() {
-        collect_relative_paths(&project_dir, project_relative_path, &mut paths)?;
-    }
-    Ok(paths)
-}
-
-fn collect_relative_paths(
-    directory: &Path,
-    prefix: &RootRelativePath,
-    out: &mut HashSet<String>,
-) -> Result<(), StorageError> {
-    for entry in std::fs::read_dir(directory).map_err(|_| StorageError::new("IO_UNAVAILABLE"))? {
-        let entry = entry.map_err(|_| StorageError::new("IO_UNAVAILABLE"))?;
-        let file_type = entry
-            .file_type()
-            .map_err(|_| StorageError::new("IO_UNAVAILABLE"))?;
-        let name = entry.file_name().to_string_lossy().into_owned();
-        let relative = join_relative(prefix, &name)?;
-        if file_type.is_dir() {
-            collect_relative_paths(&entry.path(), &relative, out)?;
-        } else if file_type.is_file() {
-            out.insert(relative.as_str().to_owned());
+    for (role, extension) in [
+        (StateDocumentRole::Working, "work"),
+        (StateDocumentRole::SavedCheckpoint, "strd"),
+    ] {
+        let file_name = format!("project.{extension}");
+        let Some(bytes) =
+            read_contained_state_document_bytes(canonical_root, project_relative_path, &file_name)?
+        else {
+            continue;
+        };
+        let parsed = parse_project_document(&bytes);
+        if parsed.parse_status != StateDocumentParseStatus::Parsed {
+            continue;
+        }
+        for assignment in parsed.regular_assignments {
+            let (path, status) = ot_domain::resolve_against_inventory(
+                project_relative_path,
+                &assignment.raw_path,
+                &inventory_paths,
+            );
+            lookup.insert(
+                (role, assignment.slot.kind(), assignment.slot.number()),
+                (path, status),
+            );
         }
     }
-    Ok(())
-}
-
-fn read_document_bytes(
-    canonical_root: &Path,
-    relative: &RootRelativePath,
-) -> Result<Option<Vec<u8>>, StorageError> {
-    let path = resolve_relative_for_read(canonical_root, relative)?;
-    if !path.is_file() {
-        return Ok(None);
-    }
-    std::fs::read(path)
-        .map(Some)
-        .map_err(|_| StorageError::new("IO_UNAVAILABLE"))
+    Ok(lookup)
 }
 
 fn append_bank_observations(
@@ -226,7 +198,7 @@ fn append_part_observations(
                 slots.flex_slot_id,
             );
             let (reference_status, referenced_relative_path) =
-                status_for_target(&target, slot_lookup);
+                status_for_target(role, &target, slot_lookup);
             out.push(BankSampleReferenceObservation {
                 bank,
                 document_role: role,
@@ -290,9 +262,6 @@ fn append_lock_observations(
                 ) else {
                     continue;
                 };
-                if bank_machine_slot_to_pool_index(raw).is_none() {
-                    continue;
-                }
                 let kind = if machine_type == 0 {
                     SampleSlotKind::Static
                 } else if machine_type == 1 {
@@ -302,7 +271,7 @@ fn append_lock_observations(
                 };
                 let target = track_slot_reference_from_raw(kind, raw);
                 let (reference_status, referenced_relative_path) =
-                    status_for_target(&target, slot_lookup);
+                    status_for_target(role, &target, slot_lookup);
                 out.push(BankSampleReferenceObservation {
                     bank,
                     document_role: role,
@@ -323,12 +292,13 @@ fn append_lock_observations(
 }
 
 fn status_for_target(
+    document_role: StateDocumentRole,
     target: &ot_domain::project_structure::TrackSlotReference,
     slot_lookup: &SlotStatusLookup,
 ) -> (Option<SampleReferenceStatus>, Option<RootRelativePath>) {
     match target {
         ot_domain::project_structure::TrackSlotReference::Slot(id) => slot_lookup
-            .get(&(id.kind(), id.number()))
+            .get(&(document_role, id.kind(), id.number()))
             .map(|(path, status)| (Some(*status), path.clone()))
             .unwrap_or((Some(SampleReferenceStatus::UnassignedSlot), None)),
         ot_domain::project_structure::TrackSlotReference::Unassigned => {
@@ -381,6 +351,7 @@ mod tests {
     use super::*;
     use crate::project_structure_reader::read_project_structure;
     use ot_domain::project_structure::TrackSlotReference;
+    use ot_domain::SampleReferenceStatus;
     use ot_tools_io::BankFile;
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -504,6 +475,52 @@ mod tests {
     }
 
     #[test]
+    fn flex_recorder_buffer_lock_is_inventoried() {
+        let (_temp, inventory, root) = inventory_for_real_device();
+        let bank = BankFile::from_data_file(&bank_work_path(&root)).unwrap();
+        let expects_recorder_lock = bank.patterns.0.iter().any(|pattern| {
+            let Ok(part_index) = PartIndex::new(pattern.part_assignment) else {
+                return false;
+            };
+            let Some(part) = bank.parts.unsaved.0.get(usize::from(part_index.get())) else {
+                return false;
+            };
+            pattern
+                .audio_track_trigs
+                .0
+                .iter()
+                .enumerate()
+                .any(|(track_index, track)| {
+                    let machine = part.audio_track_machine_types[track_index];
+                    if machine != 1 {
+                        return false;
+                    }
+                    track
+                        .plocks
+                        .0
+                        .iter()
+                        .take(ot_domain::SAMPLE_LOCK_SCAN_STEPS)
+                        .any(|lock| {
+                            locked_sample_slot_raw(machine, lock.static_slot_id, lock.flex_slot_id)
+                                .is_some_and(|raw| {
+                                    matches!(
+                                        track_slot_reference_from_raw(SampleSlotKind::Flex, raw),
+                                        TrackSlotReference::RecorderBuffer(_)
+                                    )
+                                })
+                        })
+                })
+        });
+        if !expects_recorder_lock {
+            return;
+        }
+        assert!(inventory.observations.iter().any(|observation| {
+            observation.origin == ReferenceOrigin::SampleLock
+                && matches!(observation.target, TrackSlotReference::RecorderBuffer(_))
+        }));
+    }
+
+    #[test]
     fn inaudible_leftover_lock_is_preserved() {
         let (_temp, inventory, _root) = inventory_for_real_device();
         let locks: Vec<_> = inventory
@@ -536,5 +553,110 @@ mod tests {
             }
         }
         assert!(!inventory.observations.is_empty());
+    }
+
+    #[test]
+    fn audio_pool_path_outside_project_resolves_against_root_inventory() {
+        let temp = TempDir::new().unwrap();
+        let audio = temp.path().join("SET/AUDIO");
+        fs::create_dir_all(&audio).unwrap();
+        let project = temp.path().join(PROJECT);
+        fs::create_dir_all(&project).unwrap();
+        fs::copy(
+            fixture_dir("real_device").join("project.work"),
+            project.join("project.work"),
+        )
+        .unwrap();
+        fs::copy(
+            fixture_dir("real_device").join("bank01.work"),
+            project.join("bank01.work"),
+        )
+        .unwrap();
+        let percs = audio.join("Elektron").join("Percs.wav");
+        fs::create_dir_all(percs.parent().unwrap()).unwrap();
+        fs::write(&percs, b"RIFF").unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let project_path = RootRelativePath::parse(PROJECT).unwrap();
+        let structure = read_project_structure(&root, &project_path).unwrap();
+        let inventory =
+            build_bank_reference_inventory(&root, &project_path, &structure, 1).unwrap();
+        assert!(inventory.observations.iter().any(|observation| {
+            observation.reference_status == Some(SampleReferenceStatus::Resolved)
+                && observation
+                    .referenced_relative_path
+                    .as_ref()
+                    .is_some_and(|path| path.as_str() == "SET/AUDIO/Elektron/Percs.wav")
+        }));
+    }
+
+    #[test]
+    fn saved_checkpoint_uses_strd_slot_assignments() {
+        let temp = TempDir::new().unwrap();
+        let project = temp.path().join(PROJECT);
+        fs::create_dir_all(&project).unwrap();
+        let work = fs::read_to_string(fixture_dir("real_device").join("project.work")).unwrap();
+        fs::write(project.join("project.work"), &work).unwrap();
+        let strd = work.replace(
+            "SLOT=045\r\nPATH=../AUDIO/Elektron/Percs.wav",
+            "SLOT=045\r\nPATH=../AUDIO/Elektron/Acdrum.wav",
+        );
+        assert_ne!(work, strd);
+        fs::write(project.join("project.strd"), strd).unwrap();
+        for file in ["bank01.work", "bank01.strd"] {
+            fs::copy(fixture_dir("real_device").join(file), project.join(file)).unwrap();
+        }
+        let audio = temp.path().join("SET/AUDIO/Elektron");
+        fs::create_dir_all(&audio).unwrap();
+        fs::write(audio.join("Percs.wav"), b"RIFF").unwrap();
+        fs::write(audio.join("Acdrum.wav"), b"RIFF").unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let project_path = RootRelativePath::parse(PROJECT).unwrap();
+        let structure = read_project_structure(&root, &project_path).unwrap();
+        let inventory =
+            build_bank_reference_inventory(&root, &project_path, &structure, 1).unwrap();
+        let flex_45 = (
+            SampleSlotKind::Flex,
+            45_u16,
+            RootRelativePath::parse("SET/AUDIO/Elektron/Percs.wav").unwrap(),
+            RootRelativePath::parse("SET/AUDIO/Elektron/Acdrum.wav").unwrap(),
+        );
+        let working_path = inventory
+            .observations
+            .iter()
+            .find(|observation| {
+                observation.document_role == StateDocumentRole::Working
+                    && observation.target
+                        == TrackSlotReference::Slot(
+                            ot_domain::SampleSlotId::new(flex_45.0, flex_45.1).unwrap(),
+                        )
+            })
+            .and_then(|observation| observation.referenced_relative_path.clone());
+        let checkpoint_path = inventory
+            .observations
+            .iter()
+            .find(|observation| {
+                observation.document_role == StateDocumentRole::SavedCheckpoint
+                    && observation.target
+                        == TrackSlotReference::Slot(
+                            ot_domain::SampleSlotId::new(flex_45.0, flex_45.1).unwrap(),
+                        )
+            })
+            .and_then(|observation| observation.referenced_relative_path.clone());
+        assert_eq!(working_path.as_ref(), Some(&flex_45.2));
+        assert_eq!(checkpoint_path.as_ref(), Some(&flex_45.3));
+    }
+
+    #[test]
+    fn parsed_bank_missing_on_reread_fails_closed() {
+        let (temp, root) = copied_project(
+            "real_device",
+            &["project.work", "bank01.work", "bank01.strd"],
+        );
+        let project = RootRelativePath::parse(PROJECT).unwrap();
+        let structure = read_project_structure(&root, &project).unwrap();
+        fs::remove_file(root.join("SET/PROJECT/bank01.work")).unwrap();
+        let error = build_bank_reference_inventory(&root, &project, &structure, 1).unwrap_err();
+        assert!(error.to_string().contains(BANK_REREAD_MISSING));
+        drop(temp);
     }
 }

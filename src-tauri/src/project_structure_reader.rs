@@ -44,6 +44,38 @@ pub(crate) fn read_project_structure(
     read_banks_in_directory(canonical_root, &project_directory, project_relative_path)
 }
 
+/// Read a single Project state document through a non-following descriptor.
+pub(crate) fn read_contained_state_document_bytes(
+    canonical_root: &Path,
+    project_relative_path: &RootRelativePath,
+    file_name: &str,
+) -> Result<Option<Vec<u8>>, StorageError> {
+    let project_directory = resolve_relative_for_read(canonical_root, project_relative_path)?;
+    read_contained_state_document_bytes_in_directory(canonical_root, &project_directory, file_name)
+}
+
+#[cfg(unix)]
+fn read_contained_state_document_bytes_in_directory(
+    canonical_root: &Path,
+    project_directory: &Path,
+    file_name: &str,
+) -> Result<Option<Vec<u8>>, StorageError> {
+    let project_dir = open_contained_directory(canonical_root, project_directory)?;
+    read_contained_bank_bytes(canonical_root, &project_dir, file_name)
+}
+
+#[cfg(not(unix))]
+fn read_contained_state_document_bytes_in_directory(
+    canonical_root: &Path,
+    project_directory: &Path,
+    file_name: &str,
+) -> Result<Option<Vec<u8>>, StorageError> {
+    let _ = (canonical_root, project_directory, file_name);
+    Err(StorageError::new(
+        "LIBRARY_SCAN_FAILED: contained state document reads require a non-following descriptor",
+    ))
+}
+
 #[cfg(unix)]
 fn read_banks_in_directory(
     canonical_root: &Path,
