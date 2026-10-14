@@ -4862,6 +4862,39 @@ test.describe('Tools Tab - Copy Scenes', () => {
     expect(calls[0].args.sourcePartIndex).toBe(2)
   })
 
+  test('the source cross can read all four Parts at once', async ({ page }) => {
+    const src = field(page, SOURCE, 'Part')
+    await src.locator('.part-all').click()
+    await page.waitForTimeout(200)
+    expect(await selected(src)).toEqual(['1', '4', 'All', '2', '3'])
+
+    // Four source Parts can only pair with the same four, so the destination follows
+    const dest = field(page, DEST, 'Parts')
+    expect(await selected(dest)).toEqual(['1', '4', 'All', '2', '3'])
+    await expect(dest.locator('.part-btn', { hasText: /^2$/ })).toBeDisabled()
+    await expect(dest.locator('.part-btn', { hasText: /^2$/ }))
+      .toHaveAttribute('title', 'Synced with source All selection')
+  })
+
+  test('reading all four Parts copies each one into the Part it came from', async ({ page }) => {
+    await field(page, SOURCE, 'Part').locator('.part-all').click()
+    await page.waitForTimeout(200)
+    const calls = await execute(page)
+    expect(calls).toHaveLength(4)
+    expect(calls.map((c: any) => [c.args.sourcePartIndex, c.args.destPartIndices]))
+      .toEqual([[0, [0]], [1, [1]], [2, [2]], [3, [3]]])
+  })
+
+  test('leaving All goes back to a single source Part', async ({ page }) => {
+    const src = field(page, SOURCE, 'Part')
+    await src.locator('.part-all').click()
+    await page.waitForTimeout(200)
+    await src.locator('.part-all').click()
+    await page.waitForTimeout(200)
+    expect(await selected(src)).toEqual(['1'])
+    await expect(field(page, DEST, 'Parts').locator('.part-btn', { hasText: /^2$/ })).toBeEnabled()
+  })
+
   test('several destination parts all receive the scene', async ({ page }) => {
     const parts = field(page, DEST, 'Parts')
     await parts.locator('.part-btn', { hasText: /^3$/ }).click()
@@ -5001,4 +5034,5 @@ test.describe('Tools Tab - Copy Scenes', () => {
       .toHaveText('1 scene copied to 2 parts in 1 bank')
   })
 })
+
 

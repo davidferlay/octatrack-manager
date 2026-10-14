@@ -348,7 +348,10 @@
 | CSC-2 | Copy Scenes | What it says it does | Select Copy Scenes | The description reads that it copies individual scenes - their parameter locks plus their track levels - between Parts and banks |
 | CSC-3 | Copy Scenes | Fields offered | Select Copy Scenes | Source asks Project, Bank, Part, Scenes; destination asks Project, Banks, Parts, Scenes |
 | CSC-4 | Copy Scenes | Starting point | Select Copy Scenes | Bank A, Part 1 and Scene 1 are selected on both sides |
-| CSC-4b | Copy Scenes | Part widget | Look at either Part field | It is the same cross as Copy Parts: 1 on top, 4 and 2 either side, 3 underneath. The destination has an All in the middle, the source does not |
+| CSC-4b | Copy Scenes | Part widget | Look at either Part field | It is the same cross as Copy Parts: 1 on top, 4 and 2 either side, 3 underneath, All in the middle |
+| CSC-4c | Copy Scenes | Source All | Press All on the source cross | All four Parts light up, and the destination cross lights up with them and goes inert, its buttons reading "Synced with source All selection" |
+| CSC-4d | Copy Scenes | Source All copies pairwise | With source All, copy scene 1 of Bank A into Bank B | Each source Part's scene 1 lands in the Part it came from: Part 1 into Part 1, Part 2 into Part 2, and so on |
+| CSC-4e | Copy Scenes | Leaving source All | Press All again | The source goes back to a single Part and the destination cross is usable again |
 | CSC-5 | Copy Scenes | Unloaded banks refused | Look at the source Bank row on a project with only a few banks | The banks that do not exist are greyed out and cannot be picked |
 | CSC-6 | Copy Scenes | One scene copied | Copy Part 1 scene 1 onto Part 2 scene 5, then open Part 2 scene 5 on the Scenes grid | It holds the same locks and the same track levels as the source |
 | CSC-7 | Copy Scenes | The scene's own level travels | Copy a scene whose XLV differs from the destination's | The destination scene's XLV is the source's |

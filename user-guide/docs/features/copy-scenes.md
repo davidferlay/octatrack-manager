@@ -22,7 +22,9 @@ Scenes are a Part thing, so a scene always belongs to a bank and a Part. Copy Sc
 2. Destination: choose the project, one or more banks, one or more Parts, and where the scenes should land.
 3. Execute.
 
-Both Part fields are the cross the device draws, the same one [Copy Parts](./copy-parts.md) uses: 1 on top, 4 and 2 either side, 3 underneath. The source reads one Part, so it has nothing in the middle; the destination writes to as many as you like and has an All there.
+Both Part fields are the cross the device draws, the same one [Copy Parts](./copy-parts.md) uses: 1 on top, 4 and 2 either side, 3 underneath, with All in the middle.
+
+Pressing All on the source reads all four Parts at once. Four Parts can only pair with the same four, so the destination cross follows along and goes inert: each Part's scenes land in the Part they came from. It is the way to move a whole bank's scenes without touching any sound design.
 
 The source pane has its own project selector, so a scene can be read out of a project without opening it. It is the same picker as the destination one - see [Copy Banks](./copy-bank.md#choosing-the-source-and-destination-projects) for what it lists and how to browse for a project it does not know about.
 

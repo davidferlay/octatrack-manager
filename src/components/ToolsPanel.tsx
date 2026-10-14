@@ -227,6 +227,8 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
   // Copy Scenes picks scenes out of one Part, so it keeps its own selections rather
   // than sharing Copy Parts' - the two mean different things by "part".
   const [sceneSourcePartIndex, setSceneSourcePartIndex] = useState<number>(0);
+  // All four source Parts have to pair with the same four, so the destination follows
+  const sceneSourceAllParts = sceneSourcePartIndex === -1;
   const [sourceSceneSelection, setSourceSceneSelection] = useState<SelectionState>({ selection: [0], anchor: 0 });
   const sourceSceneIndices = sourceSceneSelection.selection;
   const selectSourceScene = useCallback((idx: number, e: React.MouseEvent) => {
@@ -1319,17 +1321,26 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             && sceneDestBankIndices.includes(sourceBankIndex)
             ? [...sceneDestBankIndices.filter(i => i !== sourceBankIndex), sourceBankIndex]
             : sceneDestBankIndices;
+          /*
+           * All four source Parts pair with the four they came from; one source Part
+           * goes into every destination Part that was picked.
+           */
+          const scenePartPairs: [number, number[]][] = sceneSourceAllParts
+            ? [[0, [0]], [1, [1]], [2, [2]], [3, [3]]]
+            : [[sceneSourcePartIndex, sceneDestPartIndices]];
           for (const bankIdx of sceneBanksOrdered) {
-            await invoke("copy_scenes", {
-              sourceProject,
-              sourceBankIndex,
-              sourcePartIndex: sceneSourcePartIndex,
-              sourceSceneIndices,
-              destProject,
-              destBankIndex: bankIdx,
-              destPartIndices: sceneDestPartIndices,
-              destSceneIndices,
-            });
+            for (const [fromPart, intoParts] of scenePartPairs) {
+              await invoke("copy_scenes", {
+                sourceProject,
+                sourceBankIndex,
+                sourcePartIndex: fromPart,
+                sourceSceneIndices,
+                destProject,
+                destBankIndex: bankIdx,
+                destPartIndices: intoParts,
+                destSceneIndices,
+              });
+            }
           }
           const scenes = sourceSceneIndices.length;
           setStatusMessage(
@@ -1608,7 +1619,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 <div className="tools-part-cross-row">
                   <button
                     type="button"
-                    className={`tools-toggle-btn part-btn ${sceneSourcePartIndex === 0 ? "selected" : ""}`}
+                    className={`tools-toggle-btn part-btn ${sceneSourcePartIndex === 0 || sceneSourceAllParts ? "selected" : ""}`}
                     onClick={() => setSceneSourcePartIndex(0)}
                     title="Read the scenes of Part 1"
                   >
@@ -1618,16 +1629,26 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 <div className="tools-part-cross-row">
                   <button
                     type="button"
-                    className={`tools-toggle-btn part-btn ${sceneSourcePartIndex === 3 ? "selected" : ""}`}
+                    className={`tools-toggle-btn part-btn ${sceneSourcePartIndex === 3 || sceneSourceAllParts ? "selected" : ""}`}
                     onClick={() => setSceneSourcePartIndex(3)}
                     title="Read the scenes of Part 4"
                   >
                     4
                   </button>
-                  <span className="tools-part-cross-spacer"></span>
                   <button
                     type="button"
-                    className={`tools-toggle-btn part-btn ${sceneSourcePartIndex === 1 ? "selected" : ""}`}
+                    className={`tools-toggle-btn part-btn part-all ${sceneSourceAllParts ? "selected" : ""}`}
+                    onClick={() => {
+                      setSceneSourcePartIndex(sceneSourceAllParts ? 0 : -1);
+                      if (!sceneSourceAllParts) setSceneDestPartIndices([0, 1, 2, 3]);
+                    }}
+                    title="Read the scenes of all four Parts, each into the Part it came from"
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    className={`tools-toggle-btn part-btn ${sceneSourcePartIndex === 1 || sceneSourceAllParts ? "selected" : ""}`}
                     onClick={() => setSceneSourcePartIndex(1)}
                     title="Read the scenes of Part 2"
                   >
@@ -1637,7 +1658,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                 <div className="tools-part-cross-row">
                   <button
                     type="button"
-                    className={`tools-toggle-btn part-btn ${sceneSourcePartIndex === 2 ? "selected" : ""}`}
+                    className={`tools-toggle-btn part-btn ${sceneSourcePartIndex === 2 || sceneSourceAllParts ? "selected" : ""}`}
                     onClick={() => setSceneSourcePartIndex(2)}
                     title="Read the scenes of Part 3"
                   >
@@ -3020,13 +3041,14 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
             <div className="tools-field">
               <label>Parts</label>
               {/* The same cross as the source, several at a time */}
-              <div className="tools-part-cross">
+              <div className={`tools-part-cross ${sceneSourceAllParts ? "disabled" : ""}`}>
                 <div className="tools-part-cross-row">
                   <button
                     type="button"
                     className={`tools-toggle-btn part-btn ${sceneDestPartIndices.includes(0) ? "selected" : ""}`}
-                    onClick={() => toggleSceneDestPart(0)}
-                    title="Put the scenes into Part 1"
+                    onClick={() => !sceneSourceAllParts && toggleSceneDestPart(0)}
+                    disabled={sceneSourceAllParts}
+                    title={sceneSourceAllParts ? "Synced with source All selection" : "Put the scenes into Part 1"}
                   >
                     1
                   </button>
@@ -3035,24 +3057,28 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   <button
                     type="button"
                     className={`tools-toggle-btn part-btn ${sceneDestPartIndices.includes(3) ? "selected" : ""}`}
-                    onClick={() => toggleSceneDestPart(3)}
-                    title="Put the scenes into Part 4"
+                    onClick={() => !sceneSourceAllParts && toggleSceneDestPart(3)}
+                    disabled={sceneSourceAllParts}
+                    title={sceneSourceAllParts ? "Synced with source All selection" : "Put the scenes into Part 4"}
                   >
                     4
                   </button>
                   <button
                     type="button"
                     className={`tools-toggle-btn part-btn part-all ${sceneDestPartIndices.length === 4 ? "selected" : ""}`}
-                    onClick={() => setSceneDestPartIndices(sceneDestPartIndices.length === 4 ? [] : [0, 1, 2, 3])}
-                    title="Select all Parts"
+                    onClick={() => !sceneSourceAllParts
+                      && setSceneDestPartIndices(sceneDestPartIndices.length === 4 ? [] : [0, 1, 2, 3])}
+                    disabled={sceneSourceAllParts}
+                    title={sceneSourceAllParts ? "Synced with source All selection" : "Select all Parts"}
                   >
                     All
                   </button>
                   <button
                     type="button"
                     className={`tools-toggle-btn part-btn ${sceneDestPartIndices.includes(1) ? "selected" : ""}`}
-                    onClick={() => toggleSceneDestPart(1)}
-                    title="Put the scenes into Part 2"
+                    onClick={() => !sceneSourceAllParts && toggleSceneDestPart(1)}
+                    disabled={sceneSourceAllParts}
+                    title={sceneSourceAllParts ? "Synced with source All selection" : "Put the scenes into Part 2"}
                   >
                     2
                   </button>
@@ -3061,8 +3087,9 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                   <button
                     type="button"
                     className={`tools-toggle-btn part-btn ${sceneDestPartIndices.includes(2) ? "selected" : ""}`}
-                    onClick={() => toggleSceneDestPart(2)}
-                    title="Put the scenes into Part 3"
+                    onClick={() => !sceneSourceAllParts && toggleSceneDestPart(2)}
+                    disabled={sceneSourceAllParts}
+                    title={sceneSourceAllParts ? "Synced with source All selection" : "Put the scenes into Part 3"}
                   >
                     3
                   </button>
