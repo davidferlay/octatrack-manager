@@ -221,7 +221,7 @@ is shown and set on its own and never touches what a scene holds.
 | SC157 | Randomize | A whole page off | Untick a page heading and run it | None of that page's values change; the others do |
 | SC158 | Randomize | One parameter off | Untick a single parameter and run it | That one keeps its value; the rest are rerolled |
 | SC158b | Randomize | In and out are told apart quietly | Look at a list with one parameter unticked | The ones in are plain filled chips; the one out is hollow and dimmed. The list is not a block of orange when everything is in |
-| SC158c | Randomize | The list lines up | Read down the parameter list | Each page's chips start under its name, not under its tick |
+| SC158c | Randomize | The list lines up | Read down the parameter list | One left edge runs down the list: every page's tick and every chip box sit on it. Only the page name is indented, past its tick |
 | SC159 | Randomize | Part of a page | Untick one parameter of a page | The page heading shows it is partly on, and ticking the heading brings the whole page back |
 | SC160 | Randomize | Nothing to run | Untick every parameter, or press None under the scene grid | "Randomize" in the modal is refused, and says why |
 | SC161 | Randomize | It closes when it has run | Run it | The modal closes and the badge names what changed |
