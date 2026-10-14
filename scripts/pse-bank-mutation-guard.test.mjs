@@ -58,7 +58,7 @@ describe("pse-bank-mutation-guard on the current tree", () => {
     assert.deepEqual(report.findings, []);
     assert.equal(report.verdict, "PASS");
     assert.equal(report.bank_apply, "NOT_AUTHORIZED");
-    assert.deepEqual(report.gates, { BLOCKED: 13, ACTIVE: 5 });
+    assert.deepEqual(report.gates, { BLOCKED: 12, ACTIVE: 6 });
     for (const target of REQUIRED_RUST_TARGETS) {
       assert.ok(report.scanned.rust.includes(target), target);
     }
@@ -246,6 +246,7 @@ describe("ChangePlan / Mutation gate ledger", () => {
       "change-plan.bank-copy-deterministic",
       "change-plan.bank-move-deterministic",
       "change-plan.bank-swap-deterministic",
+      "change-plan.affected-reference-enumeration",
       "change-plan.stale-precondition-detection",
       "change-plan.plan-generation-no-write",
     ]);
@@ -335,8 +336,8 @@ describe("ChangePlan / Mutation gate ledger", () => {
     changePlanGate(backed).required_tests = ["bank_copy_changeplan_is_deterministic_and_blocked"];
     assert.deepEqual(evaluate(backed).findings, []);
     assert.deepEqual(evaluate(backed).summary, {
-      BLOCKED: ISSUE_191_GATE_IDS.length - 5,
-      ACTIVE: 5,
+      BLOCKED: ISSUE_191_GATE_IDS.length - 6,
+      ACTIVE: 6,
     });
   });
 

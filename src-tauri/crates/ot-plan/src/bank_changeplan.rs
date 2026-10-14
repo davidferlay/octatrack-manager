@@ -19,7 +19,9 @@ use ot_domain::project_structure::{
     TrackSlotReference, TrackStructure, UnmodeledDependency,
 };
 use ot_domain::{
-    ContentHash, RootId, RootRelativePath, SampleSlotKind, StateDocumentParseStatus,
+    BankReferenceInventory, BankSampleReferenceObservation, ContentHash, ReferenceClassStatus,
+    ReferenceCoverage, ReferenceCoverageAggregate, ReferenceOrigin, ReferenceScopeRole, RootId,
+    RootRelativePath, SampleReferenceStatus, SampleSlotKind, StateDocumentParseStatus,
     StateDocumentRole,
 };
 use sha2::{Digest, Sha256};
@@ -107,30 +109,45 @@ pub struct BankChangePlanningFacts {
     pub scope_manifest: TreeManifest,
     pub source_presence: BankStateDocumentSet,
     pub destination_presence: BankStateDocumentSet,
+    pub reference_inventory: BankReferenceInventory,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum MissingReferenceClass {
-    SampleLockPatternTrackStep,
-    InactiveMachineSlot,
-    PartsSaved,
-    RecorderSlotId,
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BankChangePlanReferenceObservation {
+    pub scope: ReferenceScopeRole,
+    pub bank: BankIndex,
+    pub document_role: StateDocumentRole,
+    pub origin: ReferenceOrigin,
+    pub part_state: ot_domain::PartStateRole,
+    pub part: PartIndex,
+    pub pattern: Option<PatternIndex>,
+    pub track: TrackIndex,
+    pub step: Option<u8>,
+    pub target: TrackSlotReference,
+    pub audible: Option<bool>,
+    pub reference_status: Option<SampleReferenceStatus>,
+    pub referenced_relative_path: Option<RootRelativePath>,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ReferenceCoverage {
-    Partial,
-}
-
-impl ReferenceCoverage {
-    pub fn missing_classes(self) -> &'static [MissingReferenceClass] {
-        const ALL: [MissingReferenceClass; 4] = [
-            MissingReferenceClass::SampleLockPatternTrackStep,
-            MissingReferenceClass::InactiveMachineSlot,
-            MissingReferenceClass::PartsSaved,
-            MissingReferenceClass::RecorderSlotId,
-        ];
-        &ALL
+impl From<(ReferenceScopeRole, BankSampleReferenceObservation)>
+    for BankChangePlanReferenceObservation
+{
+    fn from((scope, observation): (ReferenceScopeRole, BankSampleReferenceObservation)) -> Self {
+        Self {
+            scope,
+            bank: observation.bank,
+            document_role: observation.document_role,
+            origin: observation.origin,
+            part_state: observation.part_state,
+            part: observation.part,
+            pattern: observation.pattern,
+            track: observation.track,
+            step: observation.step,
+            target: observation.target,
+            audible: observation.audible,
+            reference_status: observation.reference_status,
+            referenced_relative_path: observation.referenced_relative_path,
+        }
     }
 }
 
@@ -279,7 +296,9 @@ pub struct BankChangePlan {
     pub affected_parts: Vec<AffectedPartObservation>,
     pub affected_tracks: Vec<AffectedTrackObservation>,
     pub affected_sample_references: Vec<AffectedSampleReferenceObservation>,
+    pub reference_observations: Vec<BankChangePlanReferenceObservation>,
     pub reference_coverage: ReferenceCoverage,
+    pub reference_coverage_aggregate: ReferenceCoverageAggregate,
     pub project_state_observation: Option<ot_domain::project_structure::ProjectStateDocument>,
     pub state_document_effect: BankStateDocumentEffectSummary,
     pub unmodeled_dependencies: Vec<UnmodeledDependency>,
@@ -325,6 +344,7 @@ pub enum BankChangePlanError {
     ProjectPathMismatch,
     BankPresenceMismatch,
     ReadinessEvidenceMismatch,
+    ReferenceInventoryRevisionMismatch,
     Plan(PlanError),
 }
 
@@ -352,6 +372,9 @@ impl fmt::Display for BankChangePlanError {
             Self::ReadinessEvidenceMismatch => {
                 formatter.write_str("readiness evidence is not current_main()")
             }
+            Self::ReferenceInventoryRevisionMismatch => formatter.write_str(
+                "reference inventory observed revision does not match planning facts",
+            ),
             Self::Plan(error) => write!(formatter, "{error}"),
         }
     }
@@ -421,6 +444,10 @@ pub fn plan_bank_change(
 
     let (affected_patterns, affected_parts, affected_tracks, affected_sample_references) =
         enumerate_affected_references(&facts.project_structure, source, destination, operation);
+    let reference_observations =
+        scoped_reference_observations(&facts.reference_inventory, source, destination, operation);
+    let reference_coverage = facts.reference_inventory.coverage;
+    let reference_coverage_aggregate = reference_coverage.aggregate();
 
     let backup_paths: Vec<_> = candidate_change_documents
         .iter()
@@ -447,7 +474,9 @@ pub fn plan_bank_change(
         affected_parts,
         affected_tracks,
         affected_sample_references,
-        reference_coverage: ReferenceCoverage::Partial,
+        reference_observations,
+        reference_coverage,
+        reference_coverage_aggregate,
         project_state_observation: facts.project_structure.project_state.clone(),
         state_document_effect: BankStateDocumentEffectSummary {
             copy_saved_checkpoint_semantics: state_effect.copy_saved_checkpoint_semantics,
@@ -510,7 +539,85 @@ fn validate_facts(
     {
         return Err(BankChangePlanError::BankPresenceMismatch);
     }
+    if facts.reference_inventory.observed_revision != facts.observed_revision {
+        return Err(BankChangePlanError::ReferenceInventoryRevisionMismatch);
+    }
     Ok(())
+}
+
+fn scoped_reference_observations(
+    inventory: &BankReferenceInventory,
+    source: BankIndex,
+    destination: BankIndex,
+    operation: BankChangeOperation,
+) -> Vec<BankChangePlanReferenceObservation> {
+    let mut out = Vec::new();
+    for observation in &inventory.observations {
+        let scope = match operation {
+            BankChangeOperation::Copy if observation.bank == source => {
+                Some(ReferenceScopeRole::SourceContent)
+            }
+            BankChangeOperation::Copy if observation.bank == destination => {
+                Some(ReferenceScopeRole::DestinationCurrent)
+            }
+            BankChangeOperation::Move | BankChangeOperation::Swap
+                if observation.bank == source || observation.bank == destination =>
+            {
+                Some(ReferenceScopeRole::OperatedBank)
+            }
+            _ => None,
+        };
+        if let Some(scope) = scope {
+            out.push(BankChangePlanReferenceObservation::from((
+                scope,
+                observation.clone(),
+            )));
+        }
+    }
+    out.sort_by(compare_plan_reference);
+    out
+}
+
+fn compare_plan_reference(
+    left: &BankChangePlanReferenceObservation,
+    right: &BankChangePlanReferenceObservation,
+) -> std::cmp::Ordering {
+    scope_rank(left.scope)
+        .cmp(&scope_rank(right.scope))
+        .then_with(|| left.bank.get().cmp(&right.bank.get()))
+        .then_with(|| {
+            state_role_rank(left.document_role).cmp(&state_role_rank(right.document_role))
+        })
+        .then_with(|| origin_rank(left.origin).cmp(&origin_rank(right.origin)))
+        .then_with(|| left.part.get().cmp(&right.part.get()))
+        .then_with(|| pattern_key(left.pattern).cmp(&pattern_key(right.pattern)))
+        .then_with(|| left.track.get().cmp(&right.track.get()))
+        .then_with(|| step_key(left.step).cmp(&step_key(right.step)))
+        .then_with(|| format!("{:?}", left.target).cmp(&format!("{:?}", right.target)))
+}
+
+fn scope_rank(scope: ReferenceScopeRole) -> u8 {
+    match scope {
+        ReferenceScopeRole::SourceContent => 0,
+        ReferenceScopeRole::DestinationCurrent => 1,
+        ReferenceScopeRole::OperatedBank => 2,
+    }
+}
+
+fn origin_rank(origin: ReferenceOrigin) -> u8 {
+    match origin {
+        ReferenceOrigin::ActiveMachine => 0,
+        ReferenceOrigin::SampleLock => 1,
+        ReferenceOrigin::SavedPartMachine => 2,
+    }
+}
+
+fn pattern_key(pattern: Option<PatternIndex>) -> u8 {
+    pattern.map(|index| index.get()).unwrap_or(255)
+}
+
+fn step_key(step: Option<u8>) -> u8 {
+    step.unwrap_or(255)
 }
 
 fn presence_matches_structure(set: &BankStateDocumentSet, structure: &ProjectStructure) -> bool {
@@ -1097,10 +1204,18 @@ pub fn derive_bank_changeplan_id(plan: &BankChangePlan) -> PlanId {
     encode_parts(&mut hasher, &plan.affected_parts);
     encode_tracks(&mut hasher, &plan.affected_tracks);
     encode_samples(&mut hasher, &plan.affected_sample_references);
+    encode_reference_observations(&mut hasher, &plan.reference_observations);
     encode_field(
         &mut hasher,
         60,
-        &[reference_coverage_code(plan.reference_coverage)],
+        &reference_coverage_bytes(plan.reference_coverage),
+    );
+    encode_field(
+        &mut hasher,
+        61,
+        &[reference_coverage_aggregate_code(
+            plan.reference_coverage_aggregate,
+        )],
     );
     encode_preconditions(&mut hasher, &plan.preconditions);
     encode_blockers(&mut hasher, &plan.blockers);
@@ -1321,8 +1436,99 @@ fn readiness_gap_code(gap: ReadinessGap) -> u8 {
     }
 }
 
-fn reference_coverage_code(_coverage: ReferenceCoverage) -> u8 {
-    1
+fn reference_coverage_bytes(coverage: ReferenceCoverage) -> [u8; 5] {
+    [
+        class_status_code(coverage.active_machine),
+        class_status_code(coverage.sample_locks),
+        class_status_code(coverage.saved_parts),
+        class_status_code(coverage.inactive_machine_slots),
+        class_status_code(coverage.recorder_setup),
+    ]
+}
+
+fn class_status_code(status: ReferenceClassStatus) -> u8 {
+    match status {
+        ReferenceClassStatus::Covered => 1,
+        ReferenceClassStatus::ExcludedByContract => 2,
+        ReferenceClassStatus::Unmodeled => 3,
+    }
+}
+
+fn reference_coverage_aggregate_code(aggregate: ReferenceCoverageAggregate) -> u8 {
+    match aggregate {
+        ReferenceCoverageAggregate::CompleteForChangePlanReview => 1,
+        ReferenceCoverageAggregate::Partial => 2,
+        ReferenceCoverageAggregate::Blocked => 3,
+    }
+}
+
+fn encode_reference_observations(
+    hasher: &mut Sha256,
+    observations: &[BankChangePlanReferenceObservation],
+) {
+    encode_count(hasher, 58, observations.len());
+    for observation in observations {
+        let mut bytes = vec![
+            scope_code(observation.scope),
+            observation.bank.get(),
+            role_code(observation.document_role),
+            origin_code(observation.origin),
+            part_state_code(observation.part_state),
+            observation.part.get(),
+            pattern_key(observation.pattern),
+            observation.track.get(),
+            step_key(observation.step),
+        ];
+        bytes.extend(slot_reference_bytes(observation.target));
+        bytes.push(audible_code(observation.audible));
+        bytes.push(reference_status_code(observation.reference_status));
+        if let Some(path) = &observation.referenced_relative_path {
+            bytes.extend(path.as_str().as_bytes());
+        }
+        encode_field(hasher, 59, &bytes);
+    }
+}
+
+fn scope_code(scope: ReferenceScopeRole) -> u8 {
+    match scope {
+        ReferenceScopeRole::SourceContent => 1,
+        ReferenceScopeRole::DestinationCurrent => 2,
+        ReferenceScopeRole::OperatedBank => 3,
+    }
+}
+
+fn origin_code(origin: ReferenceOrigin) -> u8 {
+    match origin {
+        ReferenceOrigin::ActiveMachine => 1,
+        ReferenceOrigin::SampleLock => 2,
+        ReferenceOrigin::SavedPartMachine => 3,
+    }
+}
+
+fn part_state_code(role: ot_domain::PartStateRole) -> u8 {
+    match role {
+        ot_domain::PartStateRole::Working => 1,
+        ot_domain::PartStateRole::Saved => 2,
+    }
+}
+
+fn audible_code(audible: Option<bool>) -> u8 {
+    match audible {
+        None => 0,
+        Some(true) => 1,
+        Some(false) => 2,
+    }
+}
+
+fn reference_status_code(status: Option<SampleReferenceStatus>) -> u8 {
+    match status {
+        None => 0,
+        Some(SampleReferenceStatus::Resolved) => 1,
+        Some(SampleReferenceStatus::Missing) => 2,
+        Some(SampleReferenceStatus::InvalidPath) => 3,
+        Some(SampleReferenceStatus::Ambiguous) => 4,
+        Some(SampleReferenceStatus::UnassignedSlot) => 5,
+    }
 }
 
 fn state_doc_semantics_code(semantics: CopySavedCheckpointSemantics) -> u8 {
@@ -1449,7 +1655,11 @@ mod tests {
         BankStructure, MachineKind, PatternPlaybackScale, PatternScale, PatternStructure,
         ProjectStateDocument, TrackPlayback, TrackStructure, BANK_UNMODELED_DEPENDENCIES,
     };
-    use ot_domain::{RecorderBufferId, SampleSlotId, SampleSlotKind};
+    use ot_domain::{
+        BankReferenceInventory, BankSampleReferenceObservation, PartStateRole, RecorderBufferId,
+        ReferenceCoverage, ReferenceCoverageAggregate, ReferenceOrigin, ReferenceScopeRole,
+        SampleReferenceStatus, SampleSlotId, SampleSlotKind,
+    };
     use std::collections::HashSet;
 
     fn fingerprint() -> String {
@@ -1574,6 +1784,40 @@ mod tests {
             scope_manifest: manifest,
             source_presence: presence(source),
             destination_presence: presence(destination),
+            reference_inventory: synthetic_reference_inventory(source, destination),
+        }
+    }
+
+    fn synthetic_reference_inventory(
+        source: BankIndex,
+        destination: BankIndex,
+    ) -> BankReferenceInventory {
+        let mut observations = Vec::new();
+        for (bank, role) in [
+            (source, StateDocumentRole::Working),
+            (source, StateDocumentRole::SavedCheckpoint),
+            (destination, StateDocumentRole::Working),
+            (destination, StateDocumentRole::SavedCheckpoint),
+        ] {
+            observations.push(BankSampleReferenceObservation {
+                bank,
+                document_role: role,
+                origin: ReferenceOrigin::ActiveMachine,
+                part_state: PartStateRole::Working,
+                part: PartIndex::new(0).unwrap(),
+                pattern: None,
+                track: TrackIndex::new(0).unwrap(),
+                step: None,
+                target: TrackSlotReference::RecorderBuffer(RecorderBufferId::new(129).unwrap()),
+                audible: None,
+                reference_status: None,
+                referenced_relative_path: None,
+            });
+        }
+        BankReferenceInventory {
+            observed_revision: 1,
+            observations,
+            coverage: ReferenceCoverage::complete_for_changeplan_review(),
         }
     }
 
@@ -1656,7 +1900,41 @@ mod tests {
     }
 
     #[test]
-    fn bank_changeplan_reference_enumeration_is_deterministic_and_partial() {
+    fn reference_inventory_is_deterministic() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let first = plan_bank_change(
+            BankChangeIntent::Copy {
+                source,
+                destination,
+            },
+            &facts(source, destination),
+            &ReadinessEvidence::current_main(),
+        )
+        .unwrap();
+        let second = plan_bank_change(
+            BankChangeIntent::Copy {
+                source,
+                destination,
+            },
+            &facts(source, destination),
+            &ReadinessEvidence::current_main(),
+        )
+        .unwrap();
+        assert_eq!(first.reference_observations, second.reference_observations);
+        assert_eq!(
+            first.reference_coverage_aggregate,
+            ReferenceCoverageAggregate::CompleteForChangePlanReview
+        );
+        assert!(!first.affected_patterns.is_empty());
+        assert!(first
+            .reference_observations
+            .iter()
+            .any(|sample| matches!(sample.target, TrackSlotReference::RecorderBuffer(_))));
+    }
+
+    #[test]
+    fn active_machine_reference_is_enumerated() {
         let source = BankIndex::new(0).unwrap();
         let destination = BankIndex::new(1).unwrap();
         let plan = plan_bank_change(
@@ -1668,14 +1946,289 @@ mod tests {
             &ReadinessEvidence::current_main(),
         )
         .unwrap();
-        assert_eq!(plan.reference_coverage, ReferenceCoverage::Partial);
-        assert!(!plan.affected_patterns.is_empty());
-        assert!(!plan.affected_parts.is_empty());
-        assert!(!plan.affected_tracks.is_empty());
+        assert!(plan.reference_observations.iter().any(|observation| {
+            observation.origin == ReferenceOrigin::ActiveMachine
+                && observation.scope == ReferenceScopeRole::SourceContent
+        }));
+    }
+
+    #[test]
+    fn copy_reference_scope_is_deterministic() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let plan = plan_bank_change(
+            BankChangeIntent::Copy {
+                source,
+                destination,
+            },
+            &facts(source, destination),
+            &ReadinessEvidence::current_main(),
+        )
+        .unwrap();
         assert!(plan
-            .affected_sample_references
+            .reference_observations
             .iter()
-            .any(|sample| matches!(sample.slot, TrackSlotReference::RecorderBuffer(_))));
+            .any(|observation| observation.scope == ReferenceScopeRole::DestinationCurrent));
+        assert!(plan
+            .reference_observations
+            .iter()
+            .any(|observation| observation.scope == ReferenceScopeRole::SourceContent));
+    }
+
+    #[test]
+    fn move_reference_scope_is_deterministic() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let plan = plan_bank_change(
+            BankChangeIntent::Move {
+                source,
+                destination,
+            },
+            &facts(source, destination),
+            &ReadinessEvidence::current_main(),
+        )
+        .unwrap();
+        assert!(plan
+            .reference_observations
+            .iter()
+            .all(|observation| observation.scope == ReferenceScopeRole::OperatedBank));
+    }
+
+    #[test]
+    fn swap_reference_scope_is_deterministic() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let plan = plan_bank_change(
+            BankChangeIntent::Swap {
+                source,
+                destination,
+            },
+            &facts(source, destination),
+            &ReadinessEvidence::current_main(),
+        )
+        .unwrap();
+        assert_eq!(plan.reference_observations.len(), 4);
+    }
+
+    #[test]
+    fn reference_step_change_invalidates_plan_id() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let mut planning = facts(source, destination);
+        planning
+            .reference_inventory
+            .observations
+            .push(BankSampleReferenceObservation {
+                bank: source,
+                document_role: StateDocumentRole::Working,
+                origin: ReferenceOrigin::SampleLock,
+                part_state: PartStateRole::Working,
+                part: PartIndex::new(0).unwrap(),
+                pattern: Some(PatternIndex::new(0).unwrap()),
+                track: TrackIndex::new(0).unwrap(),
+                step: Some(0),
+                target: TrackSlotReference::Slot(
+                    SampleSlotId::new(SampleSlotKind::Static, 1).unwrap(),
+                ),
+                audible: Some(true),
+                reference_status: None,
+                referenced_relative_path: None,
+            });
+        let first = plan_bank_change(
+            BankChangeIntent::Copy {
+                source,
+                destination,
+            },
+            &planning,
+            &ReadinessEvidence::current_main(),
+        )
+        .unwrap()
+        .id()
+        .clone();
+        planning
+            .reference_inventory
+            .observations
+            .last_mut()
+            .unwrap()
+            .step = Some(1);
+        let second = plan_bank_change(
+            BankChangeIntent::Copy {
+                source,
+                destination,
+            },
+            &planning,
+            &ReadinessEvidence::current_main(),
+        )
+        .unwrap()
+        .id()
+        .clone();
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn missing_reference_status_is_preserved() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let mut planning = facts(source, destination);
+        planning.reference_inventory.observations[0].reference_status =
+            Some(SampleReferenceStatus::Missing);
+        planning.reference_inventory.observations[0].referenced_relative_path =
+            Some(RootRelativePath::parse("SET/PROJECT/missing.wav").unwrap());
+        let plan = plan_bank_change(
+            BankChangeIntent::Copy {
+                source,
+                destination,
+            },
+            &planning,
+            &ReadinessEvidence::current_main(),
+        )
+        .unwrap();
+        assert!(plan.reference_observations.iter().any(|observation| {
+            observation.reference_status == Some(SampleReferenceStatus::Missing)
+        }));
+    }
+
+    #[test]
+    fn invalid_path_status_is_preserved() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let mut planning = facts(source, destination);
+        planning.reference_inventory.observations[0].reference_status =
+            Some(SampleReferenceStatus::InvalidPath);
+        let plan = plan_bank_change(
+            BankChangeIntent::Copy {
+                source,
+                destination,
+            },
+            &planning,
+            &ReadinessEvidence::current_main(),
+        )
+        .unwrap();
+        assert!(plan.reference_observations.iter().any(|observation| {
+            observation.reference_status == Some(SampleReferenceStatus::InvalidPath)
+        }));
+    }
+
+    #[test]
+    fn ambiguous_reference_status_is_preserved() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let mut planning = facts(source, destination);
+        planning.reference_inventory.observations[0].reference_status =
+            Some(SampleReferenceStatus::Ambiguous);
+        let plan = plan_bank_change(
+            BankChangeIntent::Copy {
+                source,
+                destination,
+            },
+            &planning,
+            &ReadinessEvidence::current_main(),
+        )
+        .unwrap();
+        assert!(plan.reference_observations.iter().any(|observation| {
+            observation.reference_status == Some(SampleReferenceStatus::Ambiguous)
+        }));
+    }
+
+    #[test]
+    fn working_and_saved_checkpoint_references_stay_separate() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let plan = plan_bank_change(
+            BankChangeIntent::Copy {
+                source,
+                destination,
+            },
+            &facts(source, destination),
+            &ReadinessEvidence::current_main(),
+        )
+        .unwrap();
+        assert!(plan.reference_observations.iter().any(|observation| {
+            observation.bank == source && observation.document_role == StateDocumentRole::Working
+        }));
+        assert!(plan.reference_observations.iter().any(|observation| {
+            observation.bank == source
+                && observation.document_role == StateDocumentRole::SavedCheckpoint
+        }));
+    }
+
+    #[test]
+    fn reference_slot_change_invalidates_plan_id() {
+        let first = plan_id_for_slot(TrackSlotReference::RecorderBuffer(
+            RecorderBufferId::new(129).unwrap(),
+        ));
+        let second = plan_id_for_slot(TrackSlotReference::Slot(
+            SampleSlotId::new(SampleSlotKind::Flex, 2).unwrap(),
+        ));
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn reference_status_change_invalidates_plan_id() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let mut planning = facts(source, destination);
+        planning.reference_inventory.observations[0].reference_status =
+            Some(SampleReferenceStatus::Missing);
+        let first = plan_bank_change(
+            BankChangeIntent::Copy {
+                source,
+                destination,
+            },
+            &planning,
+            &ReadinessEvidence::current_main(),
+        )
+        .unwrap()
+        .id()
+        .clone();
+        planning.reference_inventory.observations[0].reference_status =
+            Some(SampleReferenceStatus::Resolved);
+        planning.reference_inventory.observations[0].referenced_relative_path =
+            Some(RootRelativePath::parse("SET/PROJECT/sample.wav").unwrap());
+        let second = plan_bank_change(
+            BankChangeIntent::Copy {
+                source,
+                destination,
+            },
+            &planning,
+            &ReadinessEvidence::current_main(),
+        )
+        .unwrap()
+        .id()
+        .clone();
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn coverage_change_invalidates_plan_id() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let mut planning = facts(source, destination);
+        let first = plan_bank_change(
+            BankChangeIntent::Copy {
+                source,
+                destination,
+            },
+            &planning,
+            &ReadinessEvidence::current_main(),
+        )
+        .unwrap()
+        .id()
+        .clone();
+        planning.reference_inventory.coverage.sample_locks =
+            ot_domain::ReferenceClassStatus::Unmodeled;
+        let second = plan_bank_change(
+            BankChangeIntent::Copy {
+                source,
+                destination,
+            },
+            &planning,
+            &ReadinessEvidence::current_main(),
+        )
+        .unwrap()
+        .id()
+        .clone();
+        assert_ne!(first, second);
     }
 
     #[test]
@@ -1751,6 +2304,11 @@ mod tests {
                         *assigned = slot;
                     }
                 }
+            }
+        }
+        for observation in &mut planning.reference_inventory.observations {
+            if observation.origin == ReferenceOrigin::ActiveMachine {
+                observation.target = slot;
             }
         }
         let plan = plan_bank_change(

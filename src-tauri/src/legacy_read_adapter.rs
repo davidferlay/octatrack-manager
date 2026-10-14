@@ -340,6 +340,23 @@ fn is_inventory_audio_file(name: &str) -> bool {
         })
 }
 
+/// Root-relative paths of catalog-eligible WAV/AIF files under a registered root.
+pub(crate) fn registered_root_wav_inventory_paths(
+    canonical_root: &Path,
+) -> Result<HashSet<String>, StorageError> {
+    let mut candidates = Vec::new();
+    collect_audio_candidates(
+        canonical_root,
+        canonical_root,
+        &mut Vec::new(),
+        &mut candidates,
+    )?;
+    Ok(candidates
+        .into_iter()
+        .map(|(relative_path, _, _)| relative_path.as_str().to_owned())
+        .collect())
+}
+
 fn modified_at_unix_ns(metadata: &fs::Metadata) -> Option<i64> {
     let modified = metadata.modified().ok()?;
     match modified.duration_since(UNIX_EPOCH) {

@@ -123,10 +123,18 @@ mod tests {
     ) -> BankChangePlanningFacts {
         let project = project_relative_path(capture);
         let structure = read_project_structure(root, &project).unwrap();
+        let observed_revision = 1;
+        let reference_inventory = crate::bank_reference_inventory::build_bank_reference_inventory(
+            root,
+            &project,
+            &structure,
+            observed_revision,
+        )
+        .expect("reference inventory");
         BankChangePlanningFacts {
             root_id: RootId::new("root-session-fixture").unwrap(),
             device_fingerprint: format!("rootfp:v1:{}", "c".repeat(64)),
-            observed_revision: 1,
+            observed_revision,
             identity_is_stable: true,
             read_model_schema: PROJECT_STRUCTURE_SCHEMA.to_owned(),
             project_relative_path: project.clone(),
@@ -134,6 +142,7 @@ mod tests {
             source_presence: presence_from_structure(&structure, source),
             destination_presence: presence_from_structure(&structure, destination),
             project_structure: structure,
+            reference_inventory,
         }
     }
 
@@ -183,10 +192,18 @@ mod tests {
         let source = BankIndex::new(1).unwrap();
         let destination = BankIndex::new(0).unwrap();
         let structure = read_project_structure(&root, &project).unwrap();
+        let observed_revision = 1;
+        let reference_inventory = crate::bank_reference_inventory::build_bank_reference_inventory(
+            &root,
+            &project,
+            &structure,
+            observed_revision,
+        )
+        .expect("reference inventory");
         let facts = BankChangePlanningFacts {
             root_id: RootId::new("root-session-fixture").unwrap(),
             device_fingerprint: format!("rootfp:v1:{}", "d".repeat(64)),
-            observed_revision: 1,
+            observed_revision,
             identity_is_stable: true,
             read_model_schema: PROJECT_STRUCTURE_SCHEMA.to_owned(),
             project_relative_path: project.clone(),
@@ -194,6 +211,7 @@ mod tests {
             source_presence: presence_from_structure(&structure, source),
             destination_presence: presence_from_structure(&structure, destination),
             project_structure: structure,
+            reference_inventory,
         };
         plan_bank_change(
             BankChangeIntent::Move {

@@ -38,9 +38,22 @@
       "id": "change-plan.affected-reference-enumeration",
       "phase": "change-plan",
       "title": "affected reference enumeration test",
-      "status": "BLOCKED",
-      "waits_on": [181],
-      "required_tests": []
+      "status": "ACTIVE",
+      "required_tests": [
+        "reference_inventory_is_deterministic",
+        "active_machine_reference_is_enumerated",
+        "saved_part_reference_classification_is_pinned",
+        "inactive_machine_slot_is_excluded",
+        "static_sample_lock_uses_static_slot",
+        "flex_sample_lock_uses_flex_slot",
+        "inaudible_leftover_lock_is_preserved",
+        "copy_reference_scope_is_deterministic",
+        "move_reference_scope_is_deterministic",
+        "swap_reference_scope_is_deterministic",
+        "missing_reference_status_is_preserved",
+        "working_and_saved_checkpoint_references_stay_separate",
+        "bank_changeplan_generation_leaves_committed_fixture_bytes_identical"
+      ]
     },
     {
       "id": "change-plan.stale-precondition-detection",

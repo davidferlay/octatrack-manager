@@ -4,6 +4,7 @@
 mod asset_derivation_query;
 mod audio_pool;
 mod audio_runtime;
+mod bank_reference_inventory;
 mod bank_validation;
 mod catalog_runtime;
 mod clone_runtime;

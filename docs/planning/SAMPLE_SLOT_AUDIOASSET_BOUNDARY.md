@@ -236,7 +236,7 @@ Bank 操作の後状態では少なくとも次を確認する。
 | P-7 | SavedCheckpoint（`project.strd`、`parts.saved`）側の Slot 解決を計画でどう扱うか | `ReadinessGap::WorkingSavedCheckpointRule`（PSE 監査 §7C） |
 | P-8 | I-9 を crate 依存で強制すること | 現状はソース文字列ガード。Project Structure を独立 crate に分ける等は製品コード変更なので、この PR では提案だけ |
 | P-9 | catalog の Project 側投影テーブルと Sample 側テーブルが同じ crate にあること | 所有はテーブルと関数の意味だけで分けている。分割は将来の判断 |
-| P-10 | §3.2 規則 6 の (a)–(d) を read model に加えるか、未モデルとして失敗で閉じること | #181 の前提。現状は I-10 で範囲を固定しているだけ |
+| P-10 | §3.2 規則 6 の (a)–(d) を read model に加えるか、未モデルとして失敗で閉じること | ChangePlan 在庫は `MO-PSE-BANK-CHANGEPLAN-REFERENCE-COVERAGE-1` で (a)(c) 列挙、(b) 契約除外、(d) 未モデル。構造 read model（I-10）は変えない |
 
 ## 9. 回帰テスト一覧
 

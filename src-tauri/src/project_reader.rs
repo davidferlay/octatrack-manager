@@ -2,6 +2,10 @@
 #![allow(clippy::collapsible_if)]
 #![allow(clippy::collapsible_match)]
 
+use ot_domain::{
+    effective_sample_lock_track_length, locked_sample_slot_raw, sample_lock_is_audible,
+    SAMPLE_LOCK_SCAN_STEPS,
+};
 use ot_tools_io::settings::{LoopMode, TimeStretchMode, TrigQuantizationMode};
 use ot_tools_io::types::{Slice, SlotAttributes, SlotMarkers, SlotType};
 use ot_tools_io::{
@@ -1040,20 +1044,6 @@ pub struct SampleSlotUsage {
     pub flex_usage: Vec<Vec<SlotUsageEntry>>,
 }
 
-const SAMPLE_LOCK_SCAN_STEPS: usize = 64;
-
-fn pattern_effective_track_length(
-    pattern: &ot_tools_io::patterns::Pattern,
-    track: &ot_tools_io::patterns::AudioTrackTrigs,
-) -> usize {
-    let length = if pattern.scale.scale_mode == 1 {
-        track.scale_per_track_mode.per_track_len
-    } else {
-        pattern.scale.master_len
-    };
-    (length as usize).min(SAMPLE_LOCK_SCAN_STEPS)
-}
-
 /// Record sample-lock references for one pattern track into the static or flex pool.
 fn append_sample_lock_usage_for_track(
     bank_index: u8,
@@ -1070,7 +1060,11 @@ fn append_sample_lock_usage_for_track(
         1 => flex_usage,
         _ => return,
     };
-    let track_length = pattern_effective_track_length(pattern, track);
+    let track_length = effective_sample_lock_track_length(
+        pattern.scale.scale_mode,
+        pattern.scale.master_len,
+        track.scale_per_track_mode.per_track_len,
+    );
     for (step_index, parameter_lock) in track
         .plocks
         .0
@@ -1078,10 +1072,12 @@ fn append_sample_lock_usage_for_track(
         .enumerate()
         .take(SAMPLE_LOCK_SCAN_STEPS)
     {
-        let slot_id = match machine_type {
-            0 => parameter_lock.static_slot_id,
-            1 => parameter_lock.flex_slot_id,
-            _ => return,
+        let Some(slot_id) = locked_sample_slot_raw(
+            machine_type,
+            parameter_lock.static_slot_id,
+            parameter_lock.flex_slot_id,
+        ) else {
+            return;
         };
         if let Some(index) = crate::bank_validation::bank_machine_slot_to_usage_index(slot_id) {
             if let Some(entries) = pool.get_mut(index) {
@@ -1092,7 +1088,7 @@ fn append_sample_lock_usage_for_track(
                     part: None,
                     pattern: Some(pattern_index),
                     step: Some(step_index as u8),
-                    audible: step_index < track_length,
+                    audible: sample_lock_is_audible(step_index, track_length),
                 });
             }
         }
