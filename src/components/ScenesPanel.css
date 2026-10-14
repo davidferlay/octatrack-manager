@@ -1067,7 +1067,7 @@
 
 .scene-randomize-header-info {
   margin-right: auto;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   color: var(--elektron-text-secondary);
   position: relative;
   top: 1px;
@@ -1075,7 +1075,7 @@
 }
 
 .modal-content.scene-randomize-modal {
-  max-width: 820px;
+  max-width: 660px;
   width: 94%;
 }
 
@@ -1083,8 +1083,8 @@
    the other, so the list has the room it needs without a tall modal. */
 .scene-randomize-body {
   display: grid;
-  grid-template-columns: 290px 1fr;
-  gap: 18px;
+  grid-template-columns: 270px 1fr;
+  gap: 16px;
   align-items: start;
   text-align: left;
 }
@@ -1125,7 +1125,7 @@
   text-transform: none;
   letter-spacing: 0;
   font-weight: 400;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .scene-randomize-hint {
@@ -1152,7 +1152,7 @@
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 2px 0;
+  padding: 2px 0 2px 1px;
   background: none;
   border: none;
   cursor: pointer;
@@ -1176,14 +1176,15 @@
 }
 
 .scene-randomize-page-params {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(78px, 1fr));
   gap: 4px;
   padding: 4px 0 0 0;
 }
 
 .scene-randomize-param {
   padding: 3px 7px;
+  text-align: left;
   font-size: 11px;
   font-family: inherit;
   background: #2b2b2b;
@@ -1205,19 +1206,12 @@
   opacity: 0.5;
 }
 
-.scene-randomize-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 0 16px 16px;
-}
-
-.scene-randomize-go {
-  border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
-}
-
-.scene-randomize-go:disabled {
+.scene-randomize-modal .modal-button.primary:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.scene-randomize-modal .modal-button.primary:disabled:hover {
+  background-color: var(--elektron-orange);
+  border-color: var(--elektron-orange);
 }

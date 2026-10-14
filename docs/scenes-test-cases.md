@@ -225,6 +225,7 @@ is shown and set on its own and never touches what a scene holds.
 | SC159 | Randomize | Part of a page | Untick one parameter of a page | The page heading shows it is partly on, and ticking the heading brings the whole page back |
 | SC160 | Randomize | Nothing to run | Untick every parameter, or press None under the scene grid | "Randomize" in the modal is refused, and says why |
 | SC161 | Randomize | It closes when it has run | Run it | The modal closes and the badge names what changed |
+| SC161b | Randomize | The footer reads like the others | Look at the bottom of the modal | A bordered footer with two full-width buttons: Cancel plain, Randomize the orange primary, as on Create Project |
 | SC162 | Randomize | Leaving without running | Press Escape, click the backdrop, press the header's close button, or press Cancel | The modal closes and nothing was written |
 | SC163 | Randomize | Which parameters are held does not change | Run it in any configuration | A scene holds exactly the parameters it held before; only values moved |
 | SC164 | Randomize | The device agrees | Randomize with bounds, save, then open the project on the device | The scenes read back the values the app showed |
