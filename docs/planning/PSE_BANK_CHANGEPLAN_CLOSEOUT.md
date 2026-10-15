@@ -4,14 +4,14 @@ Work ID: `MO-PSE-BANK-CHANGEPLAN-CLOSEOUT-1`
 Parent: [#181](https://github.com/kaz4g/masterocta/issues/181)
 Audit base: `main` @ [`0c47dbe9c95d403e70d8eafe5071e96dc68117c2`](https://github.com/kaz4g/masterocta/commit/0c47dbe9c95d403e70d8eafe5071e96dc68117c2) (merge PR [#232](https://github.com/kaz4g/masterocta/pull/232); includes PR [#231](https://github.com/kaz4g/masterocta/pull/231))
 
-This work unit is **docs-only**. It re-audits current `main` and records the formal #181 completion for the **read-only** ChangePlan. It does not close GitHub issues, change Rust, alter the gate ledger, or authorize Apply.
+This work unit records a **re-audit** of current `main` after the read-only ChangePlan landed. It does not authorize Apply, alter the gate ledger by itself, or close GitHub issues.
 
 ## Judgment (current main)
 
 ```text
-BANK_CHANGEPLAN_IMPLEMENTATION = COMPLETE
-CHANGEPLAN_IMPLEMENTATION_READINESS = COMPLETE
-ISSUE_181_CLOSE_READY = YES
+BANK_CHANGEPLAN_READ_ONLY_PLANNER = COMPLETE
+CHANGEPLAN_IMPLEMENTATION_READINESS = PARTIAL
+ISSUE_181_CLOSE_READY = NO
 CHANGEPLAN_EXECUTION_READINESS = NOT_READY
 BANK_CHANGEPLAN_READINESS = NOT_READY
 APPLY_AUTHORIZED = NO
@@ -22,97 +22,63 @@ APPLY_READINESS = NOT_READY
 
 | Symbol | Meaning |
 | --- | --- |
-| `CHANGEPLAN_IMPLEMENTATION_READINESS = COMPLETE` | #181 Done: Copy / Move / Swap produce a reviewable read-only `BankChangePlan` before any write |
+| `BANK_CHANGEPLAN_READ_ONLY_PLANNER = COMPLETE` | `plan_bank_change()` for Copy / Move / Swap exists on `main`, is fail-closed, and does not write media |
+| `CHANGEPLAN_IMPLEMENTATION_READINESS = PARTIAL` | Planner scaffold and inventory gates are in place; **full** pre-write impact (final affected files, semantics) is not complete |
+| `ISSUE_181_CLOSE_READY = NO` | Keep **#181 OPEN** until Move/Swap/Copy pre-write impact is fully specified (Working/SavedCheckpoint, vacated Move source, active-bank retarget) or #181 Done is explicitly rescoped in the issue |
 | `CHANGEPLAN_EXECUTION_READINESS = NOT_READY` | Executable plans (semantics resolved, Apply permitted) are not ready |
 | `BANK_CHANGEPLAN_READINESS = NOT_READY` | Legacy **execution** sense unless a doc says otherwise |
-| `ISSUE_181_CLOSE_READY = YES` | Issue #181 may be closed as read-only ChangePlan complete; closing is an operator action outside this PR |
 
-#181 completion does **not** mean Apply readiness, `BankMutationEnvelope` sealing, or lifting `APPLY_AUTHORIZED`.
+#181 GitHub Done line today: *all three operations produce a ChangePlan whose pre-write impact is reviewable*. Blocked semantics mean `candidate_change_documents` are **role candidates**, not a guaranteed complete affected-file set. Closing #181 would drop the tracker for those semantics even though Apply stays blocked.
+
+Apply readiness, `BankMutationEnvelope` sealing, and `APPLY_AUTHORIZED` are unchanged.
 
 Implementation evidence:
 
-- [`PSE_BANK_CHANGEPLAN_CORE.md`](./PSE_BANK_CHANGEPLAN_CORE.md) (`MO-PSE-BANK-CHANGEPLAN-CORE-1`, PR #231)
-- [`PSE_BANK_CHANGEPLAN_REFERENCE_COVERAGE.md`](./PSE_BANK_CHANGEPLAN_REFERENCE_COVERAGE.md) (`MO-PSE-BANK-CHANGEPLAN-REFERENCE-COVERAGE-1`, PR #232)
-- Code: [`ot_plan::bank_changeplan`](../../src-tauri/crates/ot-plan/src/bank_changeplan.rs), inventory tests in [`pse_bank_changeplan.rs`](../../src-tauri/src/pse_bank_changeplan.rs)
+- [`PSE_BANK_CHANGEPLAN_CORE.md`](./PSE_BANK_CHANGEPLAN_CORE.md) (PR #231)
+- [`PSE_BANK_CHANGEPLAN_REFERENCE_COVERAGE.md`](./PSE_BANK_CHANGEPLAN_REFERENCE_COVERAGE.md) (PR #232)
+- Code: [`ot_plan::bank_changeplan`](../../src-tauri/crates/ot-plan/src/bank_changeplan.rs)
 
 ## #181 Done checklist (re-audit)
 
-| Requirement | Status | Evidence |
+| Requirement | Status | Evidence / caveat |
 | --- | --- | --- |
 | Copy / Move / Swap Intent | PASS | `BankChangeIntent`; `source == destination` → `Err` |
-| affected Banks / Patterns / Parts / Tracks / Sample Slot refs | PASS | `enumerate_affected_references`, scoped `reference_observations`, Working vs SavedCheckpoint separate |
-| affected files | PASS | `read_dependencies`, `candidate_change_documents` (Copy: source read-only, destination candidates) |
-| PRE hashes / preconditions | PASS | project-scope `TreeManifest` → `FilePrecondition` (size + hash or absent); non-regular → blocker |
-| backup requirement | PASS | `BackupRequirementDeclaration { required: true, relative_paths }` only (no `BackupEvidence`) |
+| affected Banks / Patterns / Parts / Tracks / Sample Slot refs | PASS | `enumerate_affected_references`, scoped `reference_observations`; Working vs SavedCheckpoint separate |
+| affected files | **PARTIAL** | `read_dependencies` + `candidate_change_documents` list **candidates** from state-document rules; final set unknown until #217 / owner decisions (Move vacated source, retarget, Working/SavedCheckpoint) |
+| PRE hashes / preconditions | **PARTIAL** | `FilePrecondition` from caller-supplied `scope_manifest`; missing manifest entries → `Absent` without cross-check against read-model presence — **no fail-closed completeness proof yet** |
+| backup requirement | PASS | `BackupRequirementDeclaration` only (no `BackupEvidence`) |
 | verification requirement | PASS | six `VerificationRequirementKind` declarations (no fabricated POST hashes) |
-| deterministic PlanId | PASS | `derive_bank_changeplan_id`, `validate_integrity` |
-| stale detection | PASS | `check_bank_changeplan_staleness` (manifest diff → `Stale`, no silent rebase) |
-| no-write proof | PASS | `execution_authorized() == false`; `bank_changeplan_generation_leaves_committed_fixture_bytes_identical` |
+| deterministic PlanId | PASS | `derive_bank_changeplan_id`, `validate_integrity`; Copy / Move / Swap each run planner twice in unit tests and compare `PlanId` |
+| stale detection | **PARTIAL** | `check_bank_changeplan_staleness` compares manifests; incomplete PRE manifest can miss files (same gap as preconditions) |
+| planner byte preservation | PASS (scoped) | Subset digest on committed fixtures (`.work`, `.strd`, selected sidecars) — **not** a syscall-level no-write proof ([`PSE_CI_FOUNDATION.md`](../testing/PSE_CI_FOUNDATION.md) §5) |
 
 Plans remain **blocked for execution** (`execution_readiness = Blocked`, semantic / readiness blockers in `Ok(plan)`).
 
-## #191 ChangePlan gates (6 / 6 ACTIVE)
+## #191 ChangePlan gates (ledger)
 
 Ledger: [`scripts/pse-bank-mutation-gates.json`](../../scripts/pse-bank-mutation-gates.json). Required tests: [`scripts/pse-read-model-inventory.json`](../../scripts/pse-read-model-inventory.json).
 
-| Gate id | Status |
-| --- | --- |
-| `change-plan.bank-copy-deterministic` | ACTIVE |
-| `change-plan.bank-move-deterministic` | ACTIVE |
-| `change-plan.bank-swap-deterministic` | ACTIVE |
-| `change-plan.affected-reference-enumeration` | ACTIVE |
-| `change-plan.stale-precondition-detection` | ACTIVE |
-| `change-plan.plan-generation-no-write` | ACTIVE |
+Six ChangePlan gates are **ACTIVE** on `main` (inventory + guard). That means required tests run in Project Structure CI; it does **not** override the **PARTIAL** rows above or `ISSUE_181_CLOSE_READY = NO`.
 
-PR #232 CI: Project Structure (Linux / macOS), Bank Mutation Safety Guard, Rust Tests — **PASS** (run `38529382333` / `38529382351`).
-
-Mutation and recovery gates (12) remain **BLOCKED** until #183 runner exists.
+Mutation and recovery gates (12) stay **BLOCKED** until a **Bank fixture Apply runner** exists. GitHub [#183](https://github.com/kaz4g/masterocta/issues/183) is **CLOSED** with no production runner (`ISSUE_183_STATE_MISMATCH = YES` in [`PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md`](./PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md)). Do not assign new mutation work only to closed #183 — reopen it or open a successor issue before implementation.
 
 ## ReadinessEvidence (`current_main()`)
 
-Pinned by test `current_main_readiness_keeps_remaining_changeplan_gaps_open` in [`bank_mutation.rs`](../../src-tauri/crates/ot-plan/src/bank_mutation.rs).
+Pinned by `current_main_readiness_keeps_remaining_changeplan_gaps_open` in [`bank_mutation.rs`](../../src-tauri/crates/ot-plan/src/bank_mutation.rs).
 
-**RESOLVED**
+**RESOLVED:** `ArrangementFileSlot` (#204), `BankChangePlan` (read-only planner).
 
-| Gap | Tracking |
-| --- | --- |
-| `ArrangementFileSlot` | #204 |
-| `BankChangePlan` | #181 read-only planner (PR #231 / #232) |
+**OPEN (5):** `ArrangerPatternReferences`, `BankInternalIdentity`, `SceneAndRecorderDependencies`, `WorkingSavedCheckpointRule`, `ApplyAuthorization`.
 
-**OPEN** (5)
-
-| Gap | Tracking |
-| --- | --- |
-| `ArrangerPatternReferences` | PSE read-model exit audit §7C / §8 |
-| `BankInternalIdentity` | #221 |
-| `SceneAndRecorderDependencies` | PSE read-model exit audit §7C |
-| `WorkingSavedCheckpointRule` | #217 / BMS §16 |
-| `ApplyAuthorization` | control plane §9 (PSE-3) |
-
-## What #181 did not deliver (by design)
-
-- `BankMutationEnvelope` or Prepare / Apply / Verify on fixtures (#183)
-- Resolution of execution semantics (Working / SavedCheckpoint, vacated Move source, active bank retarget)
-- `APPLY_AUTHORIZED = YES` or write APIs / Tauri mutation IPC
-
-## Next work (not started here)
+## Next work
 
 ```text
 NEXT_WORK_ID = MO-PSE-BANK-STATE-DOC-SEMANTICS-2
 Parent = #217
 ```
 
-Scope for the next phase (classification only in that work unit):
-
-| Topic | Split goal |
-| --- | --- |
-| Copy Working / SavedCheckpoint rule | device evidence vs owner decision |
-| Move / Swap document role semantics | device evidence vs owner decision |
-| Active Bank retarget | device evidence vs owner decision |
-| Move vacated source | device evidence vs owner decision |
-
-No gap closure, Apply, encoder, or filesystem write in `MO-PSE-BANK-CHANGEPLAN-CLOSEOUT-1`.
+Classify Copy Working/SavedCheckpoint, Move/Swap document roles, active-bank retarget, and Move vacated source into device-evidence vs owner-decision buckets (#217 remains the semantic parent; #181 stays open until impact is known).
 
 ## Historical docs
 
-[`PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md`](./PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md) and [`PSE_READ_MODEL_EXIT_AUDIT.md`](./PSE_READ_MODEL_EXIT_AUDIT.md) retain pre–#231 / #232 snapshots. **Current judgment for #181 and readiness gaps is this closeout document.**
+Older snapshots: [`PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md`](./PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md), [`PSE_READ_MODEL_EXIT_AUDIT.md`](./PSE_READ_MODEL_EXIT_AUDIT.md). **Current closeout judgment is this file.**

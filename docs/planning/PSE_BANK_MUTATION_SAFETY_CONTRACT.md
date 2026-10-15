@@ -29,7 +29,7 @@ APPLY_READINESS        = NOT_READY
 
 ## 1. 依存と現在の判定
 
-`ReadinessEvidence::current_main()` は 7 項目中 **2 件解決済み**、**5 件 open**（現行判定: [`PSE_BANK_CHANGEPLAN_CLOSEOUT.md`](./PSE_BANK_CHANGEPLAN_CLOSEOUT.md)）。1 件でも open なら、他の検査がすべて通っても Apply entry permit は発行されない（テスト `current_main_withholds_the_permit_even_for_a_clean_plan`、`a_single_open_gap_withholds_the_permit`）。`BANK_CHANGEPLAN_IMPLEMENTATION = COMPLETE`（#181 read-only）は Apply 解禁を意味しない。
+`ReadinessEvidence::current_main()` は 7 項目中 **2 件解決済み**、**5 件 open**（現行判定: [`PSE_BANK_CHANGEPLAN_CLOSEOUT.md`](./PSE_BANK_CHANGEPLAN_CLOSEOUT.md)）。1 件でも open なら、他の検査がすべて通っても Apply entry permit は発行されない（テスト `current_main_withholds_the_permit_even_for_a_clean_plan`、`a_single_open_gap_withholds_the_permit`）。`BANK_CHANGEPLAN_READ_ONLY_PLANNER = COMPLETE`（closeout）は Apply 解禁や #181 close を意味しない（`ISSUE_181_CLOSE_READY = NO`）。
 
 | `ReadinessGap` | 状態 | 追跡 |
 | --- | --- | --- |
@@ -303,10 +303,10 @@ ChangePlan の deterministic / reference enumeration の 4 gate は #181 実装�
 
 ## 15. 残作業
 
-| Issue | この契約のあとに必要なこと |
+| Issue / tracker | この契約のあとに必要なこと |
 | --- | --- |
-| #181 | **read-only ChangePlan — COMPLETE** on `main`（closeout）。`BankMutationEnvelope` は #183 Prepare / Apply 側 |
-| #183 | Prepare（staged bytes）、Apply、Verify を fixture / temporary copy 上で実装する。Apply 入口は `ApplyEntryPermit` を取り、writer lock 下で `reverify` してから書く。`LiveTargetObservation.project_structure` を lock 内の contained reader の再読込結果で埋める。production 用の contained manifest capture（symlink 非追従、root 内）を実装する。target class を backend 証拠から決める |
+| #181 | read-only ChangePlan planner on `main`（[`PSE_BANK_CHANGEPLAN_CLOSEOUT.md`](./PSE_BANK_CHANGEPLAN_CLOSEOUT.md)）。GitHub #181 は **OPEN**（`ISSUE_181_CLOSE_READY = NO`）— Move/Swap/Copy の完全な pre-write impact は #217 系 semantics が未決 |
+| Bank fixture Apply runner | **OPEN tracker なし。** GitHub #183 は **CLOSED**（`ISSUE_183_STATE_MISMATCH = YES`）。Prepare / Apply / Verify / `BankMutationEnvelope` は **reopen #183 または後続 OPEN issue** で起票してから実装。契約検査は #182、journal / recovery は #185 |
 | #184 | 正常系・境界・失敗系の reference integrity。Arranger / arrangement 参照が読めるようになったら structure verify に加える。project 外 sample を含む Slot 参照先の referenced-file check（§13） |
 | #185 | Bank 用 backup manifest、journal、resume / rollback、`mutation_gate` への Bank journal 追加、failure injection、retry / idempotency。Recovery 後に Set root 単位または referenced-file 単位で外部 sample の不変を確認（§13） |
 | #186 | Native 受入。実機 CF 原本は別承認まで対象外 |
@@ -327,7 +327,8 @@ ChangePlan の deterministic / reference enumeration の 4 gate は #181 実装�
 ```text
 BANK_MUTATION_CONTRACT            = DEFINED (masterocta.bank-mutation-contract:v1)
 CONTRACT_TESTS                    = IN_INVENTORY (Project Structure CI)
-BANK_CHANGEPLAN_IMPLEMENTATION    = COMPLETE (#181 read-only, closeout)
+BANK_CHANGEPLAN_READ_ONLY_PLANNER = COMPLETE (closeout)
+ISSUE_181_CLOSE_READY             = NO
 BANK_CHANGEPLAN_READINESS         = NOT_READY (execution sense)
 CHANGEPLAN_EXECUTION_READINESS    = NOT_READY
 APPLY_READINESS                   = NOT_READY

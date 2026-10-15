@@ -112,7 +112,7 @@ CI-only parser.
 | Viewer UI / E2E | #180 | #202 Viewer + explicit Frontend Checks step + `e2e/project-structure-viewer.spec.ts` | existing `CI` Frontend Checks / E2E; Viewer paths are in PSE scope | **PASS** when those jobs succeed | Native desktop inspection stays with #186 |
 | Bank write-surface trip-wire | #191 | `scripts/pse-bank-mutation-guard.mjs` | `Bank Mutation Safety Guard` job, always runs, feeds the aggregate | **PASS** while the Bank editor path has no write API (§12) | revise only with #182 / #183 |
 | ChangePlan / Mutation gate ledger | #191 | `scripts/pse-bank-mutation-gates.json` checked by the guard | same job | **PASS** = all 18 gates listed; ChangePlan 6 **ACTIVE**; mutation / recovery **BLOCKED** | [`PSE_BANK_CHANGEPLAN_CLOSEOUT.md`](../planning/PSE_BANK_CHANGEPLAN_CLOSEOUT.md) |
-| ChangePlan determinism / stale | #181 | `ot_plan::bank_changeplan` + inventory tests | Project Structure Linux / macOS | **PASS** when ledger ChangePlan gates are ACTIVE and jobs succeed (PR #232) | execution readiness stays `NOT_READY` |
+| ChangePlan determinism / stale | #181 | `ot_plan::bank_changeplan` + inventory tests (Copy / Move / Swap each compare repeated `PlanId`) | Project Structure Linux / macOS | **PASS** when ledger ChangePlan gates are ACTIVE and jobs succeed | full pre-write impact / `ISSUE_181_CLOSE_READY` per closeout |
 | Expected-changed-files Apply | #183 | ledger entries only | — | **BLOCKED** | #182 contract + #183 runner |
 | Reference integrity after mutation | #184 | ledger entry only | — | **BLOCKED** | Apply + integrity suite |
 | Backup / failure injection / Recovery | #185 | ledger entries only | — | **BLOCKED** | Recovery implementation |
@@ -313,7 +313,7 @@ given PR is only green when its own Actions run is green.
 
 ### ChangePlan gates (#181)
 
-All six are ledger entries with status **ACTIVE** on current `main` (PR #231 / #232). Formal audit: [`PSE_BANK_CHANGEPLAN_CLOSEOUT.md`](../planning/PSE_BANK_CHANGEPLAN_CLOSEOUT.md). `BANK_CHANGEPLAN_IMPLEMENTATION = COMPLETE`; `BANK_CHANGEPLAN_READINESS` and `CHANGEPLAN_EXECUTION_READINESS` stay `NOT_READY` (execution sense).
+All six are ledger entries with status **ACTIVE** on current `main` (PR #231 / #232). Formal audit: [`PSE_BANK_CHANGEPLAN_CLOSEOUT.md`](../planning/PSE_BANK_CHANGEPLAN_CLOSEOUT.md). Read-only planner complete; **`ISSUE_181_CLOSE_READY = NO`**; execution readiness `NOT_READY`.
 
 | Ledger id | #191 item | Status |
 | --- | --- | --- |

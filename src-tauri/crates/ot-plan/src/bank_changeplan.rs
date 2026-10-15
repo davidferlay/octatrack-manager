@@ -1862,7 +1862,12 @@ mod tests {
             destination,
         };
         let facts = facts(source, destination);
-        let plan = plan_bank_change(intent, &facts, &ReadinessEvidence::current_main()).unwrap();
+        let readiness = ReadinessEvidence::current_main();
+        let first = plan_bank_change(intent, &facts, &readiness).unwrap();
+        let second = plan_bank_change(intent, &facts, &readiness).unwrap();
+        assert_eq!(first.id(), second.id());
+        assert!(!first.execution_authorized());
+        let plan = first;
         assert!(plan
             .blockers
             .contains(&BankChangePlanBlocker::MoveVacatedSourceUnknown));
@@ -1887,12 +1892,13 @@ mod tests {
             source,
             destination,
         };
-        let plan = plan_bank_change(
-            intent,
-            &facts(source, destination),
-            &ReadinessEvidence::current_main(),
-        )
-        .unwrap();
+        let facts = facts(source, destination);
+        let readiness = ReadinessEvidence::current_main();
+        let first = plan_bank_change(intent, &facts, &readiness).unwrap();
+        let second = plan_bank_change(intent, &facts, &readiness).unwrap();
+        assert_eq!(first.id(), second.id());
+        assert!(!first.execution_authorized());
+        let plan = first;
         assert_eq!(plan.operation, BankChangeOperation::Swap);
         assert!(plan
             .blockers
