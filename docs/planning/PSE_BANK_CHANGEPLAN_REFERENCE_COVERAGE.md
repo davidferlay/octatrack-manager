@@ -1,5 +1,7 @@
 # Bank ChangePlan reference coverage (read-only)
 
+**Formal #181 judgment (current main):** [`PSE_BANK_CHANGEPLAN_CLOSEOUT.md`](./PSE_BANK_CHANGEPLAN_CLOSEOUT.md).
+
 Work ID: `MO-PSE-BANK-CHANGEPLAN-REFERENCE-COVERAGE-1`  
 Parent: [#181](https://github.com/kaz4g/masterocta/issues/181)  
 Base branch: `main` @ `6e25354bf0e271a706b2b20079dcfeb770192651`

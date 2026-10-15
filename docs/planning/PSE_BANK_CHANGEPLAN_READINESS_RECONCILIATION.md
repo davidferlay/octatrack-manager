@@ -1,5 +1,7 @@
 # Bank ChangePlan readiness reconciliation
 
+**Current #181 / readiness judgment supersedes this document for closeout:** [`PSE_BANK_CHANGEPLAN_CLOSEOUT.md`](./PSE_BANK_CHANGEPLAN_CLOSEOUT.md). Tables below are historical (pre–PR #231 / #232).
+
 Work ID: `MO-PSE-BANK-CHANGEPLAN-READINESS-RECONCILIATION-1`  
 Parent: [#181](https://github.com/kaz4g/masterocta/issues/181)  
 Related merged PR: [#227](https://github.com/kaz4g/masterocta/pull/227)  

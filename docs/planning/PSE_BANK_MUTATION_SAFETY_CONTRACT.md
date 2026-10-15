@@ -8,7 +8,7 @@
 - Inventory: [`scripts/pse-read-model-inventory.json`](../../scripts/pse-read-model-inventory.json)（`ot-plan-bank-mutation-contract`、`masterocta-bank-mutation-contract`）
 - Gate ledger: [`scripts/pse-bank-mutation-gates.json`](../../scripts/pse-bank-mutation-gates.json)（`contract.document` がこの文書を指す。各 gate の `contract_rules` / `contract_tests` は §14）
 - Static guard: [`scripts/pse-bank-mutation-guard.mjs`](../../scripts/pse-bank-mutation-guard.mjs)（#206、CI foundation §12）
-- Related: [`PROJECT_STRUCTURE_CONTROL_PLANE.md`](./PROJECT_STRUCTURE_CONTROL_PLANE.md) §6 / §9、[`PSE_READ_MODEL_EXIT_AUDIT.md`](./PSE_READ_MODEL_EXIT_AUDIT.md) §7C / §11、[`../testing/PSE_CI_FOUNDATION.md`](../testing/PSE_CI_FOUNDATION.md)、[`../NEXT_GENERATION_ARCHITECTURE.md`](../NEXT_GENERATION_ARCHITECTURE.md) P4 / P5 / §5.6–5.8
+- Related: [`PROJECT_STRUCTURE_CONTROL_PLANE.md`](./PROJECT_STRUCTURE_CONTROL_PLANE.md) §6 / §9、[`PSE_READ_MODEL_EXIT_AUDIT.md`](./PSE_READ_MODEL_EXIT_AUDIT.md) §7C / §11、[`PSE_BANK_CHANGEPLAN_CLOSEOUT.md`](./PSE_BANK_CHANGEPLAN_CLOSEOUT.md)（#181 read-only 完了の現行判定）、[`../testing/PSE_CI_FOUNDATION.md`](../testing/PSE_CI_FOUNDATION.md)、[`../NEXT_GENERATION_ARCHITECTURE.md`](../NEXT_GENERATION_ARCHITECTURE.md) P4 / P5 / §5.6–5.8
 
 ## 0. この文書の位置づけ
 
@@ -29,17 +29,17 @@ APPLY_READINESS        = NOT_READY
 
 ## 1. 依存と現在の判定
 
-`ReadinessEvidence::current_main()` は 7 項目中 **`ArrangementFileSlot` のみ解決済み**（#204、`P_ARR_TEST` on MkII `R0173` / OS `1.40`）。残り 6 gap が open の間、他の検査がすべて通っても Apply entry permit は発行されない（テスト `current_main_withholds_the_permit_even_for_a_clean_plan`、`a_single_open_gap_withholds_the_permit`）。実装可能な read-only ChangePlan 計画器と実行可能計画の区別は [`PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md`](./PSE_BANK_CHANGEPLAN_READINESS_RECONCILIATION.md) を参照。
+`ReadinessEvidence::current_main()` は 7 項目中 **2 件解決済み**、**5 件 open**（現行判定: [`PSE_BANK_CHANGEPLAN_CLOSEOUT.md`](./PSE_BANK_CHANGEPLAN_CLOSEOUT.md)）。1 件でも open なら、他の検査がすべて通っても Apply entry permit は発行されない（テスト `current_main_withholds_the_permit_even_for_a_clean_plan`、`a_single_open_gap_withholds_the_permit`）。`BANK_CHANGEPLAN_IMPLEMENTATION = COMPLETE`（#181 read-only）は Apply 解禁を意味しない。
 
-| `ReadinessGap` | 未解決の理由 | 追跡 |
+| `ReadinessGap` | 状態 | 追跡 |
 | --- | --- | --- |
-| `BankChangePlan` | #181 は `BANK_CHANGEPLAN_READINESS = NOT_READY` | #181 |
-| `ArrangementFileSlot` | `[STATES] ARRANGEMENT` のファイル対応は MkII `R0173` / OS `1.40` の `P_ARR_TEST`（UI 1/2/8 → raw 0/1/7 → `arr01`/`arr02`/`arr08`）でのみ解決済み。それ以外の OS は `Unrecognized` のまま | #204 |
-| `ArrangerPatternReferences` | Arranger `pattern_id`（`n_rows == 0` を含む）の番号付けが未証明 | 監査 §7C / §8 |
-| `BankInternalIdentity` | A/B/C/E/F 監査後も `BANK_INTERNAL_IDENTITY = NOT_OBSERVED`（[`PSE_BANK_INTERNAL_IDENTITY.md`](./PSE_BANK_INTERNAL_IDENTITY.md) #221） | 監査 §7C |
-| `SceneAndRecorderDependencies` | Scene / Recorder は unmodeled。unmodeled 依存は計画を失敗で閉じる | 監査 §7C、control plane §6 |
-| `WorkingSavedCheckpointRule` | `.work` / `.strd` のどちらを動かすか、`[STATES] BANK` をどう扱うか未決 | 監査 §7C、control plane §12 |
-| `ApplyAuthorization` | PSE-3 Apply の明示承認文書がない | control plane §9 |
+| `BankChangePlan` | **解決** — read-only `BankChangePlan` planner on `main`（PR #231 / #232） | #181 |
+| `ArrangementFileSlot` | **解決** — MkII `R0173` / OS `1.40` の `P_ARR_TEST`（UI 1/2/8 → raw 0/1/7 → `arr01`/`arr02`/`arr08`）。それ以外の OS は `Unrecognized` のまま | #204 |
+| `ArrangerPatternReferences` | open — Arranger `pattern_id`（`n_rows == 0` を含む）の番号付けが未証明 | 監査 §7C / §8 |
+| `BankInternalIdentity` | open — [`PSE_BANK_INTERNAL_IDENTITY.md`](./PSE_BANK_INTERNAL_IDENTITY.md) #221 | 監査 §7C |
+| `SceneAndRecorderDependencies` | open — Scene / Recorder は unmodeled | 監査 §7C、control plane §6 |
+| `WorkingSavedCheckpointRule` | open — `.work` / `.strd` と `[STATES] BANK` の操作規則未決 | 監査 §7C、#217 |
+| `ApplyAuthorization` | open — PSE-3 Apply の明示承認文書がない | control plane §9 |
 
 項目を解決済みにするには、`ReadinessEvidence::current_main()` とそれを固定するテスト `current_main_readiness_keeps_remaining_changeplan_gaps_open` を、追跡先の証拠を添えたレビュー済み PR で変更する。`ReadinessEvidence::assume_resolved` は `#[cfg(test)]` の契約テスト専用であり、製品ビルドからは呼べない。`ReadinessEvidence` の field は private で、製品から得られる値は `current_main()`（と同値の `Default` / `Clone`）だけである。証拠: `ot-plan` の doctest（`current_main()` は compile でき、`assume_resolved` の呼び出しと struct literal は compile できない）と、inventory 内のテスト `production_cannot_resolve_readiness_or_forge_a_permit`（`#[cfg(test)]` の位置、`-> Self` を返す公開関数が 2 つだけであること、field が private であることを source で検査）。stable の rustdoc は `compile_fail` の error code を照合しないため、各 snippet が意図した error（E0599 / E0451 など）だけで失敗することは手元で個別に compile して確認した。
 
@@ -168,7 +168,7 @@ stale 判定は対象ファイルだけでなく project scope 全体で行う�
 
 parser 証拠は Plan が選んだ文書だけではなく、操作が読む Bank を覆わなければならない。`project.work` と、affected role の複製元 Bank は Parsed で plan に含まれる。Swap、および manifest に既にある複製先 Bank も同じである。unmodeled 依存は envelope の任意リストではなく、executor が Apply 直前に渡す `LiveTargetObservation.project_structure` から取る。Plan が文書を省いたり unmodeled を空にしても、read model が未解析または unmodeled なら permit は出ない。
 
-**未完了（#183 / fail closed）**: `LiveTargetObservation.project_structure` は今のところ呼び出し側が渡す値である。これを信頼できる read model とするには、#183 の executor が writer lock の内側で、contained reader（`project_structure_reader`）を使って同じ project を再読込した結果を入れる必要がある。その配線は #183 の範囲で、まだ無い。それまでは readiness gap がすべて未解決なので permit は出ない（§1）。#183 はこの配線と、read model を executor 以外から注入できないことのテストを、gate を ACTIVE にする条件に含める。
+**未完了（#183 / fail closed）**: `LiveTargetObservation.project_structure` は今のところ呼び出し側が渡す値である。これを信頼できる read model とするには、#183 の executor が writer lock の内側で、contained reader（`project_structure_reader`）を使って同じ project を再読込した結果を入れる必要がある。その配線は #183 の範囲で、まだ無い。それまでは §1 の open readiness gap が 1 件でも残る限り permit は出ない。#183 はこの配線と、read model を executor 以外から注入できないことのテストを、gate を ACTIVE にする条件に含める。
 
 ## 7. Target（BMS-TARGET）
 
@@ -267,7 +267,12 @@ Bank 側が持つのは Sample Slot 参照（`TrackSlotReference`）だけであ
 
 ### Gate ledger との対応
 
-`scripts/pse-bank-mutation-gates.json` の `contract.document` はこの文書を指す。各 gate には `contract_rules`（BMS ルール ID）と `contract_tests`（すでに inventory で動いている契約テスト）を記録した。これは gate の `required_tests` では**ない**。gate は全部 **BLOCKED** のままである。契約テストは検査器そのものの正しさを示すだけで、#183 の runner が fixture コピー上で実際の Apply を行うまで gate を満たしたことにはならない。guard は `contract_tests` が inventory に存在すること、`contract_rules` が `BMS-*` 形式であること、contract 文書が設定されていることを検査する。
+`scripts/pse-bank-mutation-gates.json` の `contract.document` はこの文書を指す。各 gate には `contract_rules`（BMS ルール ID）と `contract_tests`（すでに inventory で動いている契約テスト）を記録した。これは gate の `required_tests` では**ない**。
+
+- **ChangePlan phase（6 gate）:** ledger 上 **ACTIVE**（PR #231 / #232、`PSE_BANK_CHANGEPLAN_CLOSEOUT.md`）。inventory の `required_tests` で検証される。
+- **Mutation / recovery phase（12 gate）:** **BLOCKED** のまま。#183 の runner が fixture コピー上で実際の Apply を行うまで ACTIVE にしない。
+
+契約テストは検査器そのものの正しさを示すだけで、mutation gate を満たしたことにはならない。guard は `contract_tests` が inventory に存在すること、`contract_rules` が `BMS-*` 形式であること、contract 文書が設定されていることを検査する。
 
 | gate | `contract_rules` |
 | --- | --- |
@@ -285,11 +290,11 @@ Bank 側が持つのは Sample Slot 参照（`TrackSlotReference`）だけであ
 | `recovery.restores-pre-state` | BMS-RECOVER、BMS-VERIFY-STRUCTURE |
 | `recovery.retry-idempotency` | BMS-FLOW（`RecoveryRequired` ⇄ `Recovery`。idempotency 自体の契約テストは #185） |
 
-ChangePlan の deterministic / reference enumeration の 4 gate は #181 の範囲なので、契約側の対応付けは置いていない。
+ChangePlan の deterministic / reference enumeration の 4 gate は #181 実装側で inventory に載っており、契約 §14 の `contract_rules` 表には載せていない（stale / no-write の 2 gate のみ BMS 対応付けあり）。
 
 #191 で配線してほしい gate（提案）:
 
-1. `Bank Mutation Safety` は #183 の Apply 実装が入るまで **BLOCKED** のまま。空テストや `continue-on-error` で PASS にしない（CI foundation §4）
+1. Mutation / recovery gate は #183 の Apply 実装が入るまで **BLOCKED** のまま。ChangePlan 6 gate は **ACTIVE**（closeout 参照）。空テストや `continue-on-error` で PASS にしない（CI foundation §4）
 2. #183 では、Apply の各テストが `evaluate_apply_entry` の permit を経由していること、POST に `verify_expected_changes` と `verify_bank_structure` を適用していることを inventory の required test で固定する
 3. failure injection（#185）では、各 phase での失敗後に `BankMutationPhase::on_failure` の義務どおりになったことを `prove_no_write` または `verify_recovered_to_pre` で示す
 4. `current_main_readiness_keeps_remaining_changeplan_gaps_open` の変更を含む PR は、追跡先の証拠リンクがあるかを review gate で確認する
@@ -300,7 +305,7 @@ ChangePlan の deterministic / reference enumeration の 4 gate は #181 の範�
 
 | Issue | この契約のあとに必要なこと |
 | --- | --- |
-| #181 | Copy / Move / Swap の ChangePlan が `BankMutationEnvelope` を出す。§1 の §7C 系 gap（#204 ほか）が先 |
+| #181 | **read-only ChangePlan — COMPLETE** on `main`（closeout）。`BankMutationEnvelope` は #183 Prepare / Apply 側 |
 | #183 | Prepare（staged bytes）、Apply、Verify を fixture / temporary copy 上で実装する。Apply 入口は `ApplyEntryPermit` を取り、writer lock 下で `reverify` してから書く。`LiveTargetObservation.project_structure` を lock 内の contained reader の再読込結果で埋める。production 用の contained manifest capture（symlink 非追従、root 内）を実装する。target class を backend 証拠から決める |
 | #184 | 正常系・境界・失敗系の reference integrity。Arranger / arrangement 参照が読めるようになったら structure verify に加える。project 外 sample を含む Slot 参照先の referenced-file check（§13） |
 | #185 | Bank 用 backup manifest、journal、resume / rollback、`mutation_gate` への Bank journal 追加、failure injection、retry / idempotency。Recovery 後に Set root 単位または referenced-file 単位で外部 sample の不変を確認（§13） |
@@ -320,9 +325,12 @@ ChangePlan の deterministic / reference enumeration の 4 gate は #181 の範�
 ## 判定
 
 ```text
-BANK_MUTATION_CONTRACT   = DEFINED (masterocta.bank-mutation-contract:v1)
-CONTRACT_TESTS           = IN_INVENTORY (Project Structure CI)
-BANK_CHANGEPLAN_READINESS = NOT_READY (#181, §7C except ArrangementFileSlot)
-APPLY_READINESS          = NOT_READY
-APPLY_AUTHORIZATION      = NOT_GRANTED (PSE-3)
+BANK_MUTATION_CONTRACT            = DEFINED (masterocta.bank-mutation-contract:v1)
+CONTRACT_TESTS                    = IN_INVENTORY (Project Structure CI)
+BANK_CHANGEPLAN_IMPLEMENTATION    = COMPLETE (#181 read-only, closeout)
+BANK_CHANGEPLAN_READINESS         = NOT_READY (execution sense)
+CHANGEPLAN_EXECUTION_READINESS    = NOT_READY
+APPLY_READINESS                   = NOT_READY
+APPLY_AUTHORIZED                  = NO
+APPLY_AUTHORIZATION               = NOT_GRANTED (PSE-3)
 ```
