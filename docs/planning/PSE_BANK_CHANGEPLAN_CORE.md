@@ -1,5 +1,7 @@
 # Bank ChangePlan core (read-only)
 
+**Formal #181 judgment (current main):** [`PSE_BANK_CHANGEPLAN_CLOSEOUT.md`](./PSE_BANK_CHANGEPLAN_CLOSEOUT.md).
+
 Work ID: `MO-PSE-BANK-CHANGEPLAN-CORE-1`  
 Parent: [#181](https://github.com/kaz4g/masterocta/issues/181)  
 Base branch: `main` @ `e299e4ef409c5ed0c9a1eae67786d73883331d82`

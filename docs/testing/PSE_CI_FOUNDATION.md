@@ -111,8 +111,8 @@ CI-only parser.
 | `project.work` `[STATES]`, master track, per-track scale, `INF` | #196 / #198 | inventory names added by #197 / #199 | Linux + macOS read-model jobs | **PASS** when both succeed | keep inventory current |
 | Viewer UI / E2E | #180 | #202 Viewer + explicit Frontend Checks step + `e2e/project-structure-viewer.spec.ts` | existing `CI` Frontend Checks / E2E; Viewer paths are in PSE scope | **PASS** when those jobs succeed | Native desktop inspection stays with #186 |
 | Bank write-surface trip-wire | #191 | `scripts/pse-bank-mutation-guard.mjs` | `Bank Mutation Safety Guard` job, always runs, feeds the aggregate | **PASS** while the Bank editor path has no write API (§12) | revise only with #182 / #183 |
-| ChangePlan / Mutation gate ledger | #191 | `scripts/pse-bank-mutation-gates.json` checked by the guard | same job | **PASS** = all 18 gates listed, mutation / recovery gates BLOCKED | #181 / #182 / #183 |
-| ChangePlan determinism / stale | #181 | ledger entries only | — | **BLOCKED** (`BANK_CHANGEPLAN_READINESS = NOT_READY`) | ChangePlan implementation |
+| ChangePlan / Mutation gate ledger | #191 | `scripts/pse-bank-mutation-gates.json` checked by the guard | same job | **PASS** = all 18 gates listed; ChangePlan 6 **ACTIVE**; mutation / recovery **BLOCKED** | [`PSE_BANK_CHANGEPLAN_CLOSEOUT.md`](../planning/PSE_BANK_CHANGEPLAN_CLOSEOUT.md) |
+| ChangePlan determinism / stale | #181 | `ot_plan::bank_changeplan` + inventory tests (Copy / Move / Swap each compare repeated `PlanId`) | Project Structure Linux / macOS | **PASS** when ledger ChangePlan gates are ACTIVE and jobs succeed | full pre-write impact / `ISSUE_181_CLOSE_READY` per closeout |
 | Expected-changed-files Apply | #183 | ledger entries only | — | **BLOCKED** | #182 contract + #183 runner |
 | Reference integrity after mutation | #184 | ledger entry only | — | **BLOCKED** | Apply + integrity suite |
 | Backup / failure injection / Recovery | #185 | ledger entries only | — | **BLOCKED** | Recovery implementation |
@@ -313,17 +313,16 @@ given PR is only green when its own Actions run is green.
 
 ### ChangePlan gates (#181)
 
-All six are ledger entries with status BLOCKED. `BANK_CHANGEPLAN_READINESS`
-is `NOT_READY` (exit audit §11).
+All six are ledger entries with status **ACTIVE** on current `main` (PR #231 / #232). Formal audit: [`PSE_BANK_CHANGEPLAN_CLOSEOUT.md`](../planning/PSE_BANK_CHANGEPLAN_CLOSEOUT.md). Read-only planner complete; **`ISSUE_181_CLOSE_READY = NO`**; execution readiness `NOT_READY`.
 
-| Ledger id | #191 item | Waits on |
+| Ledger id | #191 item | Status |
 | --- | --- | --- |
-| `change-plan.bank-copy-deterministic` | Bank Copy ChangePlan deterministic | #181 |
-| `change-plan.bank-move-deterministic` | Bank Move ChangePlan deterministic | #181 |
-| `change-plan.bank-swap-deterministic` | Bank Swap ChangePlan deterministic | #181 |
-| `change-plan.affected-reference-enumeration` | affected reference enumeration | #181 |
-| `change-plan.stale-precondition-detection` | stale / precondition detection | #181, #182 (hash / stale guard) |
-| `change-plan.plan-generation-no-write` | plan generation does not change the fixture | #181; reuse `pse-fixture-manifest.mjs`. Already partly enforced: any Rust module named `*bank*` / `*project_structure*` is scanned by the guard and may not write |
+| `change-plan.bank-copy-deterministic` | Bank Copy ChangePlan deterministic | ACTIVE |
+| `change-plan.bank-move-deterministic` | Bank Move ChangePlan deterministic | ACTIVE |
+| `change-plan.bank-swap-deterministic` | Bank Swap ChangePlan deterministic | ACTIVE |
+| `change-plan.affected-reference-enumeration` | affected reference enumeration | ACTIVE |
+| `change-plan.stale-precondition-detection` | stale / precondition detection | ACTIVE |
+| `change-plan.plan-generation-no-write` | plan generation does not change the fixture | ACTIVE |
 
 How a ChangePlan gate becomes ACTIVE: add its Rust tests to
 `scripts/pse-read-model-inventory.json` (so they run with zero-test and
