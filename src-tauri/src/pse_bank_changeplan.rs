@@ -115,6 +115,16 @@ mod tests {
         BankStateDocumentSet::new(bank, working, saved)
     }
 
+    fn manifest_without_path(manifest: &TreeManifest, omit: &RootRelativePath) -> TreeManifest {
+        let mut out = TreeManifest::new();
+        for (path, entry) in manifest.iter() {
+            if path != omit {
+                out.insert(path.clone(), entry.clone());
+            }
+        }
+        out
+    }
+
     fn planning_facts(
         root: &Path,
         capture: &str,
@@ -144,6 +154,32 @@ mod tests {
             project_structure: structure,
             reference_inventory,
         }
+    }
+
+    #[test]
+    fn observed_source_work_missing_from_manifest_rejects_plan_on_fixture() {
+        use ot_plan::bank_changeplan::BankChangePlanError;
+
+        let root = fixture_root();
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let mut facts = planning_facts(&root, "s0_baseline_saved", source, destination);
+        let bank01_work =
+            RootRelativePath::parse("pse_bank_copy_persistence/s0_baseline_saved/bank01.work")
+                .unwrap();
+        facts.scope_manifest = manifest_without_path(&facts.scope_manifest, &bank01_work);
+        assert_eq!(
+            plan_bank_change(
+                BankChangeIntent::Copy {
+                    source,
+                    destination,
+                },
+                &facts,
+                &ReadinessEvidence::current_main(),
+            )
+            .unwrap_err(),
+            BankChangePlanError::ManifestEntryMissingForObservedDocument
+        );
     }
 
     #[test]

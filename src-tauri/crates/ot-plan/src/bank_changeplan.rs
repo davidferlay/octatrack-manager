@@ -3,7 +3,9 @@
 //! Produces a deterministic, reviewable plan without destination bytes, Apply,
 //! or [`crate::bank_mutation::BankMutationEnvelope`].
 
-use crate::bank_mutation::{diff_manifests, ReadinessEvidence, ReadinessGap, TreeManifest};
+use crate::bank_mutation::{
+    diff_manifests, ManifestEntry, ReadinessEvidence, ReadinessGap, TreeManifest,
+};
 use crate::{
     encode_field, validate_prefixed_sha256, PlanError, PlanId, PLAN_ID_PREFIX,
     ROOT_FINGERPRINT_PREFIX,
@@ -345,6 +347,9 @@ pub enum BankChangePlanError {
     BankPresenceMismatch,
     ReadinessEvidenceMismatch,
     ReferenceInventoryRevisionMismatch,
+    ManifestEntryMissingForObservedDocument,
+    ManifestEntryNotRegularForObservedDocument,
+    ManifestPresenceMismatch,
     Plan(PlanError),
 }
 
@@ -375,6 +380,15 @@ impl fmt::Display for BankChangePlanError {
             Self::ReferenceInventoryRevisionMismatch => formatter.write_str(
                 "reference inventory observed revision does not match planning facts",
             ),
+            Self::ManifestEntryMissingForObservedDocument => formatter.write_str(
+                "scope manifest is missing a regular-file entry for an observed document path",
+            ),
+            Self::ManifestEntryNotRegularForObservedDocument => formatter.write_str(
+                "scope manifest entry for an observed document path is not a regular file",
+            ),
+            Self::ManifestPresenceMismatch => formatter.write_str(
+                "scope manifest claims a regular file where the read model reports absence",
+            ),
             Self::Plan(error) => write!(formatter, "{error}"),
         }
     }
@@ -394,6 +408,7 @@ pub fn plan_bank_change(
     readiness: &ReadinessEvidence,
 ) -> Result<BankChangePlan, BankChangePlanError> {
     validate_facts(intent, facts, readiness)?;
+    validate_observed_dependency_manifest(facts)?;
 
     let source = intent.source();
     let destination = intent.destination();
@@ -543,6 +558,56 @@ fn validate_facts(
         return Err(BankChangePlanError::ReferenceInventoryRevisionMismatch);
     }
     Ok(())
+}
+
+fn validate_observed_dependency_manifest(
+    facts: &BankChangePlanningFacts,
+) -> Result<(), BankChangePlanError> {
+    let manifest = &facts.scope_manifest;
+    let structure = &facts.project_structure;
+    let project_path = &facts.project_relative_path;
+
+    if let Some(state) = structure.project_state.as_ref() {
+        require_observed_manifest_file(manifest, &state.source_relative_path)?;
+    } else {
+        let project_work = join_project_file(project_path, "project.work");
+        if matches!(
+            manifest.get(&project_work),
+            Some(ManifestEntry::File { .. })
+        ) {
+            return Err(BankChangePlanError::ManifestPresenceMismatch);
+        }
+    }
+
+    for set in [facts.source_presence, facts.destination_presence] {
+        for role in [
+            StateDocumentRole::Working,
+            StateDocumentRole::SavedCheckpoint,
+        ] {
+            if !set.has_role(role) {
+                continue;
+            }
+            let Some(entry) = structure.bank(set.bank, role) else {
+                continue;
+            };
+            require_observed_manifest_file(manifest, &entry.source_relative_path)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn require_observed_manifest_file(
+    manifest: &TreeManifest,
+    path: &RootRelativePath,
+) -> Result<(), BankChangePlanError> {
+    match manifest.get(path) {
+        None => Err(BankChangePlanError::ManifestEntryMissingForObservedDocument),
+        Some(ManifestEntry::File { .. }) => Ok(()),
+        Some(ManifestEntry::Directory | ManifestEntry::Symlink { .. } | ManifestEntry::Other) => {
+            Err(BankChangePlanError::ManifestEntryNotRegularForObservedDocument)
+        }
+    }
 }
 
 fn scoped_reference_observations(
@@ -2367,36 +2432,316 @@ mod tests {
             destination,
         };
         let readiness = ReadinessEvidence::current_main();
+        let mut planning = facts(source, destination);
+        planning.destination_presence = BankStateDocumentSet::new(destination, false, false);
+        planning
+            .project_structure
+            .banks
+            .retain(|bank| bank.bank != destination);
         let cases = [
-            (
-                ManifestEntry::Symlink {
-                    target_digest: hash(7),
-                },
-                PreconditionPresence::Symlink {
-                    target_digest: hash(7),
-                },
-            ),
-            (ManifestEntry::Directory, PreconditionPresence::Directory),
-            (ManifestEntry::Other, PreconditionPresence::Other),
+            ManifestEntry::Symlink {
+                target_digest: hash(7),
+            },
+            ManifestEntry::Directory,
+            ManifestEntry::Other,
         ];
-        for (entry, expected) in cases {
-            let mut planning = facts(source, destination);
-            planning.scope_manifest.insert(
+        for entry in cases {
+            let mut variant = planning.clone();
+            variant.scope_manifest.insert(
                 RootRelativePath::parse("SET/PROJECT/bank02.work").unwrap(),
                 entry,
             );
-            let plan = plan_bank_change(intent, &planning, &readiness).unwrap();
+            let plan = plan_bank_change(intent, &variant, &readiness).unwrap();
             let presence = &plan
                 .preconditions
                 .iter()
                 .find(|item| item.relative_path.as_str() == "SET/PROJECT/bank02.work")
                 .expect("candidate path is a precondition")
                 .presence;
-            assert_eq!(presence, &expected);
+            assert!(matches!(
+                presence,
+                PreconditionPresence::Directory
+                    | PreconditionPresence::Symlink { .. }
+                    | PreconditionPresence::Other
+            ));
             assert!(plan
                 .blockers
                 .contains(&BankChangePlanBlocker::NonRegularPrecondition));
         }
+    }
+
+    fn planning_facts_without_manifest_paths(
+        source: BankIndex,
+        destination: BankIndex,
+        omit: &[&str],
+    ) -> BankChangePlanningFacts {
+        let planning = facts(source, destination);
+        let omit_set: std::collections::BTreeSet<_> = omit.iter().copied().collect();
+        let retained: Vec<_> = planning
+            .scope_manifest
+            .iter()
+            .filter(|(path, _)| !omit_set.contains(path.as_str()))
+            .map(|(path, entry)| (path.clone(), entry.clone()))
+            .collect();
+        let mut out = planning;
+        out.scope_manifest = TreeManifest::new();
+        for (path, entry) in retained {
+            out.scope_manifest.insert(path, entry);
+        }
+        out
+    }
+
+    #[test]
+    fn observed_source_work_missing_from_manifest_rejects_plan() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let planning = planning_facts_without_manifest_paths(
+            source,
+            destination,
+            &["SET/PROJECT/bank01.work"],
+        );
+        assert_eq!(
+            plan_bank_change(
+                BankChangeIntent::Copy {
+                    source,
+                    destination,
+                },
+                &planning,
+                &ReadinessEvidence::current_main(),
+            )
+            .unwrap_err(),
+            BankChangePlanError::ManifestEntryMissingForObservedDocument
+        );
+    }
+
+    #[test]
+    fn observed_source_strd_missing_from_manifest_rejects_plan() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let planning = planning_facts_without_manifest_paths(
+            source,
+            destination,
+            &["SET/PROJECT/bank01.strd"],
+        );
+        assert_eq!(
+            plan_bank_change(
+                BankChangeIntent::Copy {
+                    source,
+                    destination,
+                },
+                &planning,
+                &ReadinessEvidence::current_main(),
+            )
+            .unwrap_err(),
+            BankChangePlanError::ManifestEntryMissingForObservedDocument
+        );
+    }
+
+    #[test]
+    fn observed_destination_document_missing_from_manifest_rejects_plan() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let planning = planning_facts_without_manifest_paths(
+            source,
+            destination,
+            &["SET/PROJECT/bank02.strd"],
+        );
+        assert_eq!(
+            plan_bank_change(
+                BankChangeIntent::Move {
+                    source,
+                    destination,
+                },
+                &planning,
+                &ReadinessEvidence::current_main(),
+            )
+            .unwrap_err(),
+            BankChangePlanError::ManifestEntryMissingForObservedDocument
+        );
+    }
+
+    #[test]
+    fn project_state_present_but_project_work_missing_rejects_plan() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let planning = planning_facts_without_manifest_paths(
+            source,
+            destination,
+            &["SET/PROJECT/project.work"],
+        );
+        assert_eq!(
+            plan_bank_change(
+                BankChangeIntent::Copy {
+                    source,
+                    destination,
+                },
+                &planning,
+                &ReadinessEvidence::current_main(),
+            )
+            .unwrap_err(),
+            BankChangePlanError::ManifestEntryMissingForObservedDocument
+        );
+    }
+
+    #[test]
+    fn observed_document_manifest_directory_rejects_plan() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let mut planning = facts(source, destination);
+        planning.scope_manifest.insert(
+            RootRelativePath::parse("SET/PROJECT/bank01.work").unwrap(),
+            ManifestEntry::Directory,
+        );
+        assert_eq!(
+            plan_bank_change(
+                BankChangeIntent::Copy {
+                    source,
+                    destination,
+                },
+                &planning,
+                &ReadinessEvidence::current_main(),
+            )
+            .unwrap_err(),
+            BankChangePlanError::ManifestEntryNotRegularForObservedDocument
+        );
+    }
+
+    #[test]
+    fn observed_document_manifest_symlink_rejects_plan() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let mut planning = facts(source, destination);
+        planning.scope_manifest.insert(
+            RootRelativePath::parse("SET/PROJECT/bank01.work").unwrap(),
+            ManifestEntry::Symlink {
+                target_digest: hash(7),
+            },
+        );
+        assert_eq!(
+            plan_bank_change(
+                BankChangeIntent::Swap {
+                    source,
+                    destination,
+                },
+                &planning,
+                &ReadinessEvidence::current_main(),
+            )
+            .unwrap_err(),
+            BankChangePlanError::ManifestEntryNotRegularForObservedDocument
+        );
+    }
+
+    #[test]
+    fn observed_document_manifest_other_rejects_plan() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let mut planning = facts(source, destination);
+        planning.scope_manifest.insert(
+            RootRelativePath::parse("SET/PROJECT/bank01.strd").unwrap(),
+            ManifestEntry::Other,
+        );
+        assert_eq!(
+            plan_bank_change(
+                BankChangeIntent::Move {
+                    source,
+                    destination,
+                },
+                &planning,
+                &ReadinessEvidence::current_main(),
+            )
+            .unwrap_err(),
+            BankChangePlanError::ManifestEntryNotRegularForObservedDocument
+        );
+    }
+
+    #[test]
+    fn copy_destination_truly_absent_is_valid_precondition() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let intent = BankChangeIntent::Copy {
+            source,
+            destination,
+        };
+        let mut planning = facts(source, destination);
+        planning.destination_presence = BankStateDocumentSet::new(destination, false, false);
+        planning
+            .project_structure
+            .banks
+            .retain(|bank| bank.bank != destination);
+        planning.scope_manifest = planning_facts_without_manifest_paths(
+            source,
+            destination,
+            &["SET/PROJECT/bank02.work", "SET/PROJECT/bank02.strd"],
+        )
+        .scope_manifest;
+        let plan = plan_bank_change(intent, &planning, &ReadinessEvidence::current_main()).unwrap();
+        assert!(plan.preconditions.iter().any(|item| {
+            item.relative_path.as_str() == "SET/PROJECT/bank02.work"
+                && item.presence == PreconditionPresence::Absent
+        }));
+    }
+
+    #[test]
+    fn presence_absent_but_manifest_file_exists_rejects_plan() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let mut planning = facts(source, destination);
+        planning.project_structure.project_state = None;
+        assert_eq!(
+            plan_bank_change(
+                BankChangeIntent::Copy {
+                    source,
+                    destination,
+                },
+                &planning,
+                &ReadinessEvidence::current_main(),
+            )
+            .unwrap_err(),
+            BankChangePlanError::ManifestPresenceMismatch
+        );
+    }
+
+    #[test]
+    fn complete_manifest_still_generates_same_deterministic_plan() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let intent = BankChangeIntent::Copy {
+            source,
+            destination,
+        };
+        let planning = facts(source, destination);
+        let readiness = ReadinessEvidence::current_main();
+        let first = plan_bank_change(intent, &planning, &readiness).unwrap();
+        let second = plan_bank_change(intent, &planning, &readiness).unwrap();
+        assert_eq!(first.id(), second.id());
+    }
+
+    #[test]
+    fn missing_unrelated_manifest_entry_does_not_fail_planning() {
+        let source = BankIndex::new(0).unwrap();
+        let destination = BankIndex::new(1).unwrap();
+        let mut planning = facts(source, destination);
+        planning.scope_manifest.insert(
+            RootRelativePath::parse("SET/PROJECT/unrelated.bin").unwrap(),
+            ManifestEntry::File {
+                byte_size: 1,
+                content_hash: hash(8),
+            },
+        );
+        let planning = planning_facts_without_manifest_paths(
+            source,
+            destination,
+            &["SET/PROJECT/unrelated.bin"],
+        );
+        assert!(plan_bank_change(
+            BankChangeIntent::Copy {
+                source,
+                destination,
+            },
+            &planning,
+            &ReadinessEvidence::current_main(),
+        )
+        .is_ok());
     }
 
     #[test]

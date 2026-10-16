@@ -45,11 +45,11 @@ Implementation evidence:
 | Copy / Move / Swap Intent | PASS | `BankChangeIntent`; `source == destination` → `Err` |
 | affected Banks / Patterns / Parts / Tracks / Sample Slot refs | PASS | `enumerate_affected_references`, scoped `reference_observations`; Working vs SavedCheckpoint separate |
 | affected files | **PARTIAL** | `read_dependencies` + `candidate_change_documents` list **candidates** from state-document rules; final set unknown until #217 / owner decisions (Move vacated source, retarget, Working/SavedCheckpoint) |
-| PRE hashes / preconditions | **PARTIAL** | `FilePrecondition` from caller-supplied `scope_manifest`; missing manifest entries → `Absent` without cross-check against read-model presence — **no fail-closed completeness proof yet** |
+| PRE hashes / preconditions | **PASS** (observed deps) | After `MO-PSE-BANK-CHANGEPLAN-MANIFEST-COMPLETENESS-1`: `validate_observed_dependency_manifest` rejects missing/non-regular/mismatch before preconditions; `FULL_FILESYSTEM_ENUMERATION_PROVEN = NO` |
 | backup requirement | PASS | `BackupRequirementDeclaration` only (no `BackupEvidence`) |
 | verification requirement | PASS | six `VerificationRequirementKind` declarations (no fabricated POST hashes) |
 | deterministic PlanId | PASS | `derive_bank_changeplan_id`, `validate_integrity`; Copy / Move / Swap each run planner twice in unit tests and compare `PlanId` |
-| stale detection | **PARTIAL** | `check_bank_changeplan_staleness` compares manifests; incomplete PRE manifest can miss files (same gap as preconditions) |
+| stale detection | **PASS_WITH_VALIDATED_PRE_MANIFEST** | `check_bank_changeplan_staleness` unchanged; plans only start from validated observed-dependency PRE (`scope_manifest` completeness for read-model paths) |
 | planner byte preservation | PASS (scoped) | Subset digest on committed fixtures (`.work`, `.strd`, selected sidecars) — **not** a syscall-level no-write proof ([`PSE_CI_FOUNDATION.md`](../testing/PSE_CI_FOUNDATION.md) §5) |
 
 Plans remain **blocked for execution** (`execution_readiness = Blocked`, semantic / readiness blockers in `Ok(plan)`).
