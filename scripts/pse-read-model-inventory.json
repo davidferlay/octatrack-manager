@@ -139,7 +139,18 @@
         "plan_id_distinguishes_complete_slot_identities",
         "non_regular_precondition_is_explicit_and_blocking",
         "copy_plan_blocks_unparsed_project_state",
-        "declared_presence_must_match_structure_roles"
+        "declared_presence_must_match_structure_roles",
+        "observed_source_work_missing_from_manifest_rejects_plan",
+        "observed_source_strd_missing_from_manifest_rejects_plan",
+        "observed_destination_document_missing_from_manifest_rejects_plan",
+        "project_state_present_but_project_work_missing_rejects_plan",
+        "observed_document_manifest_directory_rejects_plan",
+        "observed_document_manifest_symlink_rejects_plan",
+        "observed_document_manifest_other_rejects_plan",
+        "copy_destination_truly_absent_is_valid_precondition",
+        "presence_absent_but_manifest_file_exists_rejects_plan",
+        "complete_manifest_still_generates_same_deterministic_plan",
+        "missing_unrelated_manifest_entry_does_not_fail_planning"
       ]
     },
     {
@@ -163,7 +174,8 @@
       "filter": "pse_bank_changeplan::",
       "required_tests": [
         "bank_changeplan_generation_leaves_committed_fixture_bytes_identical",
-        "bank_changeplan_generation_on_multi_device_fixture_is_read_only"
+        "bank_changeplan_generation_on_multi_device_fixture_is_read_only",
+        "observed_source_work_missing_from_manifest_rejects_plan_on_fixture"
       ]
     },
     {
