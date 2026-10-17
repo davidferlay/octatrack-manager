@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import {
   ADJACENT_TRANSITIONS,
@@ -19,22 +20,47 @@ import {
   FIXTURE_ROOT,
   META_SCHEMA,
   OPERATION_KIND,
+  PINNED_OS_RELEASE,
+  PINNED_OS_REVISION,
   PLANNED_CAPTURES,
   REQUIRED_FILES,
   SOURCE_BANK,
   WORK_ID,
   analyzeBankCopyEvidence,
   assertPlannedCaptureName,
+  buildBankCopyDatasetFromFixture,
   buildManifest,
   buildTransitionMatrix,
   classifyBankCopyEvidence,
   classifyByteProvenance,
   evidenceStatus,
   metaTemplate,
+  parseCaptureMayFlushState,
   parseProjectStatesSection,
+  setBankDecodeValidator,
   verifyManifest,
   writeManifest,
 } from "./pse-bank-copy-state-doc-device-evidence.mjs";
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const FIXTURE_S0 = path.join(
+  SCRIPT_DIR,
+  "../src-tauri/tests/fixtures/pse_bank_copy_persistence/s0_baseline_saved",
+);
+const FIXTURE_DIVERGED = path.join(
+  SCRIPT_DIR,
+  "../src-tauri/tests/fixtures/pse_bank_multi_device/bank_a_working_diverged",
+);
+
+test.before(() => {
+  setBankDecodeValidator((paths) => {
+    for (const filePath of paths) {
+      if (readFileSync(filePath).length < 256) {
+        throw new Error(`bank document too small to decode: ${filePath}`);
+      }
+    }
+  });
+});
 
 test("planned bank-copy stages match the receptacle contract", () => {
   assert.deepEqual(PLANNED_CAPTURES.map((entry) => entry.stage_semantics), [
@@ -101,6 +127,15 @@ test("may-flush transport blocks immediate copy attribution", () => {
   assert.equal(judged.capture_transport_confidence, "MAY_FLUSH");
 });
 
+test("ambiguous may-flush values stay unknown", () => {
+  assert.equal(parseCaptureMayFlushState({ capture_may_flush_device_state: "maybe" }), "unknown");
+  const judged = classifyBankCopyEvidence({
+    stages: syntheticStages({ destWorkAt: "S2", mayFlush: "maybe" }),
+  });
+  assert.equal(judged.capture_transport_confidence, "UNKNOWN");
+  assert.notEqual(judged.capture_transport_confidence, "PROVEN_NON_MUTATING");
+});
+
 test("provenance classifier distinguishes source roles", () => {
   const work = Buffer.from("source-working");
   const strd = Buffer.from("source-strd");
@@ -133,7 +168,7 @@ test("missing S2 copy_operation keeps copy_operation_proven NO", () => {
 });
 
 test("complete synthetic capture promotes analysis when transport is recorded", () => {
-  const root = materializeSyntheticCapture({ destWorkAt: "S2", transport: "recorded" });
+  const root = materializeSyntheticCapture({ destWorkAt: "S2", destStrdAt: "S4", transport: "recorded" });
   try {
     const before = snapshotDeviceBinaryHashes(root);
     for (const planned of PLANNED_CAPTURES) writeManifest(planned.name, root);
@@ -144,6 +179,75 @@ test("complete synthetic capture promotes analysis when transport is recorded", 
     assert.equal(status.copy_saved_checkpoint_semantics, "UNKNOWN");
     assert.equal(analyzeBankCopyEvidence(root).fixture_no_write, "PASS");
     assert.equal(snapshotDeviceBinaryHashes(root), before);
+    buildBankCopyDatasetFromFixture(root);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("wrong firmware metadata blocks promotion", () => {
+  const root = materializeSyntheticCapture({});
+  try {
+    const metaPath = path.join(root, "s0_baseline_saved", "capture.meta.json");
+    const meta = JSON.parse(readFileSync(metaPath, "utf8"));
+    meta.os_release = "1.39";
+    writeFileSync(metaPath, `${JSON.stringify(meta, null, 2)}\n`);
+    for (const planned of PLANNED_CAPTURES) writeManifest(planned.name, root);
+    const status = evidenceStatus(root);
+    const s0 = status.captures.find((entry) => entry.stage_id === "S0");
+    assert.equal(s0.capture_status, "REJECTED");
+    assert.match(s0.error, /R0173/);
+    assert.equal(status.device_capture, "REJECTED");
+    assert.equal(status.device_evidence_promotion, "BLOCKED");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("UI state must match project.work [STATES]", () => {
+  const root = materializeSyntheticCapture({ projectBank: 1 });
+  try {
+    for (const planned of PLANNED_CAPTURES) writeManifest(planned.name, root);
+    const row = evidenceStatus(root).captures.find((entry) => entry.stage_id === "S0");
+    assert.equal(row.capture_status, "REJECTED");
+    assert.match(row.error, /do not match project\.work/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("symlink bank file is rejected before read", () => {
+  const root = materializeSyntheticCapture({});
+  try {
+    const target = path.join(root, "outside-bank.work");
+    writeFileSync(target, readFileSync(path.join(FIXTURE_S0, "bank01.work")));
+    const linkPath = path.join(root, "s1_source_working_diverged_pre_copy", "bank01.work");
+    rmSync(linkPath);
+    symlinkSync(target, linkPath);
+    const row = evidenceStatus(root).captures.find((entry) => entry.stage_id === "S1");
+    assert.equal(row.capture_status, "REJECTED");
+    assert.match(row.error, /Symlink not allowed/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("truncated bank bytes block promotion", () => {
+  const root = materializeSyntheticCapture({});
+  try {
+    writeFileSync(path.join(root, "s0_baseline_saved", "bank02.work"), Buffer.alloc(8));
+    const row = evidenceStatus(root).captures.find((entry) => entry.stage_id === "S0");
+    assert.equal(row.capture_status, "REJECTED");
+    assert.match(row.error, /too small to decode|bank document too small/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("dataset export requires every stage present", () => {
+  const root = materializeSyntheticCapture({});
+  try {
+    assert.throws(() => buildBankCopyDatasetFromFixture(root), /every stage PRESENT/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -206,11 +310,52 @@ function transportMeta(options) {
       capture_may_flush_device_state: "unknown",
     };
   }
+  const mayFlush = options.mayFlush ?? "no";
   return {
     capture_transport: "Operator copied CF files via documented USB path",
     capture_required_mode_change: "no",
-    capture_may_flush_device_state: options.mayFlush ?? "no",
+    capture_may_flush_device_state: mayFlush,
   };
+}
+
+function readFixture(base, name) {
+  return readFileSync(path.join(base, name));
+}
+
+function diskStageFiles(planned, options = {}) {
+  const {
+    destWorkAt = "S2",
+    destStrdAt = "S4",
+    s1SourceDiverged = true,
+    projectBank = 0,
+    projectPattern = 3,
+  } = options;
+  const rank = stageRank(planned.stage_id);
+  const files = {};
+  for (const name of REQUIRED_FILES) {
+    if (name === "capture.meta.json") continue;
+    if (name === "project.work") {
+      files[name] = Buffer.from(projectText(projectBank, projectPattern), "latin1");
+      continue;
+    }
+    files[name] = readFixture(FIXTURE_S0, name);
+  }
+  if (rank >= stageRank("S1")) {
+    if (s1SourceDiverged) {
+      files["bank01.work"] = readFixture(FIXTURE_DIVERGED, "bank01.work");
+    } else {
+      const same = readFixture(FIXTURE_S0, "bank01.work");
+      files["bank01.work"] = same;
+      files["bank01.strd"] = same;
+    }
+  }
+  if (rank >= stageRank(destWorkAt)) {
+    files[`${DEST_BANK}.work`] = Buffer.from(files["bank01.work"]);
+  }
+  if (rank >= stageRank(destStrdAt)) {
+    files[`${DEST_BANK}.strd`] = readFixture(FIXTURE_S0, "bank03.strd");
+  }
+  return files;
 }
 
 function syntheticStages(options = {}) {
@@ -284,11 +429,30 @@ function syntheticStages(options = {}) {
 
 function materializeSyntheticCapture(options = {}) {
   const root = mkdtempSync(path.join(tmpdir(), "pse-bank-copy-ready-"));
-  for (const stage of syntheticStages(options)) {
-    const dir = path.join(root, stage.capture_name);
+  for (const planned of PLANNED_CAPTURES) {
+    const meta = {
+      ...metaTemplate(planned),
+      ...transportMeta(options),
+      device_generated: true,
+      capture_sequence_proven: true,
+      os_revision: PINNED_OS_REVISION,
+      os_release: PINNED_OS_RELEASE,
+      capture_date: "2026-10-17",
+      operator_note: "synthetic bank copy capture",
+      current_bank_ui: "A",
+      current_pattern_ui: "A04",
+      save_operation: planned.stage_id === "S0" || planned.stage_id === "S4" ? "Explicit project save" : "",
+      working_edit_operation: planned.stage_id === "S1" ? "Small working-only edit on Bank A" : "",
+      copy_operation: planned.stage_id === "S2" ? "Native Bank Copy A to D" : "",
+      control_switch_operation: planned.stage_id === "S3" ? "Switch to control Bank B" : "",
+      reload_operation: planned.stage_id === "S5" ? "Project reload" : "",
+    };
+    const dir = path.join(root, planned.name);
     mkdirSync(dir, { recursive: true });
-    writeFileSync(path.join(dir, "capture.meta.json"), `${JSON.stringify(stage.meta, null, 2)}\n`);
-    for (const [name, buf] of Object.entries(stage.files)) writeFileSync(path.join(dir, name), buf);
+    writeFileSync(path.join(dir, "capture.meta.json"), `${JSON.stringify(meta, null, 2)}\n`);
+    for (const [name, buf] of Object.entries(diskStageFiles(planned, options))) {
+      writeFileSync(path.join(dir, name), buf);
+    }
   }
   return root;
 }

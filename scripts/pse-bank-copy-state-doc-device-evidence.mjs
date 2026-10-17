@@ -18,8 +18,33 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const TAURI_ROOT = path.join(SCRIPT_DIR, "../src-tauri");
+
+export const PINNED_OS_REVISION = "R0173";
+export const PINNED_OS_RELEASE = "1.40";
+
+const BANK_DOCUMENT_FILES = [
+  "bank01.work",
+  "bank01.strd",
+  "bank02.work",
+  "bank02.strd",
+  "bank03.work",
+  "bank03.strd",
+  "bank04.work",
+  "bank04.strd",
+];
+
+/** @type {((paths: string[]) => void) | null} */
+let bankDecodeValidator = null;
+
+export function setBankDecodeValidator(fn) {
+  bankDecodeValidator = fn;
+}
 
 export const META_SCHEMA = "masterocta.pse-bank-copy-state-doc-capture:v1";
 export const MANIFEST_SCHEMA = "masterocta-pse-bank-copy-state-doc-manifest:v1";
@@ -53,10 +78,7 @@ export const REQUIRED_FILES = [
 
 export const MATRIX_FILES = REQUIRED_FILES.filter((name) => name !== "capture.meta.json");
 
-export const FIXTURE_ROOT = path.join(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../src-tauri/tests/fixtures/pse_bank_copy_state_doc",
-);
+export const FIXTURE_ROOT = path.join(SCRIPT_DIR, "../src-tauri/tests/fixtures/pse_bank_copy_state_doc");
 
 export const PLANNED_CAPTURES = [
   {
@@ -291,23 +313,114 @@ function readMeta(captureDir) {
   return meta;
 }
 
+export function parseCaptureMayFlushState(meta) {
+  const value = meta?.capture_may_flush_device_state;
+  if (typeof value !== "string") return "unknown";
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "" || normalized === "unknown") return "unknown";
+  if (normalized === "yes" || normalized === "true" || normalized === "1") return "yes";
+  if (normalized === "no" || normalized === "false" || normalized === "0") return "no";
+  return "unknown";
+}
+
 function transportRecorded(meta) {
-  for (const key of [
-    "capture_transport",
-    "capture_required_mode_change",
-    "capture_may_flush_device_state",
-  ]) {
+  for (const key of ["capture_transport", "capture_required_mode_change"]) {
     const value = meta[key];
     if (typeof value !== "string" || value.trim() === "" || value.trim().toLowerCase() === "unknown") {
       return false;
     }
   }
-  return true;
+  return parseCaptureMayFlushState(meta) !== "unknown";
 }
 
 function transportMayFlush(meta) {
-  const value = String(meta.capture_may_flush_device_state).trim().toLowerCase();
-  return value === "yes" || value === "true" || value === "1";
+  return parseCaptureMayFlushState(meta) === "yes";
+}
+
+export function assertPinnedFirmware(meta) {
+  if (meta.os_revision?.trim() !== PINNED_OS_REVISION || meta.os_release?.trim() !== PINNED_OS_RELEASE) {
+    throw new Error(`capture OS must be ${PINNED_OS_REVISION} / ${PINNED_OS_RELEASE} for this experiment`);
+  }
+}
+
+const UI_BANK_INDEX = { A: 0, B: 1, C: 2, D: 3 };
+
+export function parseBankUiToIndex(label) {
+  const key = String(label).trim().toUpperCase();
+  if (!Object.hasOwn(UI_BANK_INDEX, key)) {
+    throw new Error(`unrecognized current_bank_ui: ${label}`);
+  }
+  return UI_BANK_INDEX[key];
+}
+
+export function parsePatternUiToIndex(label) {
+  const match = String(label).trim().match(/^A(\d{2})$/i);
+  if (!match) {
+    throw new Error(`unrecognized current_pattern_ui: ${label}`);
+  }
+  const index = Number(match[1]) - 1;
+  if (index < 0 || index > 15) {
+    throw new Error(`current_pattern_ui out of range: ${label}`);
+  }
+  return index;
+}
+
+export function assertUiMatchesProjectStates(meta, states) {
+  if (!states.ok) throw new Error("project.work [STATES] must contain one BANK and one PATTERN in 0..15");
+  const bank = parseBankUiToIndex(meta.current_bank_ui);
+  const pattern = parsePatternUiToIndex(meta.current_pattern_ui);
+  if (bank !== states.bank || pattern !== states.pattern) {
+    throw new Error("current_bank_ui/current_pattern_ui do not match project.work [STATES]");
+  }
+}
+
+function decodeBankDocumentPaths(paths) {
+  if (bankDecodeValidator) {
+    bankDecodeValidator(paths);
+    return;
+  }
+  execFileSync(
+    "cargo",
+    [
+      "run",
+      "--quiet",
+      "--locked",
+      "--bin",
+      "pse_bank_copy_capture_decode_check",
+      "--",
+      ...paths,
+    ],
+    { cwd: TAURI_ROOT, stdio: "pipe" },
+  );
+}
+
+function assertCaptureRegularFileWithinCap(captureDir, name) {
+  const filePath = path.join(captureDir, name);
+  const st = assertRegularFile(filePath, name);
+  if (!st) throw new Error(`device_generated capture is missing ${name}`);
+  if (st.size > sizeCap(name)) throw new Error(`${name} exceeds its size cap`);
+  return st;
+}
+
+function readBoundedCaptureFile(captureDir, name) {
+  assertCaptureRegularFileWithinCap(captureDir, name);
+  return readFileSync(path.join(captureDir, name));
+}
+
+function assertAllBankDocumentsDecodable(captureDir) {
+  const paths = BANK_DOCUMENT_FILES.map((name) => path.join(captureDir, name));
+  for (const name of BANK_DOCUMENT_FILES) {
+    assertCaptureRegularFileWithinCap(captureDir, name);
+  }
+  decodeBankDocumentPaths(paths);
+}
+
+function assertAllStagesPresentForDataset(root) {
+  const rows = PLANNED_CAPTURES.map((planned) => captureRow(planned, root));
+  const bad = rows.filter((row) => row.capture_status !== "PRESENT");
+  if (bad.length > 0) {
+    throw new Error("dataset export requires every stage PRESENT with verified manifests");
+  }
 }
 
 function nonEmptyString(value) {
@@ -338,21 +451,20 @@ function provenanceReady(meta, planned, captureDir) {
   for (const key of ["os_revision", "os_release", "capture_date", "operator_note", "current_bank_ui", "current_pattern_ui"]) {
     if (!nonEmptyString(meta[key])) throw new Error("capture provenance is incomplete");
   }
+  assertPinnedFirmware(meta);
   if (!transportRecorded(meta)) throw new Error("capture transport metadata is incomplete");
   const opField = STAGE_OPERATOR_FIELD[planned.stage_id];
   if (!nonEmptyString(meta[opField])) {
     throw new Error(`${planned.stage_id} must record a non-empty ${opField}`);
   }
-  const projectPath = path.join(captureDir, "project.work");
-  const projectStat = assertRegularFile(projectPath, "project.work");
-  if (!projectStat) throw new Error("capture provenance is incomplete");
-  if (projectStat.size > PROJECT_WORK_CAP_BYTES) throw new Error("project.work exceeds 1 MiB");
-  const states = parseProjectStatesSection(readFileSync(projectPath, "latin1"));
-  if (!states.ok) throw new Error("project.work [STATES] must contain one BANK and one PATTERN in 0..15");
-  assertRegularFile(path.join(captureDir, "project.strd"), "project.strd");
+  assertCaptureRegularFileWithinCap(captureDir, "project.work");
+  assertCaptureRegularFileWithinCap(captureDir, "project.strd");
+  const states = parseProjectStatesSection(readBoundedCaptureFile(captureDir, "project.work").toString("latin1"));
+  assertUiMatchesProjectStates(meta, states);
+  assertAllBankDocumentsDecodable(captureDir);
   if (planned.stage_id === "S1") {
-    const work = readFileSync(path.join(captureDir, `${SOURCE_BANK}.work`));
-    const strd = readFileSync(path.join(captureDir, `${SOURCE_BANK}.strd`));
+    const work = readBoundedCaptureFile(captureDir, `${SOURCE_BANK}.work`);
+    const strd = readBoundedCaptureFile(captureDir, `${SOURCE_BANK}.strd`);
     if (buffersEqual(work, strd)) {
       throw new Error("S1 requires bank01.work != bank01.strd (PRE source role divergence)");
     }
@@ -500,10 +612,16 @@ function captureRow(planned, root) {
       return { ...plannedMeta, capture_status: "WAITING" };
     }
     for (const name of REQUIRED_FILES) {
-      const st = assertRegularFile(path.join(captureDir, name), name);
-      if (!st) throw new Error(`device_generated capture is missing ${name}`);
-      if (st.size > sizeCap(name)) throw new Error(`${name} exceeds its size cap`);
+      if (name === "capture.meta.json") continue;
+      if (BANK_DOCUMENT_FILES.includes(name) || name.startsWith("project.")) {
+        assertCaptureRegularFileWithinCap(captureDir, name);
+      } else {
+        const st = assertRegularFile(path.join(captureDir, name), name);
+        if (!st) throw new Error(`device_generated capture is missing ${name}`);
+        if (st.size > sizeCap(name)) throw new Error(`${name} exceeds its size cap`);
+      }
     }
+    assertAllBankDocumentsDecodable(captureDir);
     const verified = verifyManifest(planned.name, root);
     if (!verified.ok) throw new Error("SHA256SUMS.json is stale");
     return { ...plannedMeta, capture_status: "PRESENT", manifest_verified: true };
@@ -582,6 +700,7 @@ export function buildBankCopyDatasetFromFixture(root, options = {}) {
   if (!sequenceProvenFromMeta(root)) {
     throw new Error("capture sequence is not proven");
   }
+  assertAllStagesPresentForDataset(root);
   const stages = PLANNED_CAPTURES.map((planned) => {
     const captureDir = resolveCaptureDir(planned.name, root);
     return {
@@ -710,7 +829,15 @@ export function classifyBankCopyEvidence(dataset) {
   shell.dest_strd_first_changed_at = matrix.dest_strd_first_changed_at;
   const transportFlush = stages.some((stage) => transportMayFlush(stage.meta));
   const transportUnknown = stages.some((stage) => !transportRecorded(stage.meta));
-  shell.capture_transport_confidence = transportUnknown
+  const osMismatch = stages.some((stage) => {
+    try {
+      assertPinnedFirmware(stage.meta);
+      return false;
+    } catch {
+      return true;
+    }
+  });
+  shell.capture_transport_confidence = transportUnknown || osMismatch
     ? "UNKNOWN"
     : transportFlush
       ? "MAY_FLUSH"
@@ -769,6 +896,15 @@ export function evidenceStatus(root = FIXTURE_ROOT) {
   const sequenceProven = sequenceProvenFromMeta(root);
   const rejected = captures.some((row) => row.capture_status === "REJECTED");
   const allPresent = captures.every((row) => row.capture_status === "PRESENT");
+  const pinnedOsConsistent = allPresent && captures.every((row) => {
+    try {
+      const meta = readMeta(resolveCaptureDir(row.capture_label, root));
+      assertPinnedFirmware(meta);
+      return true;
+    } catch {
+      return false;
+    }
+  });
   const base = {
     ...frozenPolicyFields(),
     capture_sequence_proven: sequenceProven ? "YES" : "NO",
@@ -787,6 +923,13 @@ export function evidenceStatus(root = FIXTURE_ROOT) {
       ...base,
       device_capture: bytesPresent ? "PRESENT_UNPROMOTED" : "WAITING_FOR_REAL_DEVICE",
       result: bytesPresent ? "STOP_FOR_OPERATOR_CONFIRMATION" : "WAITING_FOR_OPERATOR_CAPTURE",
+    };
+  }
+  if (!pinnedOsConsistent) {
+    return {
+      ...base,
+      device_capture: "INCOMPLETE",
+      result: "STOP_FOR_OPERATOR_CONFIRMATION",
     };
   }
   const dataset = buildBankCopyDatasetFromFixture(root);

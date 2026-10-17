@@ -71,5 +71,9 @@ tempfile = "3"
 [features]
 test-seams = ["ot-executor/test-seams"]
 
+[[bin]]
+name = "pse_bank_copy_capture_decode_check"
+path = "src/bin/pse_bank_copy_capture_decode_check.rs"
+
 [dev-dependencies]
 tempfile = "3"
