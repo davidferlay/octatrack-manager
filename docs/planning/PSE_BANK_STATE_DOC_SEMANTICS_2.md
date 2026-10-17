@@ -26,10 +26,12 @@ COPY_PROJECT_STATE_EFFECT = NOT_APPLICABLE (until Copy role rule is proven; no a
 MOVE_DESTINATION_ROLE_SET = OWNER_DECISION_REQUIRED (same-role default constraint only; not product semantics)
 SWAP_ROLE_RULE = OWNER_DECISION_REQUIRED (same-role symmetry is safe enumeration, not proven product semantics)
 
-COPY_ACTIVE_BANK_RETARGET = DEVICE_EVIDENCE_REQUIRED
-MOVE_ACTIVE_BANK_RETARGET = DEVICE_EVIDENCE_REQUIRED
-SWAP_ACTIVE_BANK_RETARGET = DEVICE_EVIDENCE_REQUIRED
-ACTIVE_PATTERN_RETARGET = DEVICE_EVIDENCE_REQUIRED
+COPY_ACTIVE_BANK_RETARGET = DEVICE_EVIDENCE_REQUIRED (native Bank Copy exists)
+MOVE_ACTIVE_BANK_RETARGET = OWNER_DECISION_REQUIRED (no native firmware Move; PSE-2 product only)
+SWAP_ACTIVE_BANK_RETARGET = OWNER_DECISION_REQUIRED (no native firmware Swap; PSE-2 product only)
+ACTIVE_PATTERN_RETARGET_COPY = DEVICE_EVIDENCE_REQUIRED
+ACTIVE_PATTERN_RETARGET_MOVE = OWNER_DECISION_REQUIRED
+ACTIVE_PATTERN_RETARGET_SWAP = OWNER_DECISION_REQUIRED
 
 READINESS_GAP_WORKING_SAVEDCHECKPOINT = OPEN
 READINESS_GRANULARITY_MISMATCH = YES
@@ -79,10 +81,13 @@ Historical assumptions (legacy disabled `copy_bank`, control-plane vocabulary) a
 | Move: vacated source slot A after A→D | No device Move; no empty-bank fixture norm | Unknown for firmware Move | PSE-2 Move is product operation | **OWNER_DECISION_REQUIRED** |
 | Move: which roles move (Working only, SavedCheckpoint only, both) | Same-role listing only in domain | Unknown for device Move | Product must decide if device has no Move | **OWNER_DECISION_REQUIRED** (role set); paired with vacated source |
 | Swap: same-role pairing sufficient as product semantics | Symmetry enforced in domain | Unknown (no device Swap capture) | Safe default vs full semantics | **OWNER_DECISION_REQUIRED** |
-| Move/Swap: active `[STATES] BANK` follow contents vs stay on index | Pattern Paste BANK column only; not Bank Copy/Move/Swap | Unknown | UX choice if device ambiguous | **DEVICE_EVIDENCE_REQUIRED** |
-| Active `[STATES] PATTERN` when BANK changes | `bank_b_pattern_4` shows independent fields; no Move/Swap | Unknown | Unknown | **DEVICE_EVIDENCE_REQUIRED** |
-| Same-role only; no cross-role mapping | Domain + tests | N/A (safety constraint) | Already enforced | **ALREADY_PROVEN** (constraint, not operation meaning) |
-| Swap asymmetric role presence → block | Domain + tests | N/A | Fail-closed | **ALREADY_PROVEN** (constraint) |
+| Copy: active `[STATES] BANK` / `PATTERN` on native Bank Copy | No staged Bank Copy capture yet | Unknown until capture | Copy may not need retarget | **DEVICE_EVIDENCE_REQUIRED** |
+| Move/Swap: active `[STATES] BANK` follow contents vs stay on index | No firmware Move/Swap | N/A (product-only ops) | MasterOCTa UX / safety | **OWNER_DECISION_REQUIRED** |
+| `[STATES] PATTERN` when BANK changes (Copy) | `bank_b_pattern_4` shows separate fields only | Unknown | — | **DEVICE_EVIDENCE_REQUIRED** (with Copy capture) |
+| `[STATES] PATTERN` when BANK changes (Move/Swap) | No device Move/Swap | N/A | Product policy | **OWNER_DECISION_REQUIRED** |
+| Copy / Swap: same-role only; no cross-role mapping | `validate_swap_role_pairings`; Copy lists per-role destinations | Swap enforced in domain | Copy listing convention | **ALREADY_PROVEN** (Copy + Swap constraints only) |
+| Move: same-role only; no cross-role mapping | Move lists union of roles; **no** Move role-pair validator in domain | N/A | Must decide + later contract | **OWNER_DECISION_REQUIRED** (not ALREADY_PROVEN) |
+| Swap asymmetric role presence → block | Domain + tests | N/A | Fail-closed | **ALREADY_PROVEN** (Swap constraint) |
 | Bank internal identity / byte rewrite | #221 | Separate issue | Separate issue | **NOT_APPLICABLE** (see #221) |
 | Scene / Recorder / Arranger in bank bytes | Unmodeled gaps | — | — | **NOT_APPLICABLE** (fail-closed; do not expand decoders here) |
 
@@ -115,7 +120,7 @@ After Move A → D, what A becomes (empty template, files absent, initialized st
 
 ### Destination document roles
 
-Move must not cross-map roles (e.g. `A.work` → `D.strd`) unless separately proven. Default safety: same-role movement derived from source presence is **candidate enumeration only**; which roles Move touches is **OWNER_DECISION_REQUIRED** together with vacated source policy.
+Same-role pairing for Move is **not** enforced like Swap (`validate_swap_role_pairings` is Swap-only). A future Move contract must add an explicit role-mapping rule or accept cross-role risk. Until then: which roles Move touches and whether cross-role mapping is forbidden are **OWNER_DECISION_REQUIRED** together with vacated source policy (BMS §16-1).
 
 `MOVE_STATE_DOC_RULE` stays **BLOCKED**.
 
@@ -133,9 +138,11 @@ Working `project.work` `[STATES]`:
 
 | Operation | `[STATES] BANK` | `[STATES] PATTERN` |
 | --- | --- | --- |
-| Copy | **DEVICE_EVIDENCE_REQUIRED** (`COPY_ACTIVE_BANK_RETARGET`) | **DEVICE_EVIDENCE_REQUIRED** (`ACTIVE_PATTERN_RETARGET`) |
-| Move (active = source) | **DEVICE_EVIDENCE_REQUIRED** | **DEVICE_EVIDENCE_REQUIRED** |
-| Swap (active on either side) | **DEVICE_EVIDENCE_REQUIRED** | **DEVICE_EVIDENCE_REQUIRED** |
+| Copy (native on device) | **DEVICE_EVIDENCE_REQUIRED** | **DEVICE_EVIDENCE_REQUIRED** (Copy capture) |
+| Move (PSE-2 product only) | **OWNER_DECISION_REQUIRED** | **OWNER_DECISION_REQUIRED** |
+| Swap (PSE-2 product only) | **OWNER_DECISION_REQUIRED** | **OWNER_DECISION_REQUIRED** |
+
+Firmware exposes native **Bank Copy**; it does not expose native Bank Move/Swap matching PSE-2. Unconditional **DEVICE_EVIDENCE_REQUIRED** on Move/Swap retarget would leave #217's close gate unsatisfiable without a product decision path.
 
 Domain today: Copy → `ActiveBankRetarget::NotApplicable` in evaluator; Move/Swap active source or Swap destination → `Unknown`. That is **code default**, not accepted semantics.
 
@@ -172,14 +179,14 @@ Owner must pick before `MOVE_STATE_DOC_RULE` can become `Ready`.
 | Parent | #217 |
 | Fixture | New disposable project (e.g. `P_BANK_COPY_STATE`) under `src-tauri/tests/fixtures/` after separate evidence Work ID approval |
 | Device | Octatrack MkII, `R0173` / `1.40` |
-| PRE | Baseline save; record `[STATES] BANK`, `PATTERN`; hash `bankA/B/D` `.work`/`.strd`, `project.work` |
+| PRE | (1) Establish **distinct** source Working vs SavedCheckpoint on bank A: after baseline Project Save, apply a **working-only** edit on bank A (no Save), then **verify on the acquisition path** that `bankA.work` ≠ `bankA.strd` (typed or raw); if mount shows equality, stop — do not attribute Copy SavedCheckpoint semantics. (2) Record distinct **destination sentinel** on bank D (known prior `bankD.work` / `bankD.strd` hashes). (3) Record `[STATES] BANK`, `PATTERN`. (4) Hash `bankA`, `bankB`, `bankD` `.work`/`.strd`, **`project.work` and `project.strd`**. (5) Record `capture_transport` for PRE acquisition. |
 | Operation | Native **Bank Copy** A → D (menu labels recorded in manifest) |
-| POST stages | (1) Immediately after copy, **before** any bank switch or Project Save; (2) After switch to control bank not A/D; (3) After explicit Project Save; (4) Optional reload + UI sentinel |
+| POST stages | (1) Immediately after copy, **before** bank switch or Project Save; (2) After switch to control bank not A/D; (3) After explicit Project Save; (4) Optional reload + UI sentinel. **Record `capture_transport` per stage** (same rule as [`PSE_PATTERN_PASTE_PERSISTENCE.md`](./PSE_PATTERN_PASTE_PERSISTENCE.md): unknown transport blocks generalizing Working/SavedCheckpoint timing). Prefer acquisition that does not flush device state (if USB disk mode / CF mount mutates, document and treat stage attribution as **inconclusive**). |
 | UI sentinel | Destination bank/pattern visible state at each stage |
-| Files | All compared bank files + `project.work`/`project.strd` per stage |
-| Manifest | `masterocta.pse-bank-copy-state-doc-capture:v1` (to be defined in that Work ID) |
-| Success | First divergence time identifies which role(s) changed for Copy; destination `.strd` provenance classifiable |
-| Inconclusive | Copy cannot be isolated from immediate save; or CF mount hides pre-save `.work` divergence (as in #219 E/F) |
+| Files | All compared bank files + `project.work` + **`project.strd`** at **every** stage (including PRE) |
+| Manifest | `masterocta.pse-bank-copy-state-doc-capture:v1` (to be defined in that Work ID); per-stage `capture_transport` required for promotion |
+| Success | PRE proved `bankA.work` ≠ `bankA.strd`; per-stage transport recorded and non-mutating **or** attribution qualified; first **operation-attributable** divergence identifies Copy role writes; destination `.strd` provenance classifiable vs source `.work` vs source `.strd` vs prior D |
+| Inconclusive | PRE could not seed distinct source roles; copy not isolated from immediate save; unknown or state-mutating `capture_transport`; CF mount hides pre-save `.work` divergence (#219 E/F); immediate `project.strd` change with no PRE baseline |
 
 ### Optional follow-ups (only if one sequence cannot cover)
 
@@ -208,7 +215,7 @@ Do not merge Copy + active retarget if Copy-immediate stages already answer both
 
 ## #217 close gate
 
-#217 may close only when Working/SavedCheckpoint rules are resolved for Copy, Move, and Swap **and** active-bank handling is resolved or split to a tracked successor with narrowed #217 scope.
+#217 may close only when Working/SavedCheckpoint rules are resolved for Copy, Move, and Swap **and** active-bank handling is resolved (device evidence for Copy; **owner decisions** for product-only Move/Swap retarget) or split to a tracked successor with narrowed #217 scope.
 
 Neither condition is met. `ISSUE_217_CLOSE_READY = NO`
 
