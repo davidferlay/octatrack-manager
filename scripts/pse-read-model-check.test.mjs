@@ -105,7 +105,7 @@ describe("pse read-model package wiring", () => {
     );
     assert.equal(
       packageJson.scripts["test:pse-scripts"],
-      "node --test scripts/pse-fixture-manifest.test.mjs scripts/pse-read-model-check.test.mjs scripts/pse-ci-scope.test.mjs scripts/pse-ci-aggregate.test.mjs scripts/pse-ci-workflow.test.mjs scripts/pse-bank-mutation-guard.test.mjs scripts/pse-bank-multi-device-manifest.test.mjs scripts/pse-bank-internal-identity-audit.test.mjs scripts/pse-arrangement-capture.test.mjs scripts/pse-bank-identity-device.test.mjs scripts/pse-bank-identity-device-2.test.mjs scripts/pse-bank-identity-crossover.test.mjs scripts/pse-pattern-paste-persistence.test.mjs",
+      "node --test scripts/pse-fixture-manifest.test.mjs scripts/pse-read-model-check.test.mjs scripts/pse-ci-scope.test.mjs scripts/pse-ci-aggregate.test.mjs scripts/pse-ci-workflow.test.mjs scripts/pse-bank-mutation-guard.test.mjs scripts/pse-bank-multi-device-manifest.test.mjs scripts/pse-bank-internal-identity-audit.test.mjs scripts/pse-arrangement-capture.test.mjs scripts/pse-bank-identity-device.test.mjs scripts/pse-bank-identity-device-2.test.mjs scripts/pse-bank-identity-crossover.test.mjs scripts/pse-pattern-paste-persistence.test.mjs scripts/pse-bank-copy-state-doc-device-evidence.test.mjs",
     );
     assert.equal(
       packageJson.scripts["check:pse-bank-mutation"],

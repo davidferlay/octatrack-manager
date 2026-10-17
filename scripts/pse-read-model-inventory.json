@@ -269,6 +269,18 @@
       ]
     },
     {
+      "id": "masterocta-pse-bank-copy-state-doc-evidence",
+      "package": "masterocta",
+      "features": ["test-seams"],
+      "filter": "pse_bank_copy_state_doc_evidence::",
+      "required_tests": [
+        "fixture_root_exists_and_waits_for_device_capture",
+        "project_states_parse_requires_close_tag_and_single_bank_pattern",
+        "typed_field_delta_helper_is_deterministic_on_identical_bank_files",
+        "real_device_bank01_decodes_for_future_typed_comparison"
+      ]
+    },
+    {
       "id": "masterocta-sample-slot-boundary",
       "package": "masterocta",
       "features": ["test-seams"],

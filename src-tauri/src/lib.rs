@@ -38,6 +38,8 @@ mod gate_c_clone_rescan;
 #[cfg(test)]
 mod pse_bank_changeplan;
 #[cfg(test)]
+mod pse_bank_copy_state_doc_evidence;
+#[cfg(test)]
 mod pse_bank_identity_crossover;
 mod pse_bank_internal_identity_audit;
 #[cfg(test)]
