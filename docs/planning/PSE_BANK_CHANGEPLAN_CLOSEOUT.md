@@ -44,7 +44,7 @@ Implementation evidence:
 | --- | --- | --- |
 | Copy / Move / Swap Intent | PASS | `BankChangeIntent`; `source == destination` → `Err` |
 | affected Banks / Patterns / Parts / Tracks / Sample Slot refs | PASS | `enumerate_affected_references`, scoped `reference_observations`; Working vs SavedCheckpoint separate |
-| affected files | **PARTIAL** | `read_dependencies` + `candidate_change_documents` list **candidates** from state-document rules; final set unknown until #217 / owner decisions (Move vacated source, retarget, Working/SavedCheckpoint) |
+| affected files | **PARTIAL** | Manifest completeness fail-closed (#234). Final affected set still unknown: Copy roles **DEVICE_EVIDENCE_REQUIRED**; Move vacated source + Move/Swap role product semantics **OWNER_DECISION_REQUIRED**; active `[STATES] BANK`/`PATTERN` **DEVICE_EVIDENCE_REQUIRED** — see [`PSE_BANK_STATE_DOC_SEMANTICS_2.md`](./PSE_BANK_STATE_DOC_SEMANTICS_2.md) |
 | PRE hashes / preconditions | **PASS** (observed deps) | After `MO-PSE-BANK-CHANGEPLAN-MANIFEST-COMPLETENESS-1`: `validate_observed_dependency_manifest` rejects missing/non-regular/mismatch before preconditions; `FULL_FILESYSTEM_ENUMERATION_PROVEN = NO` |
 | backup requirement | PASS | `BackupRequirementDeclaration` only (no `BackupEvidence`) |
 | verification requirement | PASS | six `VerificationRequirementKind` declarations (no fabricated POST hashes) |
@@ -73,11 +73,11 @@ Pinned by `current_main_readiness_keeps_remaining_changeplan_gaps_open` in [`ban
 ## Next work
 
 ```text
-NEXT_WORK_ID = MO-PSE-BANK-STATE-DOC-SEMANTICS-2
+NEXT_WORK_ID = MO-PSE-BANK-COPY-STATE-DOC-DEVICE-EVIDENCE-1
 Parent = #217
 ```
 
-Classify Copy Working/SavedCheckpoint, Move/Swap document roles, active-bank retarget, and Move vacated source into device-evidence vs owner-decision buckets (#217 remains the semantic parent; #181 stays open until impact is known).
+`MO-PSE-BANK-STATE-DOC-SEMANTICS-2` classified Copy/Move/Swap state-document semantics (no rule promotion). Smallest device capture: Bank Copy with copy-immediate stages before bank switch / Project Save. Owner decisions remain for Move vacated source and Swap product completeness. See [`PSE_BANK_STATE_DOC_SEMANTICS_2.md`](./PSE_BANK_STATE_DOC_SEMANTICS_2.md). `#217` / `#181` stay open; Apply unauthorized.
 
 ## Historical docs
 
