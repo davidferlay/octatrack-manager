@@ -57,18 +57,18 @@ Audio file operations **never** copy or move `.ot` sidecar files. `.ot` files ar
 
 Controls whether Audio Editor (AED) settings are copied to the destination slots.
 
-- **Copy:** Copy selected attributes from source to destination. When reading source attributes, `.ot` sidecar files are used if available (they take priority), with fallback to `project.work` and `markers.work`. Attributes are always written to `project.work` and `markers.work` only — `.ot` files are never created.
+- **Copy:** Copy selected attributes from source to destination. Gain, BPM, timestretch, loop mode and trig quantization are taken from the source slot in `project.work`, which is what the Octatrack plays. For trim points, loop point and slices, a `.ot` next to a sample in the source project folder takes priority over `markers.work`. Attributes are always written to `project.work` and `markers.work` only - `.ot` files are never created.
 - **Don't Copy:** Destination slot attributes are left untouched — useful when the destination project has its own purposefully configured Audio Editor settings.
 
 When **Copy** is selected, individual attribute toggle buttons let you select exactly which settings to copy (all are selected by default):
 
-| Attribute | Source (project file) | Source (.ot fallback) |
+| Attribute | Source (project file) | Source (`.ot`, when present) |
 |-----------|----------------------|----------------------|
-| **Gain** | `GAIN=` field | `.ot` gain value |
-| **BPM / Tempo** | `BPMx24=` field | `.ot` tempo ÷ 24 |
-| **Timestretch** | `TIMESTRETCH=` field | `.ot` stretch mode |
-| **Loop mode** | `LOOP=` field | `.ot` loop_mode |
-| **Trig quantization** | `TRIGQUANTIZATION=` field | `.ot` quantization |
+| **Gain** | `GAIN=` field | - |
+| **BPM / Tempo** | `BPMx24=` field | - |
+| **Timestretch** | `TSMODE=` field | - |
+| **Loop mode** | `LOOPMODE=` field | - |
+| **Trig quantization** | `TRIGQUANTIZATION=` field | - |
 | **Trim points** | Markers file: trim_offset, trim_end | `.ot` trim_start, trim_end |
 | **Loop point** | Markers file: loop_point | `.ot` loop_start |
 | **Slices** | Markers file: slices, slice_count | `.ot` slices, slices_len |

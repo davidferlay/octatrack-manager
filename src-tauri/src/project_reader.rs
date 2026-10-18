@@ -796,7 +796,10 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         static_slots.push(SampleSlot {
                             slot_id,
                             slot_type: "Static".to_string(),
-                            attributes_at_default: slot_attributes_at_default(slot),
+                            attributes_at_default: slot_attributes_at_default(
+                                slot,
+                                file_exists && is_one_shot(&full_path),
+                            ),
                             path: Some(path_str),
                             gain: Some(slot.gain),
                             loop_mode: Some(loop_mode_name(slot.loop_mode)),
@@ -818,7 +821,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         static_slots.push(SampleSlot {
                             slot_id,
                             slot_type: "Static".to_string(),
-                            attributes_at_default: slot_attributes_at_default(slot),
+                            attributes_at_default: slot_attributes_at_default(slot, false),
                             path: None,
                             gain: Some(slot.gain),
                             loop_mode: Some(loop_mode_name(slot.loop_mode)),
@@ -887,7 +890,10 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         flex_slots.push(SampleSlot {
                             slot_id,
                             slot_type: "Flex".to_string(),
-                            attributes_at_default: slot_attributes_at_default(slot),
+                            attributes_at_default: slot_attributes_at_default(
+                                slot,
+                                file_exists && is_one_shot(&full_path),
+                            ),
                             path: Some(path_str),
                             gain: Some(slot.gain),
                             loop_mode: Some(loop_mode_name(slot.loop_mode)),
@@ -909,7 +915,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
                         flex_slots.push(SampleSlot {
                             slot_id,
                             slot_type: "Flex".to_string(),
-                            attributes_at_default: slot_attributes_at_default(slot),
+                            attributes_at_default: slot_attributes_at_default(slot, false),
                             path: None,
                             gain: Some(slot.gain),
                             loop_mode: Some(loop_mode_name(slot.loop_mode)),
@@ -5266,7 +5272,16 @@ fn default_attr_fields(slot_type_upper: &str) -> std::collections::HashMap<Strin
 /// equal the OT assign-time defaults — i.e. "Reset attributes to defaults" would be a no-op.
 /// Defaults: GAIN=48, TSMODE=2 (Normal), TRIGQUANTIZATION=-1 (Direct=255), and LOOPMODE 1 (Normal)
 /// for Flex / 0 (Off) for Static. Trim/BPM timing is not treated as an attribute here.
-fn slot_attributes_at_default(slot: &SlotAttributes) -> bool {
+/// A one-shot's defaults are the ones the device writes for a short sample instead: BPMx24
+/// 2880, timestretch and loop off, on Flex slots too.
+fn slot_attributes_at_default(slot: &SlotAttributes, one_shot: bool) -> bool {
+    if one_shot {
+        return slot.gain == 48
+            && slot.timestrech_mode as u8 == 0
+            && slot.loop_mode as u8 == 0
+            && slot.trig_quantization_mode as u8 == 255
+            && slot.bpm == 2880;
+    }
     let default_loop = match slot.slot_type {
         SlotType::Flex => 1u8,
         SlotType::Static => 0u8,
@@ -5294,16 +5309,39 @@ pub(crate) fn audio_frames_and_rate(path: &Path) -> Option<(u64, u32)> {
     None
 }
 
-/// Computes `TRIM_BARSx100` attribute for a freshly-assigned sample to reproduce
-/// OT on-assign behavior: assume the whole sample is one 4/4 bar, then fold that tempo into one octave
-/// `[85, 170)` BPM by doubling/halving; bars = `duration * BPM / 240`. Samples shorter than one
-/// second use the 120 BPM default with no folding. OT does not write BPM per slot on
-/// assign, so only the trim length is returned. Returns None when frames/rate are unavailable.
-/// (validated against OT assigned samples and projects)
-fn compute_assign_timing(audio_file_path: &Path) -> Option<i64> {
+/// What the Octatrack writes for a sample assigned without a `.ot`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AssignTiming {
+    /// A short sample: `BPMx24=2880`, timestretch and loop off, no `TRIM_BARSx100`.
+    OneShot,
+    /// `TRIM_BARSx100`: the sample taken as a power-of-two number of 4/4 bars.
+    Bars(i64),
+}
+
+/// Samples shorter than this many frames are assigned as one-shots.
+///
+/// ponytail: midpoint of what is known. 180 of 180 short samples assigned on our own Octatrack
+/// were one-shots, the longest at 49152 frames, the shortest with bars at 56448; OT Slots
+/// bisected the device to (47746, 50761]. The hardware test in
+/// OneDrive/OctatrackManager/Testing/assign-rule-test pins it, and tells frames from seconds.
+const ONE_SHOT_BELOW_FRAMES: u64 = 49_957;
+
+/// How the Octatrack times a freshly-assigned plain sample. Past the one-shot cutoff, the whole
+/// sample is taken as one 4/4 bar, that tempo is folded into one octave `[85, 170)` BPM by
+/// doubling/halving, and bars = `duration * BPM / 240`. Samples shorter than one second (only
+/// reachable above 44.1 kHz) use the 120 BPM default with no folding. Returns None when the
+/// frames/rate can't be read.
+///
+/// ponytail: the [85, 170) window is OctaEdit's (`SampleEditorShared::loadAudioFile`). Device
+/// slots on our cards put its lower edge above 80.75 and at most 81.91 BPM; update it once the
+/// assign-rule-test hardware run gives the exact edge.
+fn compute_assign_timing(audio_file_path: &Path) -> Option<AssignTiming> {
     let (frames, sample_rate) = audio_frames_and_rate(audio_file_path)?;
     if frames == 0 || sample_rate == 0 {
         return None;
+    }
+    if frames < ONE_SHOT_BELOW_FRAMES {
+        return Some(AssignTiming::OneShot);
     }
     let dur = frames as f64 / sample_rate as f64;
     let bpm = if dur >= 1.0 {
@@ -5318,7 +5356,25 @@ fn compute_assign_timing(audio_file_path: &Path) -> Option<i64> {
     } else {
         120.0
     };
-    Some((dur * bpm / 240.0 * 100.0).round() as i64)
+    Some(AssignTiming::Bars(
+        (dur * bpm / 240.0 * 100.0).round() as i64
+    ))
+}
+
+fn is_one_shot(audio_file_path: &Path) -> bool {
+    compute_assign_timing(audio_file_path) == Some(AssignTiming::OneShot)
+}
+
+/// The `[SAMPLE]` fields the device writes for a one-shot.
+fn one_shot_fields() -> std::collections::HashMap<String, String> {
+    let mut f = std::collections::HashMap::new();
+    f.insert("GAIN".to_string(), "48".to_string());
+    f.insert("TSMODE".to_string(), "0".to_string());
+    f.insert("LOOPMODE".to_string(), "0".to_string());
+    f.insert("TRIGQUANTIZATION".to_string(), "-1".to_string());
+    f.insert("BPMX24".to_string(), "2880".to_string());
+    f.insert("TRIM_BARSX100".to_string(), FIELD_DELETE.to_string());
+    f
 }
 
 /// Input for assigning audio files to sample slots.
@@ -5455,11 +5511,15 @@ pub fn assign_samples_to_slots(
         }
 
         if a.set_defaults {
-            fields.extend(default_attr_fields(&slot_type_upper));
-            // Compute the OT auto-detected TRIM_BARSx100 from the audio file so the slot matches
-            // the hardware on load. (The hardware writes no per-slot BPMx24 on assign.)
-            if let Some(trim_barsx100) = compute_assign_timing(&path.join(&a.audio_path)) {
-                fields.insert("TRIM_BARSX100".to_string(), trim_barsx100.to_string());
+            // What the device writes for this sample: a one-shot's fields, or the defaults with
+            // its auto-detected TRIM_BARSx100 (and no per-slot BPMx24)
+            match compute_assign_timing(&audio) {
+                Some(AssignTiming::OneShot) => fields.extend(one_shot_fields()),
+                Some(AssignTiming::Bars(trim_barsx100)) => {
+                    fields.extend(default_attr_fields(&slot_type_upper));
+                    fields.insert("TRIM_BARSX100".to_string(), trim_barsx100.to_string());
+                }
+                None => fields.extend(default_attr_fields(&slot_type_upper)),
             }
         }
 
@@ -5658,7 +5718,7 @@ pub fn reset_slot_attributes(
         _ => unreachable!(),
     };
     let targets: std::collections::HashSet<u16> = slot_indices.iter().copied().collect();
-    let mut filled: Vec<u16> = Vec::new();
+    let mut filled: Vec<(u16, bool)> = Vec::new();
     let mut empty: Vec<u16> = Vec::new();
     for slot in all_slots {
         let sid = slot.slot_id as u16;
@@ -5669,7 +5729,7 @@ pub fn reset_slot_attributes(
             Some(p) if !p.is_empty() => {
                 // Back up + delete the sibling .ot so it can't re-impose attributes.
                 backup_and_delete_ot_sibling(project_dir, p, "reset_attributes")?;
-                filled.push(sid);
+                filled.push((sid, is_one_shot(&project_dir.join(p))));
             }
             _ => empty.push(sid),
         }
@@ -5687,8 +5747,13 @@ pub fn reset_slot_attributes(
             (String, u16),
             std::collections::HashMap<String, String>,
         > = std::collections::HashMap::new();
-        for sid in &filled {
-            field_updates.insert((slot_type_upper.clone(), *sid), defaults.clone());
+        for (sid, one_shot) in &filled {
+            let fields = if *one_shot {
+                one_shot_fields()
+            } else {
+                defaults.clone()
+            };
+            field_updates.insert((slot_type_upper.clone(), *sid), fields);
         }
         replace_sample_fields_surgical(&project_file_path, &field_updates)?;
     }
@@ -6001,21 +6066,46 @@ fn patch_sample_block_fields(
         result_lines.push(line.to_string());
     }
 
-    // Insert any fields that weren't found in the existing block (before [/SAMPLE]),
-    // skipping deletion markers (nothing to delete if the field was absent).
-    let missing: Vec<(&String, &String)> = updates
+    // Insert any fields that weren't found in the existing block, skipping deletion markers
+    // (nothing to delete if the field was absent), in the device's spelling and order: the
+    // tempo fields right after PATH, the others before [/SAMPLE].
+    const ORDER: [(&str, &str); 7] = [
+        ("BPMX24", "BPMx24"),
+        ("TRIM_BARSX100", "TRIM_BARSx100"),
+        ("LOOP_BARSX100", "LOOP_BARSx100"),
+        ("TSMODE", "TSMODE"),
+        ("LOOPMODE", "LOOPMODE"),
+        ("GAIN", "GAIN"),
+        ("TRIGQUANTIZATION", "TRIGQUANTIZATION"),
+    ];
+    let rank = |k: &str| {
+        ORDER
+            .iter()
+            .position(|(u, _)| *u == k)
+            .unwrap_or(ORDER.len())
+    };
+    let mut missing: Vec<(&String, &String)> = updates
         .iter()
         .filter(|(k, v)| !applied_fields.contains(k.as_str()) && v.as_str() != FIELD_DELETE)
         .collect();
-    if !missing.is_empty() {
-        // Find the [/SAMPLE] line and insert before it
-        if let Some(end_pos) = result_lines
+    missing.sort_by_key(|(k, _)| (rank(k), k.to_string()));
+    let after_path = result_lines
+        .iter()
+        .position(|l| l.starts_with("PATH="))
+        .map(|i| i + 1);
+    let mut tempo_at = after_path.unwrap_or(0);
+    for (field_name, value) in &missing {
+        let r = rank(field_name);
+        let name = ORDER.get(r).map(|(_, d)| *d).unwrap_or(field_name.as_str());
+        let line = format!("{}={}\r", name, value);
+        if r < 3 && after_path.is_some() {
+            result_lines.insert(tempo_at, line);
+            tempo_at += 1;
+        } else if let Some(end_pos) = result_lines
             .iter()
             .rposition(|l| l.trim_end_matches('\r') == "[/SAMPLE]")
         {
-            for (field_name, value) in &missing {
-                result_lines.insert(end_pos, format!("{}={}\r", field_name, value));
-            }
+            result_lines.insert(end_pos, line);
         }
     }
 
@@ -25764,7 +25854,7 @@ mod tests {
                 None,
             )
             .unwrap();
-            assert!(slot_attributes_at_default(&flex_def));
+            assert!(slot_attributes_at_default(&flex_def, false));
 
             // Static defaults differ only in loop mode: Off(0).
             let static_def = SlotAttributes::new(
@@ -25778,7 +25868,7 @@ mod tests {
                 None,
             )
             .unwrap();
-            assert!(slot_attributes_at_default(&static_def));
+            assert!(slot_attributes_at_default(&static_def, false));
 
             // Any deviation from default => not at default.
             let gain_changed = SlotAttributes::new(
@@ -25792,7 +25882,7 @@ mod tests {
                 None,
             )
             .unwrap();
-            assert!(!slot_attributes_at_default(&gain_changed));
+            assert!(!slot_attributes_at_default(&gain_changed, false));
 
             let loop_changed = SlotAttributes::new(
                 SlotType::Flex,
@@ -25805,7 +25895,7 @@ mod tests {
                 None,
             )
             .unwrap();
-            assert!(!slot_attributes_at_default(&loop_changed));
+            assert!(!slot_attributes_at_default(&loop_changed, false));
 
             let tq_changed = SlotAttributes::new(
                 SlotType::Flex,
@@ -25818,7 +25908,7 @@ mod tests {
                 None,
             )
             .unwrap();
-            assert!(!slot_attributes_at_default(&tq_changed));
+            assert!(!slot_attributes_at_default(&tq_changed, false));
         }
 
         /// Write a silent mono 16-bit 44.1 kHz WAV with `frames` sample frames.
@@ -25838,21 +25928,84 @@ mod tests {
 
         #[test]
         fn test_compute_assign_timing_matches_hardware() {
-            // Reference cases verified against real Octatrack .ot files.
+            // Device-assigned slots on our own cards: a short sample is a one-shot, a longer one
+            // gets the power-of-two bar count of its folded tempo
             let dir = TempDir::new().unwrap();
             let cases = [
-                // (frames, expected TRIM_BARSx100)
-                (247868u64, 200i64), // 240/dur folds 42.70 -> 85.40 BPM, 2 bars
-                (88200, 100),        // exactly 2.0s -> 120 BPM, 1 bar
-                (44100, 50),         // exactly 1.0s -> 240 folds to 120 BPM, 0.5 bar
-                (22050, 25),         // 0.5s (<1s) -> 120 BPM default, 0.25 bar
+                (247868u64, AssignTiming::Bars(200)), // 240/dur folds 42.70 -> 85.40 BPM, 2 bars
+                (88200, AssignTiming::Bars(100)),     // exactly 2.0s -> 120 BPM, 1 bar
+                (50816, AssignTiming::Bars(50)),      // just past the one-shot cutoff
+                (49152, AssignTiming::OneShot),       // TTD_Clap_05, the longest one-shot seen
+                (44100, AssignTiming::OneShot),       // 1.0s
+                (22050, AssignTiming::OneShot),
             ];
-            for (i, (frames, exp_trim)) in cases.iter().enumerate() {
+            for (i, (frames, expected)) in cases.iter().enumerate() {
                 let wav = dir.path().join(format!("s{}.wav", i));
                 write_silent_wav(&wav, *frames);
-                let trim = compute_assign_timing(&wav).unwrap();
-                assert_eq!(trim, *exp_trim, "TRIM_BARSx100 for {} frames", frames);
+                assert_eq!(
+                    compute_assign_timing(&wav).unwrap(),
+                    *expected,
+                    "{} frames",
+                    frames
+                );
             }
+        }
+
+        #[test]
+        fn test_assign_writes_the_one_shot_fields_for_a_short_sample() {
+            // 180 of 180 short samples assigned on our own Octatrack: BPMx24=2880, TSMODE=0,
+            // LOOPMODE=0 even on a Flex slot, and no TRIM_BARSx100
+            let dir = setup_project_for_assign(&[]);
+            write_silent_wav(&dir.path().join("hat.wav"), 22050);
+
+            assign_samples_to_slots(
+                dir.path().to_str().unwrap(),
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "hat.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+
+            let block = sample_block(dir.path(), "FLEX", 1);
+            for field in ["BPMx24=2880\r", "TSMODE=0\r", "LOOPMODE=0\r", "GAIN=48\r"] {
+                assert!(block.contains(field), "{field} missing: {block}");
+            }
+            assert!(!block.contains("TRIM_BARSx100"), "{block}");
+        }
+
+        #[test]
+        fn test_reset_gives_a_short_sample_the_one_shot_fields() {
+            let dir = setup_project_for_assign(&[("FLEX", 1, "hat.wav")]);
+            write_silent_wav(&dir.path().join("hat.wav"), 22050);
+
+            reset_slot_attributes(dir.path().to_str().unwrap(), "FLEX", vec![1]).unwrap();
+
+            let block = sample_block(dir.path(), "FLEX", 1);
+            for field in ["BPMx24=2880\r", "TSMODE=0\r", "LOOPMODE=0\r"] {
+                assert!(block.contains(field), "{field} missing: {block}");
+            }
+            // Added where the device writes it: right after PATH, not appended at the end
+            assert!(block.contains("PATH=hat.wav\r\nBPMx24=2880\r"), "{block}");
+        }
+
+        #[test]
+        fn test_a_fresh_one_shot_reads_as_at_default() {
+            let dir = setup_project_for_assign(&[]);
+            write_silent_wav(&dir.path().join("hat.wav"), 22050);
+            let result = assign_samples_to_slots(
+                dir.path().to_str().unwrap(),
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "hat.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+            assert!(result.updated_slots[0].attributes_at_default);
         }
 
         #[test]
@@ -26081,8 +26234,8 @@ mod tests {
             fs::create_dir_all(&pool).unwrap();
             let content = surgical_write_tests::create_raw_project_work_with_custom_fields(&[]);
             surgical_write_tests::write_raw_project_work(&project, &content);
-            write_silent_wav(&pool.join("loop.wav"), 1000);
-            crate::ot_sidecar::write(&stretched_ot(1000), &pool.join("loop.ot")).unwrap();
+            write_silent_wav(&pool.join("loop.wav"), 100_000);
+            crate::ot_sidecar::write(&stretched_ot(100_000), &pool.join("loop.ot")).unwrap();
 
             let result = assign_samples_to_slots(
                 project.to_str().unwrap(),
