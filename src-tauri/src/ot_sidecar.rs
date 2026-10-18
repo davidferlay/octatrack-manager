@@ -2,14 +2,17 @@
 //!
 //! A `.ot` sits next to its audio with the same stem (`amen.wav` + `amen.ot`) and holds trim,
 //! loop point, up to 64 slices (all in sample frames), tempo, gain, timestretch, loop mode and
-//! trig quantisation. The Octatrack reads it when the sample is loaded into a slot, and only
-//! when both files are in the project directory - not in the Audio Pool (checked on our own
-//! hardware). It copies the values into the slot, which is what plays from then on.
+//! trig quantisation. The Octatrack reads it when the sample is loaded into a slot, whether the
+//! sample sits in the project folder or in the Audio Pool (both checked on our own hardware, in
+//! Testing/ot-import-test). It copies the values into the slot, which is what plays from then
+//! on. A `.ot` reaching past the end of its audio is still applied, cut to the audio's length.
 //!
-//! Ported from OT Slots (`otfile.rs`, GPLv3 like this app), whose rules were measured on an MKI:
-//! - `[SAMPLE]`: `BPMx24=<tempo>` when timestretch is off, `TRIM_BARSx100=<trim_bar_len>` when it
-//!   is on, then `TSMODE`, `LOOPMODE`, `GAIN`, `TRIGQUANTIZATION` (255 is written as -1). The
-//!   `.ot` tempo is already BPM x 24, and one outside 720..=7200 is moved to the nearest bound.
+//! Ported from OT Slots (`otfile.rs`, GPLv3 like this app), with the rules checked on our own
+//! Octatrack (Testing/ot-import-test) and card copies:
+//! - `[SAMPLE]`: `BPMx24=<tempo>` when the tempo has priority, `TRIM_BARSx100=<trim_bar_len>` when
+//!   the trim length has it - byte 22 of the `.ot`, 0 or 1, whatever the timestretch mode - then
+//!   `TSMODE`, `LOOPMODE`, `GAIN`, `TRIGQUANTIZATION` (255 is written as -1). The `.ot` tempo is
+//!   already BPM x 24, and one outside 720..=7200 is moved to the nearest bound.
 //! - markers: the `.ot`'s trim, loop point, all 64 slice entries as stored, and the count.
 
 use ot_tools_io::slices::SLICE_LOOP_POINT_DISABLED;
@@ -34,7 +37,7 @@ pub enum OtOutcome {
     Copied,
     /// Copied with every position moved to the 44.1 kHz grid of the converted audio.
     Rescaled,
-    /// Not copied: unreadable, invalid, or made for other audio.
+    /// Not copied: unreadable or invalid.
     Refused,
     /// The new audio has no `.ot`, so the one left from the file it replaced was backed up and
     /// removed - it described audio that is gone.
@@ -54,6 +57,8 @@ pub struct OtCarry {
     pub reason: Option<String>,
     /// An older `.ot` next to the audio was backed up before being replaced.
     pub replaced: bool,
+    /// Positions past the end of the audio were cut to its length, as the device does.
+    pub clamped: bool,
 }
 
 /// A slot assigned with a project-folder `.ot` next to its audio.
@@ -62,6 +67,8 @@ pub struct OtApplied {
     pub slot_index: u16,
     pub ot: String,
     pub slices: u32,
+    /// Positions past the end of the audio were cut to its length, as the device does.
+    pub clamped: bool,
     /// Why the `.ot` was not used; the slot then got what a plain sample gets.
     pub error: Option<String>,
 }
@@ -181,11 +188,16 @@ pub fn rescale(ot: &SampleSettingsFile, from_rate: u32, new_frames: u64) -> Samp
 /// The `[SAMPLE]` fields the Octatrack writes for a sample with this `.ot`, in the upper-case
 /// keys `replace_sample_fields_surgical` takes. The one of BPMx24 / TRIM_BARSx100 that does not
 /// apply is marked for deletion, so a slot reassigned over an older sample does not keep it.
+///
+/// Which one applies is the setting that has priority in the audio editor (the arrow next to
+/// ORIGINAL TEMPO or TRIM LEN), stored in byte 22 - ot-tools-io's `unknown`. 1 is the trim
+/// length: six recordings and AED_PROJD_OT on our cards got TRIM_BARSx100. 0 is the tempo:
+/// every other device-assigned `.ot`, timestretched or not, got BPMx24.
 pub fn slot_fields(ot: &SampleSettingsFile) -> HashMap<String, String> {
     use crate::project_reader::FIELD_DELETE;
     let tempo = ot.tempo.clamp(TEMPO_MIN, TEMPO_MAX);
     let mut f = HashMap::new();
-    if ot.stretch == 0 {
+    if ot.unknown != 1 {
         f.insert("BPMX24".into(), tempo.to_string());
         f.insert("TRIM_BARSX100".into(), FIELD_DELETE.into());
     } else {
@@ -226,43 +238,66 @@ pub fn write(ot: &SampleSettingsFile, path: &Path) -> Result<(), String> {
         .map_err(|e| format!("Writing {}: {e}", name_of(path)))
 }
 
-/// The `.ot` to apply when assigning audio that is in place: Ok(None) without one, Err with
-/// the reason when the one there can't be used.
-pub fn usable_for(audio: &Path, frames: u64) -> Result<Option<SampleSettingsFile>, String> {
+/// The `.ot` to apply when assigning audio that is in place, and whether any of its positions
+/// had to be cut to the audio's length: Ok(None) without one, Err with the reason when the one
+/// there can't be read.
+pub fn usable_for(audio: &Path, frames: u64) -> Result<Option<(SampleSettingsFile, bool)>, String> {
     let Some(ot_path) = companion(audio) else {
         return Ok(None);
     };
-    read_valid(&ot_path)
-        .and_then(|ot| fits(&ot, frames).map(|_| ot))
-        .map(|ot| Some(rescale(&ot, OT_RATE, frames)))
+    let ot = read_valid(&ot_path)?;
+    Ok(Some((
+        rescale(&ot, OT_RATE, frames),
+        fits(&ot, frames).is_err(),
+    )))
 }
 
-/// Bring the source's `.ot` along with audio just written to `dest_audio` in a project.
+/// Put an older `.ot` out of the way. In a project it goes to `backups/`, as every other file
+/// the app replaces; elsewhere (the Audio Pool) it is renamed `.bak` in place, since a
+/// `backups/` folder in the pool would show up in the device's file browser.
+fn retire(old: &Path) -> Result<(), String> {
+    let dir = old.parent().ok_or("No folder")?;
+    if dir.join("project.work").exists() || dir.join("project.strd").exists() {
+        return crate::project_reader::backup_and_delete_file(dir, old, "import_ot");
+    }
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let bak = dir.join(format!("{}.{}.bak", name_of(old), stamp));
+    std::fs::rename(old, &bak).map_err(|e| format!("Moving {} aside: {e}", name_of(old)))
+}
+
+/// Bring the source's `.ot` along with audio just written to `dest_audio`, in a project or in
+/// the Audio Pool.
 ///
 /// `dest_audio` must be freshly written (copied, converted or overwritten), so any `.ot`
-/// already next to it described other audio: it is backed up to the project's `backups/`
-/// and removed before the source's one, if usable, takes its place under the audio's name.
+/// already next to it described other audio: it is put out of the way (see `retire`) before
+/// the source's one, if readable, takes its place under the audio's name.
 pub fn carry(source_audio: &Path, dest_audio: &Path) -> Result<Option<OtCarry>, String> {
-    let project_dir = dest_audio.parent().ok_or("No project folder")?;
+    // A dropped folder is copied file by file, each audio file carrying its own .ot
+    if source_audio.is_dir() || dest_audio.is_dir() {
+        return Ok(None);
+    }
     let audio = name_of(dest_audio);
-    let carried = |ot: String, outcome, from_rate, reason, replaced| OtCarry {
+    let carried = |ot: String, outcome, from_rate, reason, replaced, clamped| OtCarry {
         audio: audio.clone(),
         ot,
         outcome,
         from_rate,
         reason,
         replaced,
+        clamped,
     };
 
     // Whatever sits next to the new audio describes the file it replaced
     let leftover = companion(dest_audio);
     if let Some(old) = &leftover {
-        crate::project_reader::backup_and_delete_file(project_dir, old, "import_ot")?;
+        retire(old)?;
     }
     let replaced = leftover.is_some();
 
     let Some(source_ot) = companion(source_audio) else {
-        return Ok(leftover.map(|old| carried(name_of(&old), OtOutcome::Removed, None, None, true)));
+        return Ok(
+            leftover.map(|old| carried(name_of(&old), OtOutcome::Removed, None, None, true, false))
+        );
     };
     let refused = |why: String| {
         Ok(Some(carried(
@@ -271,6 +306,7 @@ pub fn carry(source_audio: &Path, dest_audio: &Path) -> Result<Option<OtCarry>, 
             None,
             Some(why),
             replaced,
+            false,
         )))
     };
     let (Some((src_frames, src_rate)), Some((dest_frames, _))) = (
@@ -282,10 +318,13 @@ pub fn carry(source_audio: &Path, dest_audio: &Path) -> Result<Option<OtCarry>, 
                 .into(),
         );
     };
-    let ot = match read_valid(&source_ot).and_then(|ot| fits(&ot, src_frames).map(|_| ot)) {
+    let ot = match read_valid(&source_ot) {
         Ok(ot) => ot,
         Err(why) => return refused(why),
     };
+    // Applied even when it reaches past the end of the audio, cut to its length, as the device
+    // does with such a .ot
+    let clamped = fits(&ot, src_frames).is_err();
 
     let dest_ot = dest_audio.with_extension("ot");
     write(&rescale(&ot, src_rate, dest_frames), &dest_ot)?;
@@ -300,6 +339,7 @@ pub fn carry(source_audio: &Path, dest_audio: &Path) -> Result<Option<OtCarry>, 
         from_rate,
         None,
         replaced,
+        clamped,
     )))
 }
 
@@ -487,7 +527,7 @@ mod tests {
     }
 
     #[test]
-    fn slot_fields_without_timestretch_carry_the_tempo() {
+    fn slot_fields_carry_the_tempo_when_it_has_priority() {
         let f = slot_fields(&ot(1000, &[]));
         assert_eq!(f["BPMX24"], "2784");
         assert_eq!(f["TRIM_BARSX100"], FIELD_DELETE);
@@ -498,9 +538,24 @@ mod tests {
     }
 
     #[test]
-    fn slot_fields_with_timestretch_carry_the_bars() {
-        // AED_PROJD_OT on our own hardware: TS 3, bars 925, GAIN 51, quantise 2
+    fn slot_fields_follow_the_priority_byte_not_the_timestretch_mode() {
+        // ot-import-test on our Octatrack: sliced_b.ot, timestretch Normal and byte 22 at 0,
+        // was assigned with BPMx24=2880 and no TRIM_BARSx100
         let mut o = ot(1000, &[]);
+        o.stretch = 2;
+        o.tempo = 2880;
+        o.trim_bar_len = 200;
+        let f = slot_fields(&o);
+        assert_eq!(f["BPMX24"], "2880");
+        assert_eq!(f["TRIM_BARSX100"], FIELD_DELETE);
+        assert_eq!(f["TSMODE"], "2");
+    }
+
+    #[test]
+    fn slot_fields_carry_the_bars_when_the_trim_length_has_priority() {
+        // AED_PROJD_OT on our own hardware: byte 22 at 1, TS 3, bars 925, GAIN 51, quantise 2
+        let mut o = ot(1000, &[]);
+        o.unknown = 1;
         o.stretch = 3;
         o.trim_bar_len = 925;
         o.gain = 51;
@@ -520,13 +575,25 @@ mod tests {
     }
 
     #[test]
-    fn usable_for_explains_a_mismatched_ot() {
+    fn usable_for_clamps_an_ot_past_the_end_of_its_audio() {
+        // ot-import-test on our Octatrack: a .ot whose trim end was 3x the audio was applied,
+        // its trim end cut to the audio's length
         let dir = TempDir::new().unwrap();
         let audio = dir.path().join("kick.wav");
         wav(&audio, OT_RATE, 1000);
         assert_eq!(usable_for(&audio, 1000).unwrap(), None);
         write(&ot(5000, &[]), &dir.path().join("kick.ot")).unwrap();
-        assert!(usable_for(&audio, 1000).unwrap_err().contains("trim end"));
+        let (applied, clamped) = usable_for(&audio, 1000).unwrap().unwrap();
+        assert_eq!((applied.trim_end, clamped), (1000, true));
+    }
+
+    #[test]
+    fn usable_for_refuses_an_unreadable_ot() {
+        let dir = TempDir::new().unwrap();
+        let audio = dir.path().join("kick.wav");
+        wav(&audio, OT_RATE, 1000);
+        std::fs::write(dir.path().join("kick.ot"), b"not a .ot").unwrap();
+        assert!(usable_for(&audio, 1000).is_err());
     }
 
     /// A source folder holding `name` (+ its `.ot` when given) and a project folder.
@@ -541,6 +608,7 @@ mod tests {
         let project = root.path().join("project");
         std::fs::create_dir_all(&src).unwrap();
         std::fs::create_dir_all(&project).unwrap();
+        std::fs::write(project.join("project.work"), b"").unwrap();
         wav(&src.join(name), rate, frames);
         if let Some(o) = source_ot {
             write(&o, &src.join(name).with_extension("ot")).unwrap();
@@ -585,15 +653,52 @@ mod tests {
     }
 
     #[test]
-    fn carry_refuses_an_ot_made_for_other_audio() {
+    fn carry_clamps_an_ot_past_the_end_of_its_audio() {
         let (_root, src, project) = setup("kick.wav", OT_RATE, 1000, Some(ot(90_000, &[])));
         let dest = project.join("kick.wav");
         std::fs::copy(&src, &dest).unwrap();
 
         let c = carry(&src, &dest).unwrap().unwrap();
+        assert_eq!((c.outcome, c.clamped), (OtOutcome::Copied, true));
+        assert_eq!(read_valid(&project.join("kick.ot")).unwrap().trim_end, 1000);
+    }
+
+    #[test]
+    fn carry_refuses_an_unreadable_ot() {
+        let (_root, src, project) = setup("kick.wav", OT_RATE, 1000, None);
+        std::fs::write(src.with_extension("ot"), b"not a .ot").unwrap();
+        let dest = project.join("kick.wav");
+        std::fs::copy(&src, &dest).unwrap();
+
+        let c = carry(&src, &dest).unwrap().unwrap();
         assert_eq!(c.outcome, OtOutcome::Refused);
-        assert!(c.reason.unwrap().contains("trim end"));
         assert!(!project.join("kick.ot").exists());
+    }
+
+    #[test]
+    fn carry_into_the_audio_pool_keeps_the_older_ot_as_a_bak_file() {
+        // No backups/ folder in the pool: the device's file browser would list it
+        let (_root, src, project) = setup("kick.wav", OT_RATE, 1000, None);
+        std::fs::remove_file(project.join("project.work")).unwrap();
+        let dest = project.join("kick.wav");
+        std::fs::copy(&src, &dest).unwrap();
+        write(&ot(1000, &[]), &project.join("kick.ot")).unwrap();
+
+        let c = carry(&src, &dest).unwrap().unwrap();
+        assert_eq!(c.outcome, OtOutcome::Removed);
+        assert!(!project.join("kick.ot").exists() && !project.join("backups").exists());
+        let baks: Vec<_> = std::fs::read_dir(&project)
+            .unwrap()
+            .flatten()
+            .filter(|e| e.file_name().to_string_lossy().ends_with(".bak"))
+            .collect();
+        assert_eq!(baks.len(), 1);
+    }
+
+    #[test]
+    fn carry_leaves_folders_alone() {
+        let (_root, src, project) = setup("kick.wav", OT_RATE, 1000, Some(ot(1000, &[])));
+        assert_eq!(carry(src.parent().unwrap(), &project).unwrap(), None);
     }
 
     #[test]

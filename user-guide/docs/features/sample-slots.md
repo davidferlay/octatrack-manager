@@ -220,22 +220,19 @@ These files live inside the project directory and are always used by the Octatra
 `.ot` files are optional sidecar files created explicitly by the user on the Octatrack hardware via the Audio Editor's **FILE** menu (**Save Sample Settings**, **Save Sample Copy**, or **Save and Assign Sample**). They bundle both attributes and markers into a single file alongside the audio file.
 
 :::important
-**`.ot` files are only recognized by the Octatrack when located inside a project directory, next to their audio file.** The Octatrack ignores `.ot` files placed in the Audio Pool (`AUDIO/` folder) or in other projects' directories. Each project maintains its own independent settings in `project.work` and `markers.work`.
+The Octatrack reads a `.ot` when its sample is loaded into a slot, whether the pair sits in the project folder or in the Audio Pool (`AUDIO/` folder), and copies its settings into the slot. From then on the slot plays its own copy in `project.work` and `markers.work`: editing the `.ot` later does not change slots already assigned.
 :::
 
 ### Importing a Sample With Its `.ot`
 
-When audio is imported from your computer into a slot (dropped on a slot row, or with Import audio file(s) / directory from system), a `.ot` next to each file comes along with it:
+When audio is imported from your computer, into a slot (dropped on a slot row, or with Import audio file(s) / directory from system) or into the Audio Pool, a `.ot` next to each file comes along with it:
 
-- It is copied next to the imported audio in the project folder, under the imported file's name. Only WAV and AIFF files carry their `.ot`: the Octatrack plays no other format, so it never made one for them.
+- It is copied next to the imported audio, under the imported file's name. Only WAV and AIFF files carry their `.ot`: the Octatrack plays no other format, so it never made one for them.
 - When the audio is resampled to 44.1 kHz on import, the `.ot` is rescaled with it, so its trim, loop point and slices still land on the same sounds.
-- The slot then takes its settings from the `.ot`, as the Octatrack does when loading a sample.
-- A `.ot` that can't be read, or that was made for other audio (a trim or slice end past the end of the audio), is left out, and the sample is assigned with default settings.
-- When the import replaces a file already in the project, that file's old `.ot` is moved to the project's `backups/` folder first.
+- A `.ot` reaching past the end of its audio is still used, its positions cut to the audio's length, as the Octatrack does. A `.ot` that can't be read is left out.
+- When the import replaces a file that had a `.ot`, that old `.ot` is moved out of the way first: to the project's `backups/` folder in a project, renamed with a `.bak` ending in the Audio Pool.
 
-An info message is displayed to inform what happened to each `.ot`: copied, rescaled, applied with how many slices, or left out and why.
+Assigning a sample then gives the slot the settings of the `.ot` next to it, as the Octatrack does when loading a sample, whether the sample sits in the project folder or in the Audio Pool. Which of BPM or trim length the slot keeps follows the setting that had priority in the `.ot` (the arrow next to ORIGINAL TEMPO or TRIM LEN in the Audio Editor).
 
-The same applies when assigning a sample that already sits in the project folder with its `.ot`.
-
-An `.ot` file next to an Audio Pool sample is never used, as on the Octatrack.
+An info message is displayed to inform what happened to each `.ot` on slot imports: copied, rescaled, applied with how many slices, cut to the audio's length, or left out and why.
 

@@ -92,6 +92,28 @@ describe('useAudioPoolTransfer', () => {
     expect(result.current.overwriteModal.fileName).toBe('kick.wav');
   });
 
+  it('brings each copied file\'s .ot along and reports what happened to it', async () => {
+    const carry = { audio: 'loop.wav', ot: 'loop.ot', outcome: 'rescaled', from_rate: 48000, reason: null, replaced: false, clamped: false };
+    mockInvoke.mockImplementation(async (cmd, args) => {
+      const a = (args ?? {}) as Record<string, unknown>;
+      if (cmd === 'get_system_resources') return { recommended_concurrency: 1 };
+      if (cmd === 'copy_audio_file_with_progress') return `/dest/${(a.sourcePath as string).split('/').pop()}`;
+      if (cmd === 'carry_ot_sidecars') return [carry];
+      return undefined;
+    });
+    const { result } = renderHook(() => useAudioPoolTransfer());
+    const copied: unknown[][] = [];
+
+    await act(async () => {
+      await result.current.copyFilesToPool(['/a/loop.wav'], '/dest', undefined, f => copied.push(f));
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith('carry_ot_sidecars', {
+      imported: [{ source: '/a/loop.wav', dest: '/dest/loop.wav' }],
+    });
+    expect(copied).toEqual([[{ source: '/a/loop.wav', dest: '/dest/loop.wav', ot: carry }]]);
+  });
+
   it('reports a file copied after Overwrite to the onCopied callback', async () => {
     // A slot import assigns what onCopied reports: the batch must not settle before the
     // overwriting copy has finished, or the file is replaced but never assigned

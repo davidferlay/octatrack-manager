@@ -622,19 +622,18 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     if (!isEditMode || !projectPath || sourcePaths.length === 0) return;
     // Prefer the transfer pipeline (opens the progress pane); fall back to a direct copy.
     if (!onImportToProject) {
-      // ponytail: the app always passes onImportToProject. This direct copy reuses a file
-      // already in the project without writing it, so it carries no .ot (carrying assumes
-      // freshly written audio and would back up the existing file's .ot).
+      // ponytail: the app always passes onImportToProject, whose transfer pipeline brings each
+      // .ot along. This direct copy reuses a file already in the project without writing it,
+      // so it carries none (carrying assumes freshly written audio).
       const destPaths = await invoke<string[]>('copy_audio_files_to_project', { sourcePaths, destinationDir: projectPath });
       if (destPaths && destPaths.length > 0) await doAssignFiles(destPaths, targetSlot);
       return;
     }
+    // The import brought each file's .ot along (rescaled if the audio was resampled)
     const copied = await onImportToProject(sourcePaths);
     if (!copied || copied.length === 0) return;
-    // Each file's .ot follows it into the project (rescaled if the audio was resampled)
-    // before the assignment reads it
-    const carried = await invoke<OtCarry[]>('carry_ot_sidecars', { imported: copied });
-    await doAssignFiles(copied.map(c => c.dest), targetSlot, Array.isArray(carried) ? carried : []);
+    const carried = copied.map(c => c.ot).filter((c): c is OtCarry => !!c);
+    await doAssignFiles(copied.map(c => c.dest), targetSlot, carried);
   }, [isEditMode, projectPath, onImportToProject, doAssignFiles]);
 
   // Live ref so the mount-time OS drag-drop listener imports the same way the menu does.

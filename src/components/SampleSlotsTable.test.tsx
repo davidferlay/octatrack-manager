@@ -704,33 +704,33 @@ describe('SampleSlotsTable — selection & transfers toggle', () => {
     fireEvent.contextMenu(row)
     await userEvent.click(screen.getByText(/Import audio directory from system/i))
 
-    // Files are copied via the transfer pipeline, their .ot files follow, then they are assigned
+    // Files are copied via the transfer pipeline (which brings their .ot files along), then assigned
     await waitFor(() => expect(onImportToProject).toHaveBeenCalledWith(['/ext/drums/a.wav', '/ext/drums/b.wav']))
-    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('carry_ot_sidecars', {
-      imported: [
-        { source: '/ext/drums/a.wav', dest: '/proj/a.wav' },
-        { source: '/ext/drums/b.wav', dest: '/proj/b.wav' },
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('assign_samples_to_slots', expect.objectContaining({
+      assignments: [
+        expect.objectContaining({ audio_path: '/proj/a.wav' }),
+        expect.objectContaining({ audio_path: '/proj/b.wav' }),
       ],
-    }))
-    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('assign_samples_to_slots', expect.anything()))
+    })))
   })
 
   it('says in a badge that a .ot came along and gave the slot its settings and slices', async () => {
     const openModule = await import('@tauri-apps/plugin-dialog')
     vi.mocked(openModule.open).mockResolvedValue(['/ext/loop.wav'])
     mockInvoke.mockImplementation(async (cmd: string) => {
-      if (cmd === 'carry_ot_sidecars') {
-        return [{ audio: 'loop.wav', ot: 'loop.ot', outcome: 'rescaled', from_rate: 48000, reason: null, replaced: false }]
-      }
       if (cmd === 'assign_samples_to_slots') {
         return {
           assigned_count: 1, updated_slots: [], flex_ram_free_mb: 70,
-          ot_notes: [{ slot_index: 1, ot: 'loop.ot', slices: 8, error: null }],
+          ot_notes: [{ slot_index: 1, ot: 'loop.ot', slices: 8, clamped: false, error: null }],
         }
       }
       return []
     })
-    const onImportToProject = vi.fn(async () => [{ source: '/ext/loop.wav', dest: '/proj/loop.wav' }])
+    // The transfer pipeline reports what it did with the .ot next to each file
+    const onImportToProject = vi.fn(async () => [{
+      source: '/ext/loop.wav', dest: '/proj/loop.wav',
+      ot: { audio: 'loop.wav', ot: 'loop.ot', outcome: 'rescaled' as const, from_rate: 48000, reason: null, replaced: false, clamped: false },
+    }])
     renderWithProvider(
       <SampleSlotsTable
         slots={mockSlots}

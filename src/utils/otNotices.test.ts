@@ -3,10 +3,10 @@ import { otNotices, type OtCarry, type OtApplied } from './otNotices'
 
 const carry = (over: Partial<OtCarry>): OtCarry => ({
   audio: 'loop.wav', ot: 'loop.ot', outcome: 'copied', from_rate: null, reason: null, replaced: false,
-  ...over,
+  clamped: false, ...over,
 })
 const applied = (over: Partial<OtApplied>): OtApplied => ({
-  slot_index: 3, ot: 'loop.ot', slices: 8, error: null, ...over,
+  slot_index: 3, ot: 'loop.ot', slices: 8, clamped: false, error: null, ...over,
 })
 
 describe('otNotices', () => {
@@ -30,6 +30,18 @@ describe('otNotices', () => {
   it('leaves out the slice count for a .ot without slices', () => {
     expect(otNotices([], [applied({ slices: 0 })], 'S').lines)
       .toEqual(['S3 took its settings from loop.ot'])
+  })
+
+  it('says when a .ot reaching past the end of its audio was cut to it', () => {
+    // Imported: the copy is cut, and the slot then takes a .ot that fits
+    expect(otNotices([carry({ clamped: true })], [applied({})], 'F').lines).toEqual([
+      "loop.ot copied with loop.wav, cut to the audio's length",
+      'F3 took its settings and 8 slices from loop.ot',
+    ])
+    // Assigned in place (a sample already in the project or the Audio Pool)
+    expect(otNotices([], [applied({ clamped: true })], 'F').lines).toEqual([
+      "F3 took its settings and 8 slices from loop.ot, cut to the audio's length",
+    ])
   })
 
   it('reports a .ot left over from a replaced file', () => {

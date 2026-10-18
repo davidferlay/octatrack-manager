@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import type { OtCarry } from "../utils/otNotices";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import type { CopyProgressEvent, TransferItem } from "../types/transfer";
 
@@ -44,6 +45,8 @@ type CopyOutcome = "ok" | "cancelled" | "conflict" | "failed";
 export interface CopiedFile {
   source: string;
   dest: string;
+  /** What happened to the .ot next to the source, when there was one to handle. */
+  ot?: OtCarry | null;
 }
 
 export function useAudioPoolTransfer(options?: { onComplete?: (destinationPath: string) => void }) {
@@ -66,9 +69,22 @@ export function useAudioPoolTransfer(options?: { onComplete?: (destinationPath: 
   // after any copy still running: a slot import assigns what onCopied reports.
   async function finishBatch(destinationPath: string) {
     await Promise.all([...inFlightRef.current]);
+    // Each file's .ot follows it, rescaled if the audio was resampled - into a project or the
+    // Audio Pool alike, as the device reads either - before anything assigns the audio
+    const copied = [...copiedRef.current];
+    if (copied.length > 0) {
+      try {
+        const carried = await invoke<(OtCarry | null)[]>("carry_ot_sidecars", {
+          imported: copied.map(({ source, dest }) => ({ source, dest })),
+        });
+        if (Array.isArray(carried)) copied.forEach((c, i) => { c.ot = carried[i] ?? null; });
+      } catch (error) {
+        console.error("Bringing the .ot files along failed:", error);
+      }
+    }
     await onComplete?.(destinationPath);
     const cb = onCopiedRef.current;
-    if (cb) cb([...copiedRef.current]);
+    if (cb) cb(copied);
   }
 
   // Patch a transfer, but never resurrect one the user already cancelled.

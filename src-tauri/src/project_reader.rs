@@ -5512,24 +5512,21 @@ pub fn assign_samples_to_slots(
         let mut fields = std::collections::HashMap::new();
         fields.insert("PATH".to_string(), a.audio_path.clone());
 
-        // The device reads a .ot only when it sits with its audio in the project folder
-        // (checked on our hardware), and then takes every setting from it, whatever the slot
+        // The device reads the .ot next to the audio, in the project folder or the Audio Pool
+        // (both checked on our hardware), and takes every setting from it, whatever the slot
         // held before - so the whole block is rebuilt, defaults or not.
         let audio = path.join(&a.audio_path);
-        let in_project =
-            !a.audio_path.starts_with("../") && !Path::new(&a.audio_path).is_absolute();
-        let ot = match (in_project, audio_frames_and_rate(&audio)) {
-            (true, Some((frames, _))) => crate::ot_sidecar::companion(&audio)
-                .map(|ot_path| (ot_path, crate::ot_sidecar::usable_for(&audio, frames))),
-            _ => None,
-        };
+        let ot = audio_frames_and_rate(&audio).and_then(|(frames, _)| {
+            crate::ot_sidecar::companion(&audio)
+                .map(|ot_path| (ot_path, crate::ot_sidecar::usable_for(&audio, frames)))
+        });
         if let Some((ot_path, usable)) = ot {
             let ot_name = ot_path
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_default();
             match usable {
-                Ok(Some(ot)) => {
+                Ok(Some((ot, clamped))) => {
                     fields.extend(crate::ot_sidecar::slot_fields(&ot));
                     fields.insert(REPLACE_BLOCK.to_string(), String::new());
                     field_updates.insert((slot_type_upper.clone(), a.slot_index), fields);
@@ -5538,6 +5535,7 @@ pub fn assign_samples_to_slots(
                         slot_index: a.slot_index,
                         ot: ot_name,
                         slices: ot.slices_len.min(64),
+                        clamped,
                         error: None,
                     });
                     continue;
@@ -5547,6 +5545,7 @@ pub fn assign_samples_to_slots(
                     slot_index: a.slot_index,
                     ot: ot_name,
                     slices: 0,
+                    clamped: false,
                     error: Some(why),
                 }),
             }
@@ -26214,6 +26213,7 @@ mod tests {
                     (trim_end / 2, trim_end, NO_LOOP),
                 ],
             );
+            o.unknown = 1; // trim length has priority, as in AED_PROJD_OT
             o.stretch = 3;
             o.trim_bar_len = 925;
             o.loop_mode = 2;
@@ -26264,6 +26264,7 @@ mod tests {
                     slot_index: 1,
                     ot: "loop.ot".to_string(),
                     slices: 2,
+                    clamped: false,
                     error: None,
                 }]
             );
@@ -26320,9 +26321,9 @@ mod tests {
         }
 
         #[test]
-        fn test_assign_leaves_an_audio_pool_ot_alone() {
-            // Checked on our own hardware: the device only reads a .ot that sits with its
-            // audio in the project folder
+        fn test_assign_applies_the_ot_next_to_a_pool_sample() {
+            // ot-import-test on our Octatrack: AUDIO/OTIMPORT/pooled.wav was assigned with the
+            // settings and slices of the pooled.ot next to it
             let root = TempDir::new().unwrap();
             let project = root.path().join("PROJECT");
             let pool = root.path().join("AUDIO");
@@ -26346,17 +26347,22 @@ mod tests {
 
             let block = sample_block(&project, "FLEX", 1);
             assert!(
-                block.contains("GAIN=48\r") && block.contains("TSMODE=2\r"),
+                block.contains("GAIN=51\r") && block.contains("TRIM_BARSx100=925\r"),
                 "{block}"
             );
-            assert!(result.ot_notes.is_empty());
+            assert_eq!(result.ot_notes.len(), 1);
+            assert_eq!(result.ot_notes[0].slices, 2);
         }
 
         #[test]
-        fn test_assign_reports_an_ot_made_for_other_audio_and_uses_the_defaults() {
+        fn test_assign_clamps_an_ot_past_the_end_of_its_audio() {
+            // ot-import-test on our Octatrack: the .ot was applied, its trim end cut to the audio
             let dir = setup_project_for_assign(&[]);
-            write_silent_wav(&dir.path().join("loop.wav"), 1000);
-            crate::ot_sidecar::write(&stretched_ot(90_000), &dir.path().join("loop.ot")).unwrap();
+            MarkersFile::default()
+                .to_data_file(&dir.path().join("markers.work"))
+                .unwrap();
+            write_silent_wav(&dir.path().join("loop.wav"), 100_000);
+            crate::ot_sidecar::write(&stretched_ot(300_000), &dir.path().join("loop.ot")).unwrap();
 
             let result = assign_samples_to_slots(
                 dir.path().to_str().unwrap(),
@@ -26370,13 +26376,12 @@ mod tests {
             .unwrap();
 
             let block = sample_block(dir.path(), "FLEX", 1);
-            assert!(block.contains("GAIN=48\r"), "{block}");
+            assert!(block.contains("GAIN=51\r"), "{block}");
+            let markers = MarkersFile::from_data_file(&dir.path().join("markers.work")).unwrap();
+            assert_eq!(markers.flex_slots[0].trim_end, 100_000);
+            assert!(markers.flex_slots[0].slices[1].trim_end <= 100_000);
             assert_eq!(result.ot_notes.len(), 1);
-            assert!(result.ot_notes[0]
-                .error
-                .as_deref()
-                .unwrap()
-                .contains("trim end"));
+            assert!(result.ot_notes[0].clamped && result.ot_notes[0].error.is_none());
         }
 
         #[test]

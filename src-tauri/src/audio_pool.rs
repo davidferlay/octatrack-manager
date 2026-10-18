@@ -1130,9 +1130,25 @@ fn copy_dir_recursive_with_conversion(src: &Path, dst: &Path) -> Result<(), Stri
         if src_path.is_dir() {
             let dst_path = dst.join(entry.file_name());
             copy_dir_recursive_with_conversion(&src_path, &dst_path)?;
+        } else if src_path
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("ot"))
+        {
+            // A .ot goes with its audio below, rescaled if the audio is resampled; copied as it
+            // is it would point at the wrong frames. One with no audio is left out.
+            continue;
         } else {
             // Use audio conversion for files (overwrite = true since we already handled removal at top level)
-            copy_and_convert_audio(&src_path, dst, true)?;
+            let copied = copy_and_convert_audio(&src_path, dst, true)?;
+            if is_audio_file(&entry.file_name().to_string_lossy()) {
+                if let Err(e) = crate::ot_sidecar::carry(&src_path, &copied) {
+                    eprintln!(
+                        "[WARN] .ot of {} not brought along: {}",
+                        src_path.display(),
+                        e
+                    );
+                }
+            }
         }
     }
 
@@ -2152,6 +2168,39 @@ mod tests {
             }
         }
         writer.finalize().unwrap();
+    }
+
+    #[test]
+    fn a_dropped_folder_brings_each_ot_along_rescaled_with_its_audio() {
+        // A .ot copied byte for byte next to audio converted from 48 kHz would point every
+        // slice at the wrong place
+        use crate::ot_sidecar::test_support::{ot, wav};
+        let src_root = TempDir::new().unwrap();
+        let folder = src_root.path().join("Loops");
+        fs::create_dir_all(&folder).unwrap();
+        wav(&folder.join("loop.wav"), 48000, 4800);
+        crate::ot_sidecar::write(
+            &ot(4800, &[(2400, 4800, u32::MAX)]),
+            &folder.join("loop.ot"),
+        )
+        .unwrap();
+        let dest = TempDir::new().unwrap();
+
+        copy_single_file_with_progress(
+            folder.to_str().unwrap(),
+            dest.path().to_str().unwrap(),
+            false,
+            |_, _| {},
+            None,
+        )
+        .unwrap();
+
+        let audio = dest.path().join("Loops/loop.wav");
+        let (frames, rate) = crate::project_reader::audio_frames_and_rate(&audio).unwrap();
+        assert_eq!(rate, 44100);
+        let carried = crate::ot_sidecar::read_valid(&dest.path().join("Loops/loop.ot")).unwrap();
+        assert_eq!(carried.trim_end, 4410.min(frames as u32));
+        assert_eq!(carried.slices[0].trim_start, 2205);
     }
 
     #[test]

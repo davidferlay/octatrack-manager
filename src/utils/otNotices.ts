@@ -8,6 +8,8 @@ export interface OtCarry {
   from_rate: number | null
   reason: string | null
   replaced: boolean
+  /** Positions past the end of the audio were cut to its length, as the device does. */
+  clamped: boolean
 }
 
 /** A slot assigned with the `.ot` next to its audio (Rust `ot_sidecar::OtApplied`). */
@@ -15,6 +17,7 @@ export interface OtApplied {
   slot_index: number
   ot: string
   slices: number
+  clamped: boolean
   error: string | null
 }
 
@@ -32,10 +35,11 @@ export function otNotices(carries: OtCarry[], applied: OtApplied[], slotPrefix: 
 
   const lines: string[] = []
   for (const c of carries) {
-    const older = c.replaced ? ', older one moved to backups' : ''
-    if (c.outcome === 'copied') lines.push(`${c.ot} copied with ${c.audio}${older}`)
+    const extra = (c.clamped ? ", cut to the audio's length" : '')
+      + (c.replaced ? ', older one moved to backups' : '')
+    if (c.outcome === 'copied') lines.push(`${c.ot} copied with ${c.audio}${extra}`)
     if (c.outcome === 'rescaled') {
-      lines.push(`${c.ot} rescaled from ${(c.from_rate ?? 0) / 1000} kHz and copied with ${c.audio}${older}`)
+      lines.push(`${c.ot} rescaled from ${(c.from_rate ?? 0) / 1000} kHz and copied with ${c.audio}${extra}`)
     }
     if (c.outcome === 'removed') lines.push(`${c.audio} replaced: its old ${c.ot} moved to backups`)
     if (c.outcome === 'refused') lines.push(`${c.ot || `${c.audio}'s .ot`} not copied: ${c.reason}`)
@@ -46,7 +50,8 @@ export function otNotices(carries: OtCarry[], applied: OtApplied[], slotPrefix: 
       lines.push(`${a.ot} not applied to ${slot}: ${a.error}`)
     } else {
       const slices = a.slices ? ` and ${plural(a.slices, 'slice', 'slices')}` : ''
-      lines.push(`${slot} took its settings${slices} from ${a.ot}`)
+      const cut = a.clamped ? ", cut to the audio's length" : ''
+      lines.push(`${slot} took its settings${slices} from ${a.ot}${cut}`)
     }
   }
   if (lines.length <= 3) return { lines, warning }

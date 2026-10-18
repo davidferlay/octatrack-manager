@@ -523,15 +523,15 @@ struct ImportedAudio {
     dest: String,
 }
 
-/// Bring each imported file's `.ot` into the project next to it, after the import wrote the
-/// audio and before the slots are assigned (which reads the `.ot`). Only for imports into a
-/// project folder: the Octatrack ignores a `.ot` in the Audio Pool.
+/// Bring each imported file's `.ot` along next to it, in a project or in the Audio Pool, after
+/// the import wrote the audio and before any slot is assigned (which reads the `.ot`). One
+/// entry per file, None where there was no `.ot` to handle.
 #[tauri::command]
-async fn carry_ot_sidecars(imported: Vec<ImportedAudio>) -> Vec<ot_sidecar::OtCarry> {
+async fn carry_ot_sidecars(imported: Vec<ImportedAudio>) -> Vec<Option<ot_sidecar::OtCarry>> {
     tauri::async_runtime::spawn_blocking(move || {
         imported
             .iter()
-            .filter_map(|f| {
+            .map(|f| {
                 let dest = std::path::Path::new(&f.dest);
                 match ot_sidecar::carry(std::path::Path::new(&f.source), dest) {
                     Ok(carried) => carried,
@@ -547,6 +547,7 @@ async fn carry_ot_sidecars(imported: Vec<ImportedAudio>) -> Vec<ot_sidecar::OtCa
                         from_rate: None,
                         reason: Some(why),
                         replaced: false,
+                        clamped: false,
                     }),
                 }
             })
