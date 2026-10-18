@@ -456,7 +456,7 @@
 }
 
 .scene-action {
-  font-size: 11px;
+  font-size: 12px;
   padding: 3px 10px;
   background: #252525;
   color: var(--elektron-text-primary);
@@ -1015,11 +1015,6 @@
 .scene-cell:hover .scene-clear-one {
   opacity: 1;
   pointer-events: auto;
-}
-
-/* Room for the cross, so it never sits over the value's last digit */
-.scene-cell:hover input.scene-value.editable {
-  padding-right: 18px;
 }
 
 /* Randomize with bounds

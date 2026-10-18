@@ -3917,6 +3917,21 @@ test.describe('Scenes', () => {
       await expect(rows.locator('.scene-compare-travel span')).toHaveCount(1)
     })
 
+    test('gives a fractional travel no more decimals than its readings', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await open(page)
+      // Scene 3 holds PTCH at 1.2; scene 9 holds nothing. 4.6 - 1.2 in floats is
+      // 3.3999999999999995, which is what used to spill out of the column
+      await sides(page).first().selectOption({ value: '2' })
+      await sides(page).last().selectOption({ value: '8' })
+      const ptch = page.locator('.scene-compare-table tbody tr')
+        .filter({ has: page.locator('.scene-row-label', { hasText: /^PTCH$/ }) })
+      await ptch.locator('td:nth-child(4) .scene-add').click()
+      await ptch.locator('td:nth-child(4) input').fill('4.6')
+
+      await expect(ptch.locator('.scene-compare-travel')).toHaveText('+3.4')
+    })
+
     test('counts what actually moves on each track', async ({ page }) => {
       await open(page)
       await sides(page).last().selectOption({ value: '5' })

@@ -290,8 +290,14 @@ export function SceneCompare({
     const a = Number(formatSpecValue(from, row.spec));
     const b = Number(formatSpecValue(to, row.spec));
     if (!Number.isFinite(a) || !Number.isFinite(b) || a === b) return null;
+    // Float subtraction leaves 3.5999999...; the difference has no more decimals than
+    // the readings it comes from
+    const decimals = Math.max(
+      ...[from, to].map(v => formatSpecValue(v, row.spec).split('.')[1]?.length ?? 0),
+    );
     const by = b - a;
-    return <span className={by > 0 ? 'rising' : 'falling'}>{by > 0 ? `+${by}` : by}</span>;
+    const shown = by.toFixed(decimals);
+    return <span className={by > 0 ? 'rising' : 'falling'}>{by > 0 ? `+${shown}` : shown}</span>;
   };
 
   return (
