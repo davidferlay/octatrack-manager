@@ -5320,21 +5320,25 @@ enum AssignTiming {
 
 /// Samples shorter than this many frames are assigned as one-shots.
 ///
-/// ponytail: midpoint of what is known. 180 of 180 short samples assigned on our own Octatrack
-/// were one-shots, the longest at 49152 frames, the shortest with bars at 56448; OT Slots
-/// bisected the device to (47746, 50761]. The hardware test in
-/// OneDrive/OctatrackManager/Testing/assign-rule-test pins it, and tells frames from seconds.
-const ONE_SHOT_BELOW_FRAMES: u64 = 49_957;
+/// Measured on our own Octatrack (Testing/assign-rule-test): 49984 frames was still a one-shot,
+/// 50112 got bars. It counts frames, not seconds: 48 kHz files of 52000 frames (1.08 s) got bars.
+const ONE_SHOT_BELOW_FRAMES: u64 = 50_048;
 
-/// How the Octatrack times a freshly-assigned plain sample. Past the one-shot cutoff, the whole
-/// sample is taken as one 4/4 bar, that tempo is folded into one octave `[85, 170)` BPM by
-/// doubling/halving, and bars = `duration * BPM / 240`. Samples shorter than one second (only
-/// reachable above 44.1 kHz) use the 120 BPM default with no folding. Returns None when the
-/// frames/rate can't be read.
+/// How much of a file name the Octatrack reads for tempo figures: a match ending at character
+/// 27 was used on our cards, an "80" starting at character 49 was not.
+const NAME_TEMPO_CHARS: usize = 32;
+
+/// How the Octatrack times a freshly-assigned plain sample.
 ///
-/// ponytail: the [85, 170) window is OctaEdit's (`SampleEditorShared::loadAudioFile`). Device
-/// slots on our cards put its lower edge above 80.75 and at most 81.91 BPM; update it once the
-/// assign-rule-test hardware run gives the exact edge.
+/// Past the one-shot cutoff, the whole sample is taken as one 4/4 bar and that tempo is folded
+/// into the 85-170 BPM range by doubling/halving (manual p.85). The device then reads the file
+/// name: when half (or double) that tempo is a figure in it, it takes that one instead, and
+/// keeps going while the next half (or double) is in the name too - a 70 BPM loop named so
+/// loads at 70, not 140. Bars = `duration * BPM / 240`, a power of two. Samples shorter than one
+/// second (only reachable above 44.1 kHz) use the 120 BPM default with no folding. Returns None
+/// when the frames/rate can't be read.
+///
+/// Matches 344 of 346 power-of-two slots assigned on our own cards and hardware test.
 fn compute_assign_timing(audio_file_path: &Path) -> Option<AssignTiming> {
     let (frames, sample_rate) = audio_frames_and_rate(audio_file_path)?;
     if frames == 0 || sample_rate == 0 {
@@ -5344,21 +5348,59 @@ fn compute_assign_timing(audio_file_path: &Path) -> Option<AssignTiming> {
         return Some(AssignTiming::OneShot);
     }
     let dur = frames as f64 / sample_rate as f64;
-    let bpm = if dur >= 1.0 {
-        let mut b = 240.0 / dur;
-        while b < 85.0 {
-            b *= 2.0;
+    if dur < 1.0 {
+        return Some(AssignTiming::Bars((dur * 50.0).round() as i64));
+    }
+    let (mut bpm, mut bars) = (240.0 / dur, 1.0);
+    while bpm < 85.0 {
+        bpm *= 2.0;
+        bars *= 2.0;
+    }
+    while bpm >= 170.0 {
+        bpm /= 2.0;
+        bars /= 2.0;
+    }
+
+    let stem = audio_file_path
+        .file_stem()
+        .map(|s| {
+            s.to_string_lossy()
+                .chars()
+                .take(NAME_TEMPO_CHARS)
+                .collect::<String>()
+        })
+        .unwrap_or_default();
+    let figures = tempo_figures(&stem);
+    let named = |tempo: f64| figures.iter().any(|&n| (tempo - n as f64).abs() < 1.0);
+    if let Some(factor) = [0.5, 2.0].into_iter().find(|f| named(bpm * f)) {
+        // Figures are 30-300, so this ends once the tempo leaves that range
+        while named(bpm * factor) {
+            bpm *= factor;
+            bars *= factor;
         }
-        while b >= 170.0 {
-            b /= 2.0;
+    }
+    Some(AssignTiming::Bars((bars * 100.0).round() as i64))
+}
+
+/// The numbers a file name could be giving a tempo with: every run of one to three digits
+/// inside its digit groups (the device found 52 in "50752" and 72 in "172"), 30 to 300.
+fn tempo_figures(name: &str) -> Vec<u32> {
+    let mut figures = Vec::new();
+    for group in name
+        .split(|c: char| !c.is_ascii_digit())
+        .filter(|g| !g.is_empty())
+    {
+        for start in 0..group.len() {
+            for end in start + 1..=(start + 3).min(group.len()) {
+                if let Ok(n) = group[start..end].parse::<u32>() {
+                    if (30..=300).contains(&n) {
+                        figures.push(n);
+                    }
+                }
+            }
         }
-        b
-    } else {
-        120.0
-    };
-    Some(AssignTiming::Bars(
-        (dur * bpm / 240.0 * 100.0).round() as i64
-    ))
+    }
+    figures
 }
 
 fn is_one_shot(audio_file_path: &Path) -> bool {
@@ -25948,6 +25990,60 @@ mod tests {
                     "{} frames",
                     frames
                 );
+            }
+        }
+
+        #[test]
+        fn test_compute_assign_timing_reads_tempo_figures_in_the_file_name() {
+            // Manual p.85: the 85-170 BPM guess is halved or doubled when the file name holds
+            // that tempo. Every case below was assigned on our own Octatrack (the first seven
+            // in the assign-rule-test project, the others on our cards).
+            use crate::ot_sidecar::test_support::wav;
+            let dir = TempDir::new().unwrap();
+            let cases = [
+                ("22_C44_49984.wav", 44100, 49984u64, AssignTiming::OneShot),
+                ("23_C44_50112.wav", 44100, 50112, AssignTiming::Bars(50)),
+                // Frames, not seconds: 1.08 s at 48 kHz is past the cutoff
+                ("30_C48_52000.wav", 48000, 52000, AssignTiming::Bars(50)),
+                ("27_C44_50624.wav", 44100, 50624, AssignTiming::Bars(50)),
+                // 104.27 BPM halved to 52.1: the "52" in 50752
+                ("28_C44_50752.wav", 44100, 50752, AssignTiming::Bars(25)),
+                // 162.8 halved to 81.4 ("081"), then to 40.7 ("40")
+                ("08_W081p40.wav", 44100, 260049, AssignTiming::Bars(100)),
+                ("09_W081p50.wav", 44100, 259730, AssignTiming::Bars(200)),
+                // 160 halved to 80
+                (
+                    "MA_CLCO_80_Ambience_Loop_Acro_F#m.wav",
+                    44100,
+                    1058400,
+                    AssignTiming::Bars(800),
+                ),
+                // The same tempo, but the 80 is past what the device reads of the name
+                (
+                    "Cymatics - Eternity Phrase Wet 12 - Autumn Fall - 80 BPM C Min.wav",
+                    44100,
+                    529200,
+                    AssignTiming::Bars(800),
+                ),
+                // 144.8 halved to 72.4: the "72" in 172
+                (
+                    "JM_172_D_Atmos.wav",
+                    44100,
+                    2338326,
+                    AssignTiming::Bars(1600),
+                ),
+                // No tempo figure in the name: the plain guess
+                (
+                    "Artifact_Ambiance12.wav",
+                    44100,
+                    1048576,
+                    AssignTiming::Bars(1600),
+                ),
+            ];
+            for (name, rate, frames, expected) in cases {
+                let path = dir.path().join(name);
+                wav(&path, rate, frames);
+                assert_eq!(compute_assign_timing(&path), Some(expected), "{name}");
             }
         }
 
