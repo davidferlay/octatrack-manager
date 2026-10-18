@@ -60,88 +60,43 @@ The Parts Editor is organized into several pages, mirroring exactly the Octatrac
 
 #### Changing a track's machine
 
-The machine badge in the track header - the one that reads STATIC, FLEX, THRU, NEIGHBOR or PICKUP - becomes a selector in Edit mode.
+In Edit mode, the machine badge in the track header (STATIC, FLEX, THRU, NEIGHBOR, PICKUP) becomes a selector. The machine is per Part, so a track can run Flex in Part 1 and Thru in Part 2.
 
-Like everything else on these pages, the machine is per Part. The same track can run a Flex machine in Part 1 and a Thru machine in Part 2, and switching Part on the device switches it.
-
-##### SRC parameters reset
-
-Switching the machine resets that track's SRC MAIN and SETUP pages to the new machine's defaults.
-
-Every machine reads those same twelve slots differently: The third MAIN slot is LEN on a Flex machine and also LEN on a Pickup machine, but they mean different things; the second slot is STRT on a Flex machine and DIR on a Pickup one. That goes for each machine type.
-
-So each field the new machine actually uses is set to that machine's own default.
-
-That is not the same as the change being reversible. Switching back to Flex resets those six again, because Flex is now the machine that uses them. The rule is simply "the machine you pick starts at its own defaults", in both directions. If you switch by mistake, Reload Part puts the whole Part back as it was, provided you have not saved since, and that state was saved before.
-
-##### T1 and T5 cannot run Neighbor machine
-
-The picker offers four machines on T1 and T5, and five everywhere else. Neighbor is missing from those two.
-
-A Neighbor machine does not play a sample at all - it takes its audio from the track before it, which is how effect chains are built across tracks. T1 and T5 are the first of their group of four, so there is no preceding track for them to listen to, and the Octatrack will not let them run one. The Octatrack manual states it outright in its machine reference, section A.4. The editor withholds it for the same reason.
+- Switching machine resets the track's SRC MAIN and SETUP pages to the new machine's defaults, as each machine reads those slots differently (the second slot is STRT on Flex but DIR on Pickup). Switching back resets them again: use [Undo](./undo-redo.md) or Reload Part to recover from a mistake.
+- T1 and T5 cannot run a Neighbor machine: Neighbor takes its audio from the previous track, and these are the first of their group of four (Octatrack manual, section A.4).
 
 #### Changing a track's effects
 
-Wherever an FX heading names the effect - `MAIN - FILTER` on the FX1 and FX2 pages, `FX1 - FILTER` on ALL - that name becomes a selector in Edit mode. It lists OFF and the fourteen effects in the order the device lists them, which is neither alphabetical nor the order of the values it stores. Changing it rewrites the knobs below to that effect's parameters, including the gaps where the device leaves a knob position empty.
+In Edit mode, the effect name in an FX heading (`MAIN - FILTER` on FX1/FX2, `FX1 - FILTER` on ALL) becomes a selector listing OFF and the 14 effects, in the device's order.
 
-Two other places follow along. The parameter help on hover becomes that effect's, and the LFO target list renames its FX entries - point an LFO at a filter's BASE and the target reads `FLTR BASE`; load a plate reverb in that slot and the same entry becomes `PLTE TIME`.
-
-##### Effect parameters reset
-
-Loading an effect resets all parameters of that block's to default values (just like the Octatrack does, and similarly to changing Machine type).
-
-This is the same reasoning as [SRC parameters reset](#src-parameters-reset) above, and it lands the same way.
+- Loading an effect resets that block's parameters to the effect's defaults, as on the Octatrack.
+- The parameter help and the LFO target names follow the loaded effect: an LFO on a filter's BASE reads `FLTR BASE`, and `PLTE TIME` once a plate reverb is loaded.
 
 #### Changing the Sample a track plays
 
-On the SRC and ALL pages, a track running a Static or Flex machine shows the slot it plays in the track header, next to its machine type, as a labelled `SLOT F002` field - the same shape as the TRK and CUE controls on the other side. Only the slot number is shown: a filename in a header either truncates to nothing useful or shoves the rest of the row around. Hovering names the file, and the picker lists it in full.
+On the SRC and ALL pages, a Static or Flex track shows its slot in the track header (e.g. `SLOT F002`). Hover it to see the file name. In Edit mode, click it to open a Sample Slot picker that works like the [Sample Slots](./sample-slots.md) pages:
 
-The field is styled exactly like the TRK and CUE controls beside it - the same box, label and value, and the same change of look when Edit mode goes on. Only Edit mode makes it clickable, and the whole field is one button, so it shows a hand cursor throughout rather than a text caret over the number.
+- Only loaded slots of the machine's own pool (Flex or Static) are listed, and the list opens on the slot tagged `Assigned`.
+- Same preview and keys as the Sample Slots pages: arrows to move, <kbd>Space</kbd> to play, <kbd>Shift</kbd> + <kbd>Enter</kbd> for Auto-preview, <kbd>Shift</kbd> + <kbd>L</kbd> for Loop, <kbd>Ctrl</kbd> + <kbd>F</kbd> to search.
+- <kbd>Enter</kbd>, double-click or Assign assigns the slot; <kbd>Escape</kbd> or Cancel closes without changes.
+- Right-click a row for Play, Open in file explorer and Copy path to clipboard.
 
-The header reads the same way on every page: the track and its levels on the left, what it plays and on what machine on the right.
-
-In Edit mode, clicking it opens a Sample Slot picker built like the [Sample Slots](./sample-slots.md) pages:
-
-- Only the loaded slots of that machine's own pool are listed - a Flex machine never offers Static slots, and the other way round.
-- The slot the track already plays is tagged `Assigned` at the right of its row, and the list opens on it.
-- Moving the selection loads that sample, and plays it when Auto-preview is on, through the same transport bar the Sample Slots pages use.
-- The keys are the same ones: arrows move the selection, Space plays and pauses, Ctrl and the arrows scrub and set the volume, Shift+Enter toggles Auto-preview, Shift+L toggles Loop, and Ctrl+F focuses the search box.
-- Enter assigns the selected slot, as does double-clicking a row or pressing Assign. Escape or Cancel closes the picker without changing anything.
-- The window can be resized from its edges, like the Tools modals.
-- Right-clicking a row opens a menu with Play, Open in file explorer and Copy path to clipboard. Play sounds the sample whatever Auto-preview is set to. The entries are greyed out for a slot holding no file.
-- Escape closes one layer at a time: the context menu first, then the picker.
-
-The assignment is per Part, which is what makes it useful: the same track can play a different sample in Part 1 and Part 2, and switching Part on the device switches the sample with it.
-
-The slot for the pool the track is not currently using is preserved, so changing the machine type later finds the slot the device left there.
-
-The field is read-only until Edit mode is on, and the change is saved the same way every other Part parameter is.
+The assignment is per Part, and the slot of the pool the track is not using is preserved for when the machine changes back.
 
 #### Un-assigning a sample
 
-The row tagged `Assigned` carries one extra entry in its context menu: Un-assign.
-
-The Octatrack has no "no sample" setting for a machine - a Flex or Static machine always names a slot, and you assign by picking one and pressing YES on the device. So Un-assign does the only thing that means: it points the track at the lowest-numbered empty slot of that pool, which is where a fresh project leaves every machine. The menu entry names that slot before you click it, and is greyed out in the rare case that all 128 slots hold a sample.
-
-The slot still shows a number afterwards - that is the device's own model, not a quirk of the app.
+Right-click the `Assigned` row and choose Un-assign. The Octatrack has no "no sample" setting, so this points the track at the lowest-numbered empty slot of that pool, as a fresh project does. The menu entry names that slot, and is greyed out if all 128 slots are used.
 
 ### Recorder setup
 
-Each audio track has a recorder buffer, and the REC tab shows its two setup pages exactly as the device lays them out.
+The REC tab shows each audio track's two recorder setup pages, per Part, as the device lays them out:
 
-SETUP 1 is what gets sampled: INAB and INCD choose which inputs are taken, RLEN how long the recording runs (up to MAX), TRIG how sampling starts and stops, SRC3 which internal source is recorded, and LOOP whether the captured sample loops.
-
-SETUP 2 shapes it: FIN and FOUT fade the recording in and out, AB and CD set the monitoring levels of the two input pairs, and QREC and QPL quantise recording and playback. Those last two rest at OFF, which the device stores outside their ordinary range - the app keeps it rather than pulling it down to the nearest step count.
-
-The setup belongs to the Part, like everything else on these pages, so the same track can sample differently in different Parts.
+- SETUP 1, what gets sampled: INAB / INCD (inputs), RLEN (length), TRIG (start/stop), SRC3 (internal source), LOOP.
+- SETUP 2, how: FIN / FOUT (fades), AB / CD (input monitoring levels), QREC / QPL (quantisation, OFF by default).
 
 #### Track and Cue levels
 
-The track header on the AMP and ALL pages carries TRK and CUE - the device's mixer levels for that track. They are not the AMP page's own VOL, which is a separate parameter in the grid below.
-
-They sit in the header rather than in a parameter block because they belong to the track rather than to any one page: that way they show on the ALL page too, without adding a column that would unbalance the parameter grids.
-
-They are stored per track and per Part - the same track can sit at a different level in Part 1 and Part 2 - and exist for every machine type, including Thru, Neighbor and Pickup tracks that play no sample at all.
+The track header on the AMP and ALL pages carries TRK and CUE, the device's mixer levels for that track (separate from the AMP page's VOL). They are stored per track and per Part, for every machine type.
 
 ### MIDI Track Pages (M1–M8)
 
