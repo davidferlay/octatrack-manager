@@ -2880,7 +2880,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     type="button"
                     className={`tools-toggle-btn ${copyAttributes ? "selected" : ""}`}
                     onClick={() => setCopyAttributes(true)}
-                    title="Copy Audio Editor settings to destination slots (reads from .ot file if available, then project.work/markers.work)"
+                    title="Copy the source slots' own Audio Editor settings (project.work/markers.work, what the Octatrack plays) to the destination slots"
                   >
                     Copy
                   </button>
@@ -2888,7 +2888,7 @@ export function ToolsPanel({ projectPath, projectName, banks, loadedBankIndices,
                     type="button"
                     className={`tools-toggle-btn ${!copyAttributes ? "selected" : ""}`}
                     onClick={() => setCopyAttributes(false)}
-                    title="Leave destination slot attributes untouched"
+                    title="Leave destination slot attributes untouched (only the trim follows the new sample; an empty slot gets what the Octatrack writes on assign)"
                   >
                     Don't Copy
                   </button>

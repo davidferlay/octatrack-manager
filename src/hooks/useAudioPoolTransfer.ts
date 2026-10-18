@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { OtCarry } from "../utils/otNotices";
+import { isAudioFile } from "./useAudioPreview";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import type { CopyProgressEvent, TransferItem } from "../types/transfer";
 
@@ -40,6 +41,19 @@ async function getConcurrency(): Promise<number> {
 }
 
 type CopyOutcome = "ok" | "cancelled" | "conflict" | "failed";
+
+/** Folder + name without extension, lower-cased: how a .ot is matched to its sample. */
+const stemKey = (path: string) => path.replace(/\.[^./\\]*$/, "").toLowerCase();
+
+/**
+ * The batch without any .ot whose sample is in it too: that .ot comes along with the sample
+ * (carry_ot_sidecars, rescaled when the audio is converted), so copying it as well would land
+ * it twice. A .ot on its own is copied like any other file.
+ */
+function withoutCarriedOt(paths: string[]): string[] {
+  const samples = new Set(paths.filter(isAudioFile).map(stemKey));
+  return paths.filter(p => !(/\.ot$/i.test(p) && samples.has(stemKey(p))));
+}
 
 /** One file a batch wrote: where it came from and where it landed (converted names differ). */
 export interface CopiedFile {
@@ -337,6 +351,7 @@ export function useAudioPoolTransfer(options?: { onComplete?: (destinationPath: 
     fileSizes?: Map<string, number>,
     onCopied?: (copied: CopiedFile[]) => void
   ) {
+    sourcePaths = withoutCarriedOt(sourcePaths);
     setIsTransferQueueOpen(true);
     // Start a fresh batch: reset collected files and the per-batch callback.
     copiedRef.current = [];

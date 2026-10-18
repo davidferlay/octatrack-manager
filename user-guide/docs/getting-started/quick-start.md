@@ -196,6 +196,7 @@ This means you can always revert changes by copying the backed-up files back int
 | Copy Sample Slots (Copy) | Destination: `project.work`, `markers.work`, and audio files (`.wav` + `.ot`) that would be overwritten |
 | Copy Sample Slots (Move to Pool) | Destination: `project.work`, `markers.work`<br/>Source: `project.work` and audio files (`.wav` + `.ot`) that will be moved/deleted |
 | Fix Missing Samples | `project.work` (and sibling projects' `project.work` when using Move to Pool) |
+| Fix Incompatible Samples | Each project's `project.work` whose slot paths change, and each `markers.work` whose slots are rescaled after a file is resampled |
 | Purge Unused Samples (Clear unused sample slot assignments) | `project.work` - only when the option is enabled and at least one slot is cleared |
 | Clear Project | Targeted bank file(s), or `project.work` when clearing sample slots |
 | Edit mode toggle (in header)| Current bank file and `project.work` |

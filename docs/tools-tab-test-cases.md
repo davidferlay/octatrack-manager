@@ -109,8 +109,8 @@
 | SM-AF7 OK | Copy Sample Slots | Audio mode auto-switches on dest change | Select Mirror or Move all to Pool, change dest to diff-Set project | Switches to "Copy all to project" automatically |
 | SM-AF8 OK | Copy Sample Slots | Shared file kept on Move to Pool | Move to Pool with file shared between Static and Flex | Shared file NOT deleted; success message shows count of kept files |
 | SM-AF9 OK | Copy Sample Slots | Copy from AUDIO pool preserves source | Copy slots referencing ../AUDIO/ files to another project in same Set | Source files in AUDIO pool intact (not 0 bytes); dest files in project root |
-| SM-AF10 | Copy Sample Slots | .ot files never copied with audio | Assignments=Copy, any audio mode, source slot has .ot file | Only .wav copied; .ot file NOT present in destination |
-| SM-AF11 | Copy Sample Slots | Move to Pool reintegrates .ot | Move to Pool, source slot has .ot sidecar file | .ot data re-integrated into source project.work + markers.work; .ot file deleted |
+| SM-AF10 | Copy Sample Slots | .ot travels with its audio | Assignments=Copy, any audio mode, source sample has a .ot | The .ot is copied (or moved, for Move all to Pool) next to the audio in the destination, under the same name |
+| SM-AF11 | Copy Sample Slots | Move to Pool moves the .ot along | Move to Pool, source sample has a .ot | The .ot lands next to the audio in AUDIO/ and leaves the project; the source slot keeps its own attributes and markers (nothing re-integrated from the .ot) |
 | **Sample Attributes** | | | | |
 | SM-AT1 OK | Copy Sample Slots | Attributes Copy — all selected by default | Attributes=Copy, all attribute buttons selected (default), execute | All AED settings (gain, BPM, timestretch, loop, trig quant, trim, loop point, slices) copied |
 | SM-AT2 OK | Copy Sample Slots | Attributes Don't Copy — dest attrs untouched | Attributes=Don't Copy, Assignments=Copy, execute | Destination slot attributes preserved (gain, BPM, etc. unchanged from destination values) |
@@ -118,8 +118,8 @@
 | SM-AT4 OK | Copy Sample Slots | Selective attributes — markers only | Attributes=Copy, only "Trim points" + "Slices" selected, execute | Only trim and slices markers copied; gain, BPM, loop mode unchanged |
 | SM-AT5 OK | Copy Sample Slots | None button deselects all | Click "None" button | All attribute buttons deselected |
 | SM-AT6 OK | Copy Sample Slots | All button selects all | Click "None" then "All" | All attribute buttons re-selected |
-| SM-AT7 | Copy Sample Slots | .ot priority for attributes | Source slot has .ot file with gain=90, project.work has gain=50. Attributes=Copy with Gain selected | Destination gets gain=90 (.ot value takes priority) |
-| SM-AT8 | Copy Sample Slots | Fallback to project.work when no .ot | Source slot has no .ot file, project.work has gain=80. Attributes=Copy with Gain selected | Destination gets gain=80 (project.work fallback) |
+| SM-AT7 | Copy Sample Slots | The slot's own attributes are copied | Source sample has a .ot with gain=90, its slot has gain=50. Attributes=Copy with Gain selected | Destination gets gain=50: the slot's own value is what the Octatrack plays; a .ot is only read on assign |
+| SM-AT8 | Copy Sample Slots | Markers from the slot too | Source slot markers trim end 90000 with 3 slices, its .ot says trim end 50000. Copy with Trim and Slices selected | Destination markers: trim end 90000, 3 slices |
 | SM-AT9 | Copy Sample Slots | Attributes written to work files only | Copy attributes to dest | Dest project.work and/or markers.work updated; no .ot file created in destination |
 | SM-AT10 OK | Copy Sample Slots | Selective: loop_point only | Attributes=Copy, only "Loop point" selected, execute | Only loop_point copied in markers.work; trim, slices, project.work attrs unchanged |
 | SM-AT11 OK | Copy Sample Slots | Assignments OFF + Attributes ON | Assignments=Don't Copy, Attributes=Copy, execute | Dest path unchanged; selected attributes copied from source |
@@ -128,6 +128,7 @@
 | SM-AT14 OK | Copy Sample Slots | Raw field preservation | Source has TRIGQUANTIZATION=-1. Copy with trig_quant selected | Dest gets TRIGQUANTIZATION=-1 (not corrupted to 255); TRIM_BARSx100 preserved |
 | SM-AT15 OK | Copy Sample Slots | No spurious BPMx24 | Source slot has no BPMx24 line. Copy with bpm selected | Dest preserves its existing BPMx24 value (no spurious 2880 written) |
 | SM-AT16 | Copy Sample Slots | Recording buffers not affected | Copy flex slots 1-128 between projects | Recording buffers (flex slots 129-136) are untouched in both source and destination |
+| SM-AT17 | Copy Sample Slots | Assignment without attributes is assigned like the device | Assignments=Copy, Attributes=Don't Copy, into an empty destination slot | The slot gets what the Octatrack writes for a newly assigned sample (GAIN=48, its trim length or one-shot fields) and trim end = the sample's length, not 0 (a silent slot); into a slot that already has attributes, they are kept and only the markers follow the new sample |
 | **Backup Feature** | | | | |
 | SM75 OK | All operations | Backup before copy execute | Execute any copy operation | `backups/` directory created in dest project with timestamped subfolder containing destination files |
 | SM81 OK | Copy Sample Slots | Backup source on Move to Pool | Execute Move to Pool | Source project `backups/` contains `project.work` and audio files that were moved/deleted; AUDIO pool files not backed up |
@@ -158,10 +159,10 @@
 | FMS-15 | Fix Missing Samples | Confirmation — not found section | Some files not found anywhere | Red "Not found" section lists unresolved filenames |
 | FMS-16 | Fix Missing Samples | Cancel from confirmation | Click Cancel on confirmation screen | Modal closes. No files modified. No backups created |
 | FMS-17 | Fix Missing Samples | Apply changes — backup creation | Click "Apply Changes" on confirmation | Backup directory created under project/backups/ with label "fix_missing_samples" |
-| FMS-18 | Fix Missing Samples | Apply changes — file copy | Apply with "Copy to Project" resolutions | Audio files copied to project root (.ot NOT copied — project has own AED data). Slot paths updated |
+| FMS-18 | Fix Missing Samples | Apply changes — file copy | Apply with "Copy to Project" resolutions | Audio files copied to project root, each with its .ot when it has one. Slot paths updated |
 | FMS-19 | Fix Missing Samples | Apply changes — move to pool cross-project | Apply with "Move to Pool" from sibling project | File in AUDIO/. Original deleted from sibling. All sibling project paths updated |
 | FMS-20 | Fix Missing Samples | Final summary | After Apply completes | Resolved count and not-found count displayed. Expandable details show per-file actions. Close returns to Tools panel |
-| FMS-21 | Fix Missing Samples | .ot companion files NOT copied | Missing file has .ot companion in found location | Only .wav is copied/moved. .ot is never imported (project has own AED data in project.work + markers.work) |
+| FMS-21 | Fix Missing Samples | .ot travels with its audio | Missing file has a .ot in the found location | The .ot is copied or moved with the audio (to the project or the Audio Pool); the slots keep their own settings |
 | FMS-22 | Fix Missing Samples | Auto-apply (Skip Review ON) | Enable "Skip Review" option (default). Execute fix with all samples found | Search completes → Apply starts automatically (no confirmation screen). Done phase shows resolved count |
 | FMS-23 | Fix Missing Samples | Manual review (Skip Review OFF) | Enable "Review before applying". Execute fix | Search completes → progress view with Browse/Review buttons. Click "Review changes" → confirmation table shown. Must click "Apply Changes" to proceed |
 | FMS-24 | Fix Missing Samples | Previous button in confirmation | In confirmation screen, click "Previous" | Returns to progress view with Browse/Review buttons. Can click "Review changes" to go back to confirmation |

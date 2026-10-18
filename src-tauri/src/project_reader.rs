@@ -4,9 +4,7 @@
 
 use ot_tools_io::settings::{LoopMode, TimeStretchMode, TrigQuantizationMode};
 use ot_tools_io::types::{Slice, SlotAttributes, SlotMarkers, SlotType};
-use ot_tools_io::{
-    BankFile, HasChecksumField, MarkersFile, OctatrackFileIO, ProjectFile, SampleSettingsFile,
-};
+use ot_tools_io::{BankFile, HasChecksumField, MarkersFile, OctatrackFileIO, ProjectFile};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
@@ -5768,8 +5766,13 @@ pub fn reset_slot_attributes(
         }
         match slot.path.as_deref() {
             Some(p) if !p.is_empty() => {
-                // Back up + delete the sibling .ot so it can't re-impose attributes.
-                backup_and_delete_ot_sibling(project_dir, p, "reset_attributes")?;
+                // Back up + delete a sibling .ot in the project folder, so a later assign of
+                // the sample doesn't bring the attributes back. One in the Audio Pool is left:
+                // other projects read it on their next assign.
+                let audio = normalize_path_lexically(&project_dir.join(p));
+                if audio.starts_with(normalize_path_lexically(project_dir)) {
+                    backup_and_delete_ot_sibling(project_dir, p, "reset_attributes")?;
+                }
                 filled.push((sid, is_one_shot(&project_dir.join(p))));
             }
             _ => empty.push(sid),
@@ -6369,8 +6372,10 @@ pub fn fix_missing_samples(
                 if found.exists() {
                     std::fs::copy(found, &dest)
                         .map_err(|e| format!("Failed to copy {}: {}", resolution.filename, e))?;
-                    // Do NOT copy .ot files — project has its own AED data in
-                    // project.work, markers.work, and possibly its own .ot files
+                    // The .ot follows its audio: the device reads it on the next assign
+                    if let Err(e) = crate::ot_sidecar::follow(found, &dest, false) {
+                        eprintln!("[WARN] .ot of {} not brought along: {}", found.display(), e);
+                    }
                     files_copied += 1;
                 }
             }
@@ -6385,7 +6390,10 @@ pub fn fix_missing_samples(
                     std::fs::copy(found, &dest).map_err(|e| {
                         format!("Failed to copy to pool {}: {}", resolution.filename, e)
                     })?;
-                    // Do NOT copy .ot files — OT ignores .ot in Audio Pool
+                    // The .ot follows its audio: the device reads it in the Audio Pool too
+                    if let Err(e) = crate::ot_sidecar::follow(found, &dest, false) {
+                        eprintln!("[WARN] .ot of {} not brought along: {}", found.display(), e);
+                    }
                     files_copied += 1;
                 }
             }
@@ -6400,7 +6408,10 @@ pub fn fix_missing_samples(
                     std::fs::copy(found, &dest).map_err(|e| {
                         format!("Failed to copy to pool {}: {}", resolution.filename, e)
                     })?;
-                    // Do NOT copy .ot files — OT ignores .ot in Audio Pool
+                    // The .ot follows its audio: the device reads it in the Audio Pool too
+                    if let Err(e) = crate::ot_sidecar::follow(found, &dest, false) {
+                        eprintln!("[WARN] .ot of {} not brought along: {}", found.display(), e);
+                    }
                     files_moved += 1;
                 }
 
@@ -6435,8 +6446,10 @@ pub fn fix_missing_samples(
                             let sibling_file = entry_path.join(&resolution.filename);
                             if sibling_file.exists() {
                                 let _ = std::fs::remove_file(&sibling_file);
+                                // Its .ot was brought to the pool with it; kept when another
+                                // file of the same name in that project still reads it
                                 let ot_file = sibling_file.with_extension("ot");
-                                if ot_file.exists() {
+                                if ot_file.exists() && !crate::ot_sidecar::shared(&sibling_file) {
                                     let _ = std::fs::remove_file(&ot_file);
                                 }
                             }
@@ -6743,6 +6756,156 @@ pub fn update_project_references(
         Some(project_dir.as_path())
     };
     update_references_in_set(set_dir, None, renames, "fix_project_samples", only_project)
+}
+
+/// A file converted in place: its path now, the sample rate it had, its frame count now.
+pub type Resampled = (String, u32, u64);
+
+/// After pool files were resampled, rescale the markers of every slot of the set that plays one
+/// of them. Returns how many slots changed.
+pub fn rescale_pool_markers(pool_path: &str, resampled: &[Resampled]) -> Result<u32, String> {
+    let pool_dir = normalize_path_lexically(Path::new(pool_path));
+    let set_dir = pool_dir
+        .parent()
+        .ok_or_else(|| "Cannot determine set directory from pool path".to_string())?;
+    rescale_markers_in_set(set_dir, Some(&pool_dir), resampled, "fix_audio_pool", None)
+}
+
+/// The same after a project's own or pool-shared files were resampled, over the projects
+/// `update_project_references` reaches.
+pub fn rescale_project_markers(project_path: &str, resampled: &[Resampled]) -> Result<u32, String> {
+    let project_dir = normalize_path_lexically(Path::new(project_path));
+    let set_dir = project_dir
+        .parent()
+        .ok_or_else(|| "Cannot determine set directory from project path".to_string())?;
+    let only_project = if is_project_in_set(project_path).unwrap_or(false) {
+        None
+    } else {
+        Some(project_dir.as_path())
+    };
+    rescale_markers_in_set(
+        set_dir,
+        None,
+        resampled,
+        "fix_project_samples",
+        only_project,
+    )
+}
+
+/// A slot's markers count sample frames of its audio - trim, loop point, slices - and the
+/// device plays the slot's own copy. Resampling the audio leaves them pointing past where they
+/// should (`trim_end` 192000 on a 176400-frame file after 48 to 44.1 kHz), so every slot playing
+/// a resampled file gets its markers moved to the new grid. `markers.work` is backed up first.
+fn rescale_markers_in_set(
+    set_dir: &Path,
+    exclude_dir: Option<&Path>,
+    resampled: &[Resampled],
+    backup_label: &str,
+    only_project: Option<&Path>,
+) -> Result<u32, String> {
+    let targets: std::collections::HashMap<String, (u32, u64)> = resampled
+        .iter()
+        .filter(|(_, rate, _)| *rate != 44_100)
+        .map(|(path, rate, frames)| {
+            let key = normalize_path_lexically(Path::new(path))
+                .to_string_lossy()
+                .to_lowercase();
+            (key, (*rate, *frames))
+        })
+        .collect();
+    if targets.is_empty() {
+        return Ok(0);
+    }
+
+    let mut projects = set_project_files(set_dir, exclude_dir)?;
+    if let Some(only) = only_project {
+        projects.retain(|(dir, _)| dir.as_path() == only);
+    }
+
+    // One damaged project must not fail a conversion already done for the others
+    let mut total = 0;
+    for (project_dir, project_file) in projects {
+        match rescale_project_markers_for(&project_dir, &project_file, &targets, backup_label) {
+            Ok(n) => total += n,
+            Err(e) => eprintln!(
+                "[WARN] Markers of {} not rescaled: {}",
+                project_dir.display(),
+                e
+            ),
+        }
+    }
+    Ok(total)
+}
+
+/// One project of `rescale_markers_in_set`: the slots of its `markers.work` that play a
+/// resampled file, moved to the new grid. Returns how many changed.
+fn rescale_project_markers_for(
+    project_dir: &Path,
+    project_file: &Path,
+    targets: &std::collections::HashMap<String, (u32, u64)>,
+    backup_label: &str,
+) -> Result<u32, String> {
+    let raw =
+        std::fs::read(project_file).map_err(|e| format!("Failed to read project file: {}", e))?;
+    let (text, _, _) = encoding_rs::WINDOWS_1258.decode(&raw);
+    let mut hits = Vec::new();
+    for block in text.split("[SAMPLE]").skip(1) {
+        let field = |name: &str| {
+            block
+                .lines()
+                .find_map(|l| l.trim_end_matches('\r').strip_prefix(name))
+                .map(str::to_string)
+        };
+        let (Some(kind), Some(slot), Some(path)) = (field("TYPE="), field("SLOT="), field("PATH="))
+        else {
+            continue;
+        };
+        let resolved = normalize_path_lexically(&project_dir.join(path.replace('\\', "/")))
+            .to_string_lossy()
+            .to_lowercase();
+        if let (Some(&(rate, frames)), Ok(slot)) = (targets.get(&resolved), slot.parse::<usize>()) {
+            hits.push((kind == "FLEX", slot, rate, frames));
+        }
+    }
+    if hits.is_empty() {
+        return Ok(0);
+    }
+
+    let Some(markers_name) = ["markers.work", "markers.strd"]
+        .into_iter()
+        .find(|n| project_dir.join(n).exists())
+    else {
+        return Ok(0);
+    };
+    let markers_path = project_dir.join(markers_name);
+    let mut markers = MarkersFile::from_data_file(&markers_path)
+        .map_err(|e| format!("Failed to read markers file: {:?}", e))?;
+    let mut changed = 0;
+    for (flex, slot, rate, frames) in hits {
+        let slots = if flex {
+            &mut markers.flex_slots[..]
+        } else {
+            &mut markers.static_slots[..]
+        };
+        if let Some(m) = slot.checked_sub(1).and_then(|i| slots.get_mut(i)) {
+            let scaled = crate::ot_sidecar::rescale_markers(m, rate, frames);
+            if scaled != *m {
+                *m = scaled;
+                changed += 1;
+            }
+        }
+    }
+    if changed > 0 {
+        crate::backup_project_files_impl(
+            &project_dir.to_string_lossy(),
+            &[markers_name.to_string()],
+            backup_label,
+        )?;
+        markers
+            .to_data_file(&markers_path)
+            .map_err(|e| format!("Failed to write markers file: {:?}", e))?;
+    }
+    Ok(changed)
 }
 
 // ============================================================================
@@ -8980,7 +9143,7 @@ pub fn clear_tracks(
 
 /// Result of a copy_sample_slots operation
 /// Resolved Audio Editor attributes for a sample slot, read from .ot file (priority) or
-/// project.work + markers.work (fallback).
+/// project.work + markers.work.
 #[derive(Debug, Clone)]
 struct ResolvedAttributes {
     gain: u8,
@@ -8995,42 +9158,13 @@ struct ResolvedAttributes {
     slice_count: u32,
 }
 
-/// Read Audio Editor attributes for a slot, prioritizing .ot file if it exists in the project dir.
-/// Falls back to SlotAttributes + SlotMarkers from project.work / markers.work.
-fn read_slot_attributes_with_ot_priority(
-    project_path: &Path,
+/// A slot's Audio Editor attributes and markers, as the device plays them: its own copy in
+/// project.work and markers.work. A `.ot` next to the audio is only read when a sample is
+/// assigned, so it says nothing about a slot already assigned.
+fn read_slot_attributes(
     slot_attrs: &SlotAttributes,
     slot_markers: &SlotMarkers,
 ) -> ResolvedAttributes {
-    // Try to find and read .ot file
-    if let Some(ref sample_path) = slot_attrs.path {
-        let sample_path_str = sample_path.to_string_lossy().to_string();
-        // Only check for .ot files within the project directory (not ../AUDIO pool)
-        if !sample_path_str.starts_with("../") {
-            let audio_file_path = project_path.join(&sample_path_str);
-            let ot_path = audio_file_path.with_extension("ot");
-            if ot_path.exists() {
-                if let Ok(ot) = SampleSettingsFile::from_data_file(&ot_path) {
-                    return ResolvedAttributes {
-                        gain: ot.gain as u8,
-                        // .ot tempo is BPM x 24 already, like BPMx24
-                        bpm: ot.tempo.clamp(720, 7200) as u16,
-                        timestretch_mode: TimeStretchMode::try_from(ot.stretch).unwrap_or_default(),
-                        loop_mode: LoopMode::try_from(ot.loop_mode).unwrap_or_default(),
-                        trig_quantization: TrigQuantizationMode::try_from(ot.quantization as u32)
-                            .unwrap_or_default(),
-                        trim_offset: ot.trim_start,
-                        trim_end: ot.trim_end,
-                        loop_point: ot.loop_start,
-                        slices: ot.slices,
-                        slice_count: ot.slices_len,
-                    };
-                }
-            }
-        }
-    }
-
-    // Fallback: use project.work + markers.work data
     ResolvedAttributes {
         gain: slot_attrs.gain,
         bpm: slot_attrs.bpm,
@@ -9043,19 +9177,6 @@ fn read_slot_attributes_with_ot_priority(
         slices: slot_markers.slices,
         slice_count: slot_markers.slice_count,
     }
-}
-
-/// Read .ot file data for a project-local sample. Returns None if no .ot exists or file is in Audio Pool.
-fn read_ot_file(project_path: &Path, sample_path_str: &str) -> Option<SampleSettingsFile> {
-    if sample_path_str.starts_with("../") {
-        return None;
-    }
-    let audio_file_path = project_path.join(sample_path_str);
-    let ot_path = audio_file_path.with_extension("ot");
-    if !ot_path.exists() {
-        return None;
-    }
-    SampleSettingsFile::from_data_file(&ot_path).ok()
 }
 
 #[derive(serde::Serialize, Default, Debug)]
@@ -9237,32 +9358,15 @@ pub fn copy_sample_slots(
     };
     let mut markers_modified = false;
 
-    // For move_to_pool: prepare to re-integrate .ot files into source project
-    let mut source_markers_for_reintegration = if copy_assignments && audio_mode == "move_to_pool" {
-        let src_m_work = source_path.join("markers.work");
-        let src_m_strd = source_path.join("markers.strd");
-        let src_m_path = if src_m_work.exists() {
-            Some(src_m_work)
-        } else if src_m_strd.exists() {
-            Some(src_m_strd)
-        } else {
-            None
-        };
-        Some(if let Some(ref p) = src_m_path {
-            MarkersFile::from_data_file(p)
-                .map_err(|e| format!("Failed to read source markers for reintegration: {:?}", e))?
-        } else {
-            MarkersFile::default()
-        })
-    } else {
-        None
-    };
-    let mut source_markers_reintegration_modified = false;
-    let mut source_reintegration_blocks: std::collections::HashMap<
-        (String, u16),
-        std::collections::HashMap<String, String>,
-    > = std::collections::HashMap::new();
-    let mut ot_files_to_delete: Vec<std::path::PathBuf> = Vec::new();
+    // Slots given a sample without its attributes: assigned afterwards the way the device
+    // assigns one (plain-sample rule or its .ot, trim end = its length). Left alone, an empty
+    // destination kept trim end 0 - silence on the device. A destination slot that already has
+    // attributes keeps them, as "Don't copy" promises - no assign, so not even a .ot that came
+    // along overrides them - and only its trim follows the new sample.
+    let mut assign_static: Vec<SlotAssignment> = Vec::new();
+    let mut assign_flex: Vec<SlotAssignment> = Vec::new();
+    let mut retrim_static: Vec<SlotAssignment> = Vec::new();
+    let mut retrim_flex: Vec<SlotAssignment> = Vec::new();
 
     // Helper to check if an attribute is selected
     let attr_selected = |name: &str| -> bool { attribute_selection.iter().any(|s| s == name) };
@@ -9310,13 +9414,6 @@ pub fn copy_sample_slots(
                                 &other_type_paths,
                                 &mut shared_files_kept,
                                 &mut new_slot,
-                                src_slot_data,
-                                true,
-                                src_slot_id,
-                                &mut source_markers_for_reintegration,
-                                &mut source_markers_reintegration_modified,
-                                &mut source_reintegration_blocks,
-                                &mut ot_files_to_delete,
                             );
                         }
                     }
@@ -9327,11 +9424,7 @@ pub fn copy_sample_slots(
                             .as_ref()
                             .map(|m| m.static_slots.get(src_idx).unwrap_or(&default_markers))
                             .unwrap_or(&default_markers);
-                        let resolved = read_slot_attributes_with_ot_priority(
-                            source_path,
-                            src_slot_data,
-                            src_markers_data,
-                        );
+                        let resolved = read_slot_attributes(src_slot_data, src_markers_data);
                         apply_selected_attributes(
                             &mut new_slot,
                             &resolved,
@@ -9339,6 +9432,25 @@ pub fn copy_sample_slots(
                             &mut dest_markers.static_slots[dest_idx],
                             &mut markers_modified,
                         );
+                    }
+
+                    if copy_assignments && !copy_attributes {
+                        if let Some(ref path) = new_slot.path {
+                            let had_attributes = matches!(
+                                dest_project_data.slots.static_slots.get(dest_idx),
+                                Some(Some(_))
+                            );
+                            let assignment = SlotAssignment {
+                                slot_index: dest_slot_id as u16,
+                                audio_path: path.to_string_lossy().to_string(),
+                                set_defaults: true,
+                            };
+                            if had_attributes {
+                                retrim_static.push(assignment);
+                            } else {
+                                assign_static.push(assignment);
+                            }
+                        }
                     }
 
                     if dest_idx < 128 {
@@ -9383,13 +9495,6 @@ pub fn copy_sample_slots(
                                 &other_type_paths,
                                 &mut shared_files_kept,
                                 &mut new_slot,
-                                src_slot_data,
-                                false,
-                                src_slot_id,
-                                &mut source_markers_for_reintegration,
-                                &mut source_markers_reintegration_modified,
-                                &mut source_reintegration_blocks,
-                                &mut ot_files_to_delete,
                             );
                         }
                     }
@@ -9400,11 +9505,7 @@ pub fn copy_sample_slots(
                             .as_ref()
                             .map(|m| m.flex_slots.get(src_idx).unwrap_or(&default_markers))
                             .unwrap_or(&default_markers);
-                        let resolved = read_slot_attributes_with_ot_priority(
-                            source_path,
-                            src_slot_data,
-                            src_markers_data,
-                        );
+                        let resolved = read_slot_attributes(src_slot_data, src_markers_data);
                         apply_selected_attributes(
                             &mut new_slot,
                             &resolved,
@@ -9412,6 +9513,25 @@ pub fn copy_sample_slots(
                             &mut dest_markers.flex_slots[dest_idx],
                             &mut markers_modified,
                         );
+                    }
+
+                    if copy_assignments && !copy_attributes {
+                        if let Some(ref path) = new_slot.path {
+                            let had_attributes = matches!(
+                                dest_project_data.slots.flex_slots.get(dest_idx),
+                                Some(Some(_))
+                            );
+                            let assignment = SlotAssignment {
+                                slot_index: dest_slot_id as u16,
+                                audio_path: path.to_string_lossy().to_string(),
+                                set_defaults: true,
+                            };
+                            if had_attributes {
+                                retrim_flex.push(assignment);
+                            } else {
+                                assign_flex.push(assignment);
+                            }
+                        }
                     }
 
                     if dest_idx < dest_project_data.slots.flex_slots.len() {
@@ -9548,37 +9668,6 @@ pub fn copy_sample_slots(
 
     // If move_to_pool mode, also update source project
     if copy_assignments && audio_mode == "move_to_pool" {
-        // Write reintegrated .ot data to source project.work
-        if !source_reintegration_blocks.is_empty() {
-            let source_project_file = if source_path.join("project.work").exists() {
-                source_path.join("project.work")
-            } else {
-                source_path.join("project.strd")
-            };
-            replace_sample_fields_surgical(&source_project_file, &source_reintegration_blocks)?;
-            println!("[DEBUG] Re-integrated .ot data to source project.work");
-        }
-
-        // Write source markers if reintegration modified them
-        if source_markers_reintegration_modified {
-            if let Some(ref src_markers) = source_markers_for_reintegration {
-                let src_markers_final = source_path.join("markers.work");
-                src_markers
-                    .to_data_file(&src_markers_final)
-                    .map_err(|e| format!("Failed to write source markers file: {:?}", e))?;
-                println!("[DEBUG] Wrote source markers file after .ot reintegration");
-            }
-        }
-
-        // Delete .ot files after reintegration
-        for ot_path in &ot_files_to_delete {
-            let _ = std::fs::remove_file(ot_path);
-            println!(
-                "[DEBUG] Deleted .ot file after reintegration: {:?}",
-                ot_path
-            );
-        }
-
         // Update source project paths to point to Audio Pool
         let mut source_path_updates: Vec<(String, String)> = Vec::new();
 
@@ -9638,6 +9727,17 @@ pub fn copy_sample_slots(
         dest_project
     );
 
+    for (kind, assignments) in [("STATIC", assign_static), ("FLEX", assign_flex)] {
+        if !assignments.is_empty() {
+            assign_samples_to_slots(&dest_path.to_string_lossy(), kind, assignments)?;
+        }
+    }
+    for (kind, slots) in [("STATIC", retrim_static), ("FLEX", retrim_flex)] {
+        if !slots.is_empty() {
+            update_markers_trim_end(dest_path, kind, &slots, &std::collections::HashMap::new())?;
+        }
+    }
+
     Ok(CopySlotsResult { shared_files_kept })
 }
 
@@ -9652,18 +9752,14 @@ fn handle_audio_file(
     other_type_paths: &std::collections::HashSet<String>,
     shared_files_kept: &mut u32,
     new_slot: &mut SlotAttributes,
-    _src_slot_data: &SlotAttributes,
-    is_static: bool,
-    src_slot_id: u8,
-    source_markers_for_reintegration: &mut Option<MarkersFile>,
-    source_markers_reintegration_modified: &mut bool,
-    source_reintegration_blocks: &mut std::collections::HashMap<
-        (String, u16),
-        std::collections::HashMap<String, String>,
-    >,
-    ot_files_to_delete: &mut Vec<std::path::PathBuf>,
 ) {
-    let slot_type_str = if is_static { "STATIC" } else { "FLEX" };
+    // The .ot goes with its audio wherever the audio goes, unchanged: the device reads it on
+    // the next assign, in a project or the Audio Pool alike
+    let follow = |from: &Path, to: &Path, moved: bool| {
+        if let Err(e) = crate::ot_sidecar::follow(from, to, moved) {
+            eprintln!("[WARN] .ot of {} not brought along: {}", from.display(), e);
+        }
+    };
 
     match audio_mode {
         "mirror" => {
@@ -9680,8 +9776,9 @@ fn handle_audio_file(
                     let dest_full_path = dest_path.join(&file_name);
                     if std::fs::canonicalize(&src_full_path).ok()
                         != std::fs::canonicalize(&dest_full_path).ok()
+                        && std::fs::copy(&src_full_path, &dest_full_path).is_ok()
                     {
-                        let _ = std::fs::copy(&src_full_path, &dest_full_path);
+                        follow(&src_full_path, &dest_full_path, false);
                     }
                     new_slot.path = Some(std::path::PathBuf::from(&file_name));
                     println!(
@@ -9702,8 +9799,9 @@ fn handle_audio_file(
                 let dest_full_path = dest_path.join(&file_name);
                 if std::fs::canonicalize(&src_full_path).ok()
                     != std::fs::canonicalize(&dest_full_path).ok()
+                    && std::fs::copy(&src_full_path, &dest_full_path).is_ok()
                 {
-                    let _ = std::fs::copy(&src_full_path, &dest_full_path);
+                    follow(&src_full_path, &dest_full_path, false);
                 }
                 new_slot.path = Some(std::path::PathBuf::from(&file_name));
                 println!(
@@ -9727,51 +9825,15 @@ fn handle_audio_file(
                         .unwrap_or_default();
                     let pool_dest = Path::new(pool_path).join(&file_name);
 
-                    // Re-integrate .ot data before moving
-                    if let Some(ot) = read_ot_file(source_path, sample_path_str) {
-                        if let Some(ref mut src_markers) = source_markers_for_reintegration {
-                            let markers = SlotMarkers {
-                                trim_offset: ot.trim_start,
-                                trim_end: ot.trim_end,
-                                loop_point: ot.loop_start,
-                                slices: ot.slices,
-                                slice_count: ot.slices_len,
-                            };
-                            let src_idx_for_markers = (src_slot_id - 1) as usize;
-                            if is_static {
-                                if src_idx_for_markers < src_markers.static_slots.len() {
-                                    src_markers.static_slots[src_idx_for_markers] = markers;
-                                    *source_markers_reintegration_modified = true;
-                                }
-                            } else if src_idx_for_markers < src_markers.flex_slots.len() {
-                                src_markers.flex_slots[src_idx_for_markers] = markers;
-                                *source_markers_reintegration_modified = true;
-                            }
-                        }
-
-                        // Build field-level updates for source project.work with .ot attrs
-                        // What the device writes into a slot from this .ot, in its own field
-                        // order and spelling
-                        let mut reintegrated_fields = crate::ot_sidecar::slot_fields(&ot);
-                        reintegrated_fields.insert(REPLACE_BLOCK.to_string(), String::new());
-                        reintegrated_fields
-                            .insert("PATH".to_string(), format!("../AUDIO/{}", file_name));
-                        source_reintegration_blocks.insert(
-                            (slot_type_str.to_string(), src_slot_id as u16),
-                            reintegrated_fields,
-                        );
-                    }
-
-                    // Always schedule .ot file for deletion on move_to_pool
-                    // (OT ignores .ot in Audio Pool anyway)
-                    let ot_path = src_full_path.with_extension("ot");
-                    if ot_path.exists() {
-                        ot_files_to_delete.push(ot_path);
-                    }
-
                     if src_full_path.exists() {
                         if std::fs::copy(&src_full_path, &pool_dest).is_ok() {
-                            if other_type_paths.contains(sample_path_str) {
+                            // The slot keeps its own values; the .ot moves with its audio
+                            // (copied when the audio itself stays for the other slot type)
+                            let shared = other_type_paths.contains(sample_path_str);
+                            // Copied, not moved, while something in the project still reads it
+                            let ot_shared = crate::ot_sidecar::shared(&src_full_path);
+                            follow(&src_full_path, &pool_dest, !shared && !ot_shared);
+                            if shared {
                                 *shared_files_kept += 1;
                                 println!(
                                     "[DEBUG] Kept shared file (referenced by other slot type): {}",
@@ -16289,8 +16351,8 @@ mod tests {
 
         #[test]
         fn test_copy_slots_audio_copy_ot_file_not_copied() {
-            // CSS-OT-01: .ot file is NOT copied — audio operations don't handle .ot files
-            // .ot files are part of Audio Editor settings, handled separately via Sample Attributes
+            // CSS-OT-01: the .ot follows its audio into the destination project, so a later
+            // assign there (the device reads the .ot on assign) finds it
             let source = TestProject::new();
 
             // Create source audio file and .ot file
@@ -16347,15 +16409,13 @@ mod tests {
                 dest_audio.exists(),
                 "Audio file should be copied to project root"
             );
-            assert!(
-                !dest_ot.exists(),
-                ".ot file should NOT be copied — audio operations don't handle .ot files"
-            );
+            assert!(dest_ot.exists(), "the .ot follows its audio");
         }
 
         #[test]
         fn test_copy_slots_audio_copy_without_ot_when_editor_settings_off() {
-            // CSS-OT-02: .ot metadata file is NOT copied when include_editor_settings is false
+            // CSS-OT-02: the .ot follows its audio whatever the attribute settings: it belongs
+            // with the file, not with the slot
             let source = TestProject::new();
 
             // Create source audio file and .ot file
@@ -16403,10 +16463,7 @@ mod tests {
                 dest_audio.exists(),
                 "Audio file should be copied to project root"
             );
-            assert!(
-                !dest_ot.exists(),
-                ".ot file should NOT be copied when editor settings are off"
-            );
+            assert!(dest_ot.exists(), "the .ot follows its audio");
         }
 
         #[test]
@@ -16550,10 +16607,17 @@ mod tests {
         }
 
         #[test]
-        fn test_copy_slots_move_to_pool_keeps_the_ot_tempo_in_bpm_x24() {
-            let (_set, src) = ot_tempo_project_moved_to_pool();
+        fn test_copy_slots_move_to_pool_takes_the_ot_along_and_keeps_the_slot() {
+            // The device reads a .ot in the Audio Pool on assign (ot-import-test), and a slot
+            // plays its own copy: the .ot moves with its audio, the slot keeps its values
+            let (set, src) = ot_tempo_project_moved_to_pool();
             let text = surgical_write_tests::read_raw_project_work(&src);
-            assert!(text.contains("BPMx24=2784\r"), "not 116: {text}");
+            assert!(
+                !text.contains("BPMx24=2784"),
+                "slot overwritten by the .ot: {text}"
+            );
+            assert!(!src.join("kick.ot").exists());
+            assert!(set.path().join("AUDIO/kick.ot").exists());
         }
 
         #[test]
@@ -22985,8 +23049,7 @@ mod tests {
 
         #[test]
         fn test_fix_copy_to_project_with_ot_companion() {
-            // .ot file should NOT be copied — project has its own AED data in
-            // project.work, markers.work, and possibly its own .ot files
+            // The .ot follows its audio, so a later assign (the device reads it) finds it
             let temp_dir = TempDir::new().unwrap();
             let source_dir = temp_dir.path().join("source");
             fs::create_dir(&source_dir).unwrap();
@@ -23015,10 +23078,7 @@ mod tests {
             .unwrap();
 
             assert!(project_path.join("kick.wav").exists());
-            assert!(
-                !project_path.join("kick.ot").exists(),
-                ".ot file should NOT be copied — project has its own AED data"
-            );
+            assert_eq!(fs::read(project_path.join("kick.ot")).unwrap(), b"ot_data");
         }
 
         #[test]
@@ -25508,39 +25568,6 @@ mod tests {
     }
 
     // ============================================================================
-    // read_ot_file tests
-    // ============================================================================
-
-    #[test]
-    fn test_read_ot_file_audio_pool_path() {
-        let dir = TempDir::new().unwrap();
-        assert!(read_ot_file(dir.path(), "../AUDIO/kick.wav").is_none());
-    }
-
-    #[test]
-    fn test_read_ot_file_no_ot_on_disk() {
-        let dir = TempDir::new().unwrap();
-        // Create the wav but not the .ot
-        fs::write(dir.path().join("kick.wav"), b"data").unwrap();
-        assert!(read_ot_file(dir.path(), "kick.wav").is_none());
-    }
-
-    #[test]
-    fn test_read_ot_file_valid() {
-        let dir = TempDir::new().unwrap();
-        // Create a valid .ot file using ot-tools-io
-        use ot_tools_io::SampleSettingsFile;
-        let markers = ot_tools_io::types::SlotMarkers::default();
-        let sample =
-            SampleSettingsFile::new(markers, None, None, None, None, None, None, None).unwrap();
-        sample
-            .to_data_file(&dir.path().join("kick.ot"))
-            .expect("write .ot");
-        let result = read_ot_file(dir.path(), "kick.wav");
-        assert!(result.is_some());
-    }
-
-    // ============================================================================
     // validate_bank_sample_slots tests
     // ============================================================================
 
@@ -26204,7 +26231,7 @@ mod tests {
         }
 
         /// A `.ot` as the device saves one with timestretch on: our AED_PROJD_OT values.
-        fn stretched_ot(trim_end: u32) -> SampleSettingsFile {
+        fn stretched_ot(trim_end: u32) -> ot_tools_io::SampleSettingsFile {
             use ot_tools_io::slices::SLICE_LOOP_POINT_DISABLED as NO_LOOP;
             let mut o = crate::ot_sidecar::test_support::ot(
                 trim_end,
@@ -26382,6 +26409,264 @@ mod tests {
             assert!(markers.flex_slots[0].slices[1].trim_end <= 100_000);
             assert_eq!(result.ot_notes.len(), 1);
             assert!(result.ot_notes[0].clamped && result.ot_notes[0].error.is_none());
+        }
+
+        /// Two projects in one Set, for Copy Sample Slots. The source holds `kick.wav`
+        /// (100000 frames) in Static slot 1 with markers trim 0..90000 and 3 slices.
+        fn copy_slots_set() -> (TempDir, PathBuf, PathBuf) {
+            let set = TempDir::new().unwrap();
+            let (src, dest) = (set.path().join("SRC"), set.path().join("DEST"));
+            for p in [&src, &dest] {
+                fs::create_dir_all(p).unwrap();
+                let content = surgical_write_tests::create_raw_project_work_with_custom_fields(&[]);
+                surgical_write_tests::write_raw_project_work(p, &content);
+                MarkersFile::default()
+                    .to_data_file(&p.join("markers.work"))
+                    .unwrap();
+                for b in 1..=16 {
+                    BankFile::default()
+                        .to_data_file(&p.join(format!("bank{:02}.work", b)))
+                        .unwrap();
+                }
+            }
+            fs::create_dir_all(set.path().join("AUDIO")).unwrap();
+            write_silent_wav(&src.join("kick.wav"), 100_000);
+            let content = surgical_write_tests::create_raw_project_work_with_custom_fields(&[(
+                "STATIC",
+                1,
+                "kick.wav",
+                None,
+                Some(-1),
+                Some(400),
+            )]);
+            surgical_write_tests::write_raw_project_work(&src, &content);
+            let mut m = MarkersFile::default();
+            m.static_slots[0].trim_end = 90_000;
+            m.static_slots[0].slice_count = 3;
+            m.to_data_file(&src.join("markers.work")).unwrap();
+            (set, src, dest)
+        }
+
+        #[test]
+        fn test_copy_slots_assignment_alone_is_assigned_like_the_device_does() {
+            // Copying the sample but not its attributes used to leave the destination's
+            // markers at trim end 0 - a silent slot on the device - and gain at 72
+            let (_set, src, dest) = copy_slots_set();
+            copy_sample_slots(
+                src.to_str().unwrap(),
+                dest.to_str().unwrap(),
+                "static",
+                vec![1],
+                vec![1],
+                true,
+                "copy",
+                false,
+                vec![],
+            )
+            .unwrap();
+            let block = sample_block(&dest, "STATIC", 1);
+            assert!(
+                block.contains("GAIN=48\r") && block.contains("TRIM_BARSx100="),
+                "{block}"
+            );
+            let m = MarkersFile::from_data_file(&dest.join("markers.work")).unwrap();
+            assert_eq!(m.static_slots[0].trim_end, 100_000);
+        }
+
+        #[test]
+        fn test_copy_slots_copies_the_slots_own_markers_not_the_ot() {
+            // The slot plays its own copy; a .ot next to the audio is only read on assign
+            let (_set, src, dest) = copy_slots_set();
+            crate::ot_sidecar::write(
+                &crate::ot_sidecar::test_support::ot(50_000, &[]),
+                &src.join("kick.ot"),
+            )
+            .unwrap();
+            copy_sample_slots(
+                src.to_str().unwrap(),
+                dest.to_str().unwrap(),
+                "static",
+                vec![1],
+                vec![1],
+                true,
+                "copy",
+                true,
+                vec!["trim".to_string(), "slices".to_string()],
+            )
+            .unwrap();
+            let m = MarkersFile::from_data_file(&dest.join("markers.work")).unwrap();
+            assert_eq!(
+                (m.static_slots[0].trim_end, m.static_slots[0].slice_count),
+                (90_000, 3)
+            );
+        }
+
+        #[test]
+        fn test_resampled_pool_file_has_every_slots_markers_rescaled() {
+            // OTIMPDEV F2: a 48 kHz sample assigned on the device holds 48 kHz positions;
+            // once the file is converted to 44.1 kHz they must follow
+            let (set, src, _dest) = copy_slots_set();
+            let pool = set.path().join("AUDIO");
+            write_silent_wav(&pool.join("loop.wav"), 176_400); // the converted file
+            let content = surgical_write_tests::create_raw_project_work_with_custom_fields(&[
+                ("FLEX", 2, "../AUDIO/loop.wav", None, Some(-1), Some(200)),
+                ("STATIC", 1, "kick.wav", None, Some(-1), Some(400)),
+            ]);
+            surgical_write_tests::write_raw_project_work(&src, &content);
+            let mut m = MarkersFile::from_data_file(&src.join("markers.work")).unwrap();
+            m.flex_slots[1].trim_end = 192_000;
+            m.flex_slots[1].slice_count = 1;
+            m.flex_slots[1].slices[0].trim_start = 24_000;
+            m.flex_slots[1].slices[0].trim_end = 48_000;
+            m.to_data_file(&src.join("markers.work")).unwrap();
+
+            let rescaled = rescale_pool_markers(
+                pool.to_str().unwrap(),
+                &[(
+                    pool.join("loop.wav").to_string_lossy().to_string(),
+                    48_000,
+                    176_400,
+                )],
+            )
+            .unwrap();
+
+            assert_eq!(rescaled, 1);
+            let m = MarkersFile::from_data_file(&src.join("markers.work")).unwrap();
+            assert_eq!(m.flex_slots[1].trim_end, 176_400);
+            assert_eq!(
+                (
+                    m.flex_slots[1].slices[0].trim_start,
+                    m.flex_slots[1].slices[0].trim_end
+                ),
+                (22_050, 44_100)
+            );
+            assert_eq!(
+                m.static_slots[0].trim_end, 90_000,
+                "another file's slot is left alone"
+            );
+        }
+
+        #[test]
+        fn test_copy_slots_dont_copy_keeps_the_destination_attributes_despite_a_ot() {
+            // "Don't copy" promises the destination's attributes; the .ot that came along
+            // with the audio must not overwrite them
+            let (_set, src, dest) = copy_slots_set();
+            crate::ot_sidecar::write(
+                &crate::ot_sidecar::test_support::ot(100_000, &[]),
+                &src.join("kick.ot"),
+            )
+            .unwrap();
+            let content = surgical_write_tests::create_raw_project_work_with_custom_fields(&[(
+                "STATIC",
+                1,
+                "old.wav",
+                Some(3000),
+                Some(5),
+                None,
+            )]);
+            surgical_write_tests::write_raw_project_work(&dest, &content);
+            copy_sample_slots(
+                src.to_str().unwrap(),
+                dest.to_str().unwrap(),
+                "static",
+                vec![1],
+                vec![1],
+                true,
+                "copy",
+                false,
+                vec![],
+            )
+            .unwrap();
+            let block = sample_block(&dest, "STATIC", 1);
+            assert!(
+                block.contains("BPMx24=3000\r") && block.contains("TRIGQUANTIZATION=5\r"),
+                "{block}"
+            );
+            let m = MarkersFile::from_data_file(&dest.join("markers.work")).unwrap();
+            assert_eq!(
+                m.static_slots[0].trim_end, 100_000,
+                "the markers follow the new sample"
+            );
+        }
+
+        #[test]
+        fn test_rescale_skips_a_project_whose_markers_cannot_be_read() {
+            // One damaged project must not fail a conversion already done for the others
+            let (set, src, dest) = copy_slots_set();
+            let pool = set.path().join("AUDIO");
+            write_silent_wav(&pool.join("loop.wav"), 176_400);
+            for p in [&src, &dest] {
+                let content =
+                    surgical_write_tests::create_raw_project_work_with_custom_fields(&[(
+                        "FLEX",
+                        1,
+                        "../AUDIO/loop.wav",
+                        None,
+                        Some(-1),
+                        None,
+                    )]);
+                surgical_write_tests::write_raw_project_work(p, &content);
+                let mut m = MarkersFile::default();
+                m.flex_slots[0].trim_end = 192_000;
+                m.to_data_file(&p.join("markers.work")).unwrap();
+            }
+            fs::write(dest.join("markers.work"), b"damaged").unwrap();
+
+            let rescaled = rescale_pool_markers(
+                pool.to_str().unwrap(),
+                &[(
+                    pool.join("loop.wav").to_string_lossy().to_string(),
+                    48_000,
+                    176_400,
+                )],
+            )
+            .unwrap();
+
+            assert_eq!(rescaled, 1);
+        }
+
+        #[test]
+        fn test_reset_deletes_a_ot_in_a_project_subfolder() {
+            let (_set, src, _dest) = copy_slots_set();
+            fs::create_dir_all(src.join("sub")).unwrap();
+            write_silent_wav(&src.join("sub/loop.wav"), 100_000);
+            fs::write(src.join("sub/loop.ot"), b"own").unwrap();
+            let content = surgical_write_tests::create_raw_project_work_with_custom_fields(&[(
+                "FLEX",
+                1,
+                "sub/loop.wav",
+                None,
+                Some(-1),
+                None,
+            )]);
+            surgical_write_tests::write_raw_project_work(&src, &content);
+
+            reset_slot_attributes(src.to_str().unwrap(), "FLEX", vec![1]).unwrap();
+
+            assert!(!src.join("sub/loop.ot").exists());
+        }
+
+        #[test]
+        fn test_reset_leaves_a_pool_ot_alone() {
+            // Other projects read that .ot on their next assign: one project's reset must not
+            // take it from them
+            let (set, src, _dest) = copy_slots_set();
+            let pool = set.path().join("AUDIO");
+            write_silent_wav(&pool.join("loop.wav"), 100_000);
+            fs::write(pool.join("loop.ot"), b"shared").unwrap();
+            let content = surgical_write_tests::create_raw_project_work_with_custom_fields(&[(
+                "FLEX",
+                1,
+                "../AUDIO/loop.wav",
+                None,
+                Some(-1),
+                None,
+            )]);
+            surgical_write_tests::write_raw_project_work(&src, &content);
+
+            reset_slot_attributes(src.to_str().unwrap(), "FLEX", vec![1]).unwrap();
+
+            assert!(pool.join("loop.ot").exists());
         }
 
         #[test]

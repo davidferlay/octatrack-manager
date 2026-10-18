@@ -882,6 +882,15 @@ where
         .and_then(|e| e.to_str())
         .map(|e| e.eq_ignore_ascii_case("wav"))
         .unwrap_or(false);
+    // Read before the file is replaced: its .ot is rescaled from this rate afterwards
+    let from_rate = crate::project_reader::audio_frames_and_rate(source).map(|(_, r)| r);
+    let follow_ot = |converted: &Path| {
+        if let Some(rate) = from_rate {
+            if let Err(e) = crate::ot_sidecar::follow_conversion(source, converted, rate) {
+                eprintln!("[WARN] .ot of {} not rescaled: {}", source.display(), e);
+            }
+        }
+    };
 
     if is_wav {
         // Same name after conversion: write to a temp sibling, then swap it in
@@ -900,6 +909,7 @@ where
             let _ = fs::remove_file(&tmp);
             format!("Failed to replace original file: {}", e)
         })?;
+        follow_ot(source);
         Ok(source.to_path_buf())
     } else {
         let mut dest = dir.join(format!("{}.wav", stem));
@@ -914,6 +924,7 @@ where
             })?;
         fs::remove_file(source)
             .map_err(|e| format!("Converted, but failed to delete original: {}", e))?;
+        follow_ot(&dest);
         Ok(dest)
     }
 }
@@ -1353,7 +1364,13 @@ pub fn delete_files(file_paths: Vec<String>) -> Result<usize, String> {
             fs::remove_dir_all(file_path)
                 .map_err(|e| format!("Failed to delete directory: {}", e))?;
         } else {
+            // Its .ot goes with it - on its own it describes audio that no longer exists -
+            // unless another file of the same name still reads it
+            let ot = crate::ot_sidecar::companion(file_path);
             fs::remove_file(file_path).map_err(|e| format!("Failed to delete file: {}", e))?;
+            if let Some(ot) = ot.filter(|_| !crate::ot_sidecar::shared(file_path)) {
+                let _ = fs::remove_file(ot);
+            }
         }
 
         deleted_count += 1;
@@ -1384,6 +1401,15 @@ pub fn rename_file(old_path: &str, new_name: &str) -> Result<String, String> {
     }
 
     fs::rename(old_path, &new_path).map_err(|e| format!("Failed to rename: {}", e))?;
+    // The device finds a .ot by its sample's name: renamed alongside, or it would be lost.
+    // Copied instead when another file of the old name still reads it. Never fatal: the
+    // audio is renamed already, and the caller still has project references to update.
+    if new_path.is_file() {
+        let moved = !crate::ot_sidecar::shared(old_path);
+        if let Err(e) = crate::ot_sidecar::follow(old_path, &new_path, moved) {
+            eprintln!("[WARN] .ot of {} not renamed: {}", old_path.display(), e);
+        }
+    }
 
     Ok(new_path.to_string_lossy().to_string())
 }
@@ -2168,6 +2194,63 @@ mod tests {
             }
         }
         writer.finalize().unwrap();
+    }
+
+    #[test]
+    fn renaming_a_sample_renames_its_ot() {
+        // The device finds a .ot by the sample's name: left behind, it would be lost
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("kick.wav"), b"audio").unwrap();
+        fs::write(dir.path().join("kick.ot"), b"settings").unwrap();
+        rename_file(dir.path().join("kick.wav").to_str().unwrap(), "boom.wav").unwrap();
+        assert!(!dir.path().join("kick.ot").exists());
+        assert_eq!(fs::read(dir.path().join("boom.ot")).unwrap(), b"settings");
+    }
+
+    #[test]
+    fn deleting_or_renaming_one_of_two_same_named_samples_keeps_their_shared_ot() {
+        // kick.wav and kick.aif both read kick.ot; Purge already treats it as shared
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("kick.wav"), b"audio").unwrap();
+        fs::write(dir.path().join("kick.aif"), b"audio").unwrap();
+        fs::write(dir.path().join("kick.ot"), b"settings").unwrap();
+        rename_file(dir.path().join("kick.wav").to_str().unwrap(), "boom.wav").unwrap();
+        assert!(
+            dir.path().join("kick.ot").exists(),
+            "kick.aif still needs it"
+        );
+        assert!(dir.path().join("boom.ot").exists());
+        delete_files(vec![dir
+            .path()
+            .join("boom.wav")
+            .to_string_lossy()
+            .to_string()])
+        .unwrap();
+        fs::write(dir.path().join("kick.wav"), b"audio").unwrap();
+        delete_files(vec![dir
+            .path()
+            .join("kick.wav")
+            .to_string_lossy()
+            .to_string()])
+        .unwrap();
+        assert!(
+            dir.path().join("kick.ot").exists(),
+            "kick.aif still needs it"
+        );
+    }
+
+    #[test]
+    fn deleting_a_sample_deletes_its_ot() {
+        let dir = TempDir::new().unwrap();
+        fs::write(dir.path().join("kick.wav"), b"audio").unwrap();
+        fs::write(dir.path().join("kick.ot"), b"settings").unwrap();
+        delete_files(vec![dir
+            .path()
+            .join("kick.wav")
+            .to_string_lossy()
+            .to_string()])
+        .unwrap();
+        assert!(!dir.path().join("kick.ot").exists());
     }
 
     #[test]

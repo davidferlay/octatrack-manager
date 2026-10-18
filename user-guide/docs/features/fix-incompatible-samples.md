@@ -65,6 +65,8 @@ Either way, conversion starts immediately in place and a progress throbber is di
 
 Every slot reference across all projects of Set is updated to reference the new converted file automatically.
 
+When a file is resampled to 44.1 kHz, every slot playing it gets its trim points, loop point and slices moved to the new sample positions (slots count positions in samples, so they would otherwise point past where they should), and a `.ot` next to the file is rescaled and renamed with it. `markers.work` is backed up first.
+
 ---
 
 ## Fixing all files in bulk

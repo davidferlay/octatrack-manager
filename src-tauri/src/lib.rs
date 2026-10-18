@@ -1301,6 +1301,8 @@ async fn fix_pool_files(
     let result = tauri::async_runtime::spawn_blocking(move || {
         let mut outcomes: Vec<audio_pool::PoolFixOutcome> = Vec::new();
         let mut renames: Vec<(String, String)> = Vec::new();
+        // Files whose frames changed, so the slots playing them get their markers rescaled
+        let mut resampled: Vec<project_reader::Resampled> = Vec::new();
 
         for path in &file_paths {
             if cancel_token.load(std::sync::atomic::Ordering::Relaxed) {
@@ -1325,6 +1327,7 @@ async fn fix_pool_files(
                     },
                 );
             };
+            let before = project_reader::audio_frames_and_rate(std::path::Path::new(path));
             match audio_pool::convert_pool_file_in_place(
                 std::path::Path::new(path),
                 progress_callback,
@@ -1334,6 +1337,11 @@ async fn fix_pool_files(
                     let new_str = new_path.to_string_lossy().to_string();
                     if new_str != *path {
                         renames.push((path.clone(), new_str.clone()));
+                    }
+                    if let (Some((_, rate)), Some((frames, _))) =
+                        (before, project_reader::audio_frames_and_rate(&new_path))
+                    {
+                        resampled.push((new_str.clone(), rate, frames));
                     }
                     outcomes.push(audio_pool::PoolFixOutcome {
                         old_path: path.clone(),
@@ -1359,6 +1367,8 @@ async fn fix_pool_files(
         } else {
             project_reader::update_pool_references(&pool_path, &renames)?
         };
+        // After the repoint, so slots are found under the converted file's name
+        project_reader::rescale_pool_markers(&pool_path, &resampled)?;
 
         Ok(PoolFixResult {
             outcomes,
@@ -1390,6 +1400,8 @@ async fn fix_project_samples(
     let result = tauri::async_runtime::spawn_blocking(move || {
         let mut outcomes: Vec<audio_pool::PoolFixOutcome> = Vec::new();
         let mut renames: Vec<(String, String)> = Vec::new();
+        // Files whose frames changed, so the slots playing them get their markers rescaled
+        let mut resampled: Vec<project_reader::Resampled> = Vec::new();
 
         for path in &file_paths {
             if cancel_token.load(std::sync::atomic::Ordering::Relaxed) {
@@ -1414,6 +1426,7 @@ async fn fix_project_samples(
                     },
                 );
             };
+            let before = project_reader::audio_frames_and_rate(std::path::Path::new(path));
             match audio_pool::convert_pool_file_in_place(
                 std::path::Path::new(path),
                 progress_callback,
@@ -1423,6 +1436,11 @@ async fn fix_project_samples(
                     let new_str = new_path.to_string_lossy().to_string();
                     if new_str != *path {
                         renames.push((path.clone(), new_str.clone()));
+                    }
+                    if let (Some((_, rate)), Some((frames, _))) =
+                        (before, project_reader::audio_frames_and_rate(&new_path))
+                    {
+                        resampled.push((new_str.clone(), rate, frames));
                     }
                     outcomes.push(audio_pool::PoolFixOutcome {
                         old_path: path.clone(),
@@ -1448,6 +1466,8 @@ async fn fix_project_samples(
         } else {
             project_reader::update_project_references(&project_path, &renames)?
         };
+        // After the repoint, so slots are found under the converted file's name
+        project_reader::rescale_project_markers(&project_path, &resampled)?;
 
         Ok(PoolFixResult {
             outcomes,

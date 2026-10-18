@@ -251,6 +251,29 @@ describe('SampleSlotsTable — Audio Pool integration', () => {
     })
   })
 
+  it('never assigns a .ot (or a folder path) picked with the pool pane menu', async () => {
+    // A .ot sits in the pane next to its sample; assigning it would load it as a sample. The
+    // menu goes through expand_audio_paths, as a drop does: folders become their audio files
+    // and anything else is left out
+    mockInvoke.mockImplementation(async (cmd, args) => {
+      const a = (args ?? {}) as Record<string, unknown>
+      if (cmd === 'list_audio_directory') {
+        return [{ name: 'kick.ot', path: '/set/AUDIO/kick.ot', is_directory: false, size: 832, channels: null, bit_rate: null, sample_rate: null }]
+      }
+      if (cmd === 'expand_audio_paths') return ((a.paths ?? []) as string[]).filter(p => p.endsWith('.wav'))
+      return []
+    })
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode audioPoolPath="/set/AUDIO" />
+    )
+    await userEvent.click(screen.getByTitle(/Show Audio Pool/i))
+    fireEvent.contextMenu(await screen.findByText('kick.ot'))
+    await userEvent.click(screen.getByText(/Assign to first empty slot/i))
+
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('expand_audio_paths', { paths: ['/set/AUDIO/kick.ot'] }))
+    expect(mockInvoke).not.toHaveBeenCalledWith('assign_samples_to_slots', expect.anything())
+  })
+
   it('shows the Audio Pool toggle when audioPoolPath is provided', () => {
     renderWithProvider(
       <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" audioPoolPath="/set/AUDIO" />

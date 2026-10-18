@@ -110,7 +110,7 @@ See [Purge Unused Samples](purge-unused-samples.md) for the full walkthrough —
 
 ## Renaming Samples
 
-Right-click a file in the Audio Pool pane and choose "Rename...". Renaming file would normally break every sample slot pointing at it - so the rename also automatically updates all project's slots where it's used.
+Right-click a file in the Audio Pool pane and choose "Rename...". Renaming file would normally break every sample slot pointing at it - so the rename also automatically updates all project's slots where it's used. A `.ot` settings file next to it is renamed too, so the Octatrack still finds it (copied instead, when another file of the same name, such as `kick.aif` beside `kick.wav`, still uses it).
 
 The same right-click "Rename" is available in the Audio Pool pane of a project's Flex or Static tab, where it behaves identically (the loaded project reference gets updated).
 
@@ -124,6 +124,8 @@ To remove unwanted samples from your library:
 1. Select one or more files in the right panel (Audio Pool).
 2. Click **Delete**.
 3. A confirmation dialog will appear to prevent accidental loss of data.
+
+A `.ot` settings file next to a deleted sample is deleted with it, unless another file of the same name still uses it.
 
 ---
 

@@ -186,7 +186,7 @@ Multiple Sample Slots can be selected at once to perform these operations using:
 - <kbd>Shift</kbd>-click to select a range.
 - <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>-click to slect slots ndividual.
 
-If the sample's audio file has a sibling `.ot` settings file, it will be backed-up to project's `backups/` folder before being cleared.
+If the sample has a sibling `.ot` settings file in the project folder, Reset backs it up to the project's `backups/` folder and removes it, so assigning the sample again does not bring the old settings back. A `.ot` in the Audio Pool is left in place: other projects read it when they assign that sample.
 
 Pressing keyboard <kbd>Delete</kbd> (or <kbd>Backspace</kbd>) clears the sample from any slot that has one, or resets attributes on a slot that is already empty - so pressing it twice on the same slot first clears the sample, then resets its attributes (same result as "Clear sample & reset attributes").
 
@@ -230,7 +230,7 @@ When audio is imported from your computer, into a slot (dropped on a slot row, o
 - It is copied next to the imported audio, under the imported file's name. Only WAV and AIFF files carry their `.ot`: the Octatrack plays no other format, so it never made one for them.
 - When the audio is resampled to 44.1 kHz on import, the `.ot` is rescaled with it, so its trim, loop point and slices still land on the same sounds.
 - A `.ot` reaching past the end of its audio is still used, its positions cut to the audio's length, as the Octatrack does. A `.ot` that can't be read is left out.
-- When the import replaces a file that had a `.ot`, that old `.ot` is moved out of the way first: to the project's `backups/` folder in a project, renamed with a `.bak` ending in the Audio Pool.
+- When the import replaces a file that had a `.ot`, that old `.ot` is moved out of the way first: to the project's `backups/` folder in a project, renamed with a `.bak` ending in the Audio Pool. It stays when another file of the same name (such as `kick.aif` beside `kick.wav`) still uses it and the imported file brings none.
 
 Assigning a sample then gives the slot the settings of the `.ot` next to it, as the Octatrack does when loading a sample, whether the sample sits in the project folder or in the Audio Pool. Which of BPM or trim length the slot keeps follows the setting that had priority in the `.ot` (the arrow next to ORIGINAL TEMPO or TRIM LEN in the Audio Editor).
 

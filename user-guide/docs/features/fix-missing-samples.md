@@ -136,5 +136,5 @@ The same file missing in two projects is two rows, not one: where it ends up (or
 
 :::tip
 - **Both slot types are updated:** If a missing file is referenced by both a Static and a Flex slot, both are fixed in a single operation.
-- **`.ot` files are not copied:** The project's own Audio Editor settings (stored in `project.work`, `markers.work`, and possibly its own `.ot` files) are preserved.
+- **`.ot` files travel with their audio:** a `.ot` next to a found file is copied or moved with it, so the Octatrack finds it on the next assign. The slots keep their own Audio Editor settings (`project.work`, `markers.work`).
 :::

@@ -163,6 +163,47 @@ pub fn fits(ot: &SampleSettingsFile, frames: u64) -> Result<(), String> {
 /// already, only the clamp applies.
 pub fn rescale(ot: &SampleSettingsFile, from_rate: u32, new_frames: u64) -> SampleSettingsFile {
     let mut out = *ot;
+    let n = used(&out);
+    scale_positions(
+        &mut out.trim_start,
+        &mut out.trim_end,
+        &mut out.loop_start,
+        &mut out.slices[..n],
+        from_rate,
+        new_frames,
+    );
+    out
+}
+
+/// A slot's markers for audio resampled from `from_rate` to 44.1 kHz and now `new_frames`
+/// long - the same arithmetic as `rescale`. A slot whose markers were never set stays so.
+pub fn rescale_markers(m: &SlotMarkers, from_rate: u32, new_frames: u64) -> SlotMarkers {
+    let mut out = *m;
+    if out.trim_end == 0 && out.slice_count == 0 {
+        return out;
+    }
+    let n = (out.slice_count as usize).min(64);
+    scale_positions(
+        &mut out.trim_offset,
+        &mut out.trim_end,
+        &mut out.loop_point,
+        &mut out.slices[..n],
+        from_rate,
+        new_frames,
+    );
+    out
+}
+
+/// Every position x 44100 / rate, rounded, "no loop" kept, then clamped inside the audio with
+/// each slice's start before its end. At 44.1 kHz already, only the clamp applies.
+fn scale_positions(
+    trim_start: &mut u32,
+    trim_end: &mut u32,
+    loop_start: &mut u32,
+    slices: &mut [ot_tools_io::types::Slice],
+    from_rate: u32,
+    new_frames: u64,
+) {
     if from_rate != OT_RATE && from_rate > 0 {
         let r = |v: u32| -> u32 {
             if v == SLICE_LOOP_POINT_DISABLED {
@@ -171,18 +212,31 @@ pub fn rescale(ot: &SampleSettingsFile, from_rate: u32, new_frames: u64) -> Samp
             ((v as u64 * OT_RATE as u64 + from_rate as u64 / 2) / from_rate as u64)
                 .min(u32::MAX as u64 - 1) as u32
         };
-        out.trim_start = r(out.trim_start);
-        out.trim_end = r(out.trim_end);
-        out.loop_start = r(out.loop_start);
-        let n = used(&out);
-        for s in out.slices[..n].iter_mut() {
+        *trim_start = r(*trim_start);
+        *trim_end = r(*trim_end);
+        *loop_start = r(*loop_start);
+        for s in slices.iter_mut() {
             s.trim_start = r(s.trim_start);
             s.trim_end = r(s.trim_end);
             s.loop_start = r(s.loop_start);
         }
     }
-    clamp(&mut out, new_frames.min(u32::MAX as u64) as u32);
-    out
+    let frames = new_frames.min(u32::MAX as u64).max(1) as u32;
+    let lp = |v: u32| {
+        if v == SLICE_LOOP_POINT_DISABLED {
+            v
+        } else {
+            v.min(frames - 1)
+        }
+    };
+    *trim_start = (*trim_start).min(frames - 1);
+    *trim_end = (*trim_end).min(frames).max(*trim_start + 1);
+    *loop_start = lp(*loop_start);
+    for s in slices.iter_mut() {
+        s.trim_start = s.trim_start.min(frames - 1);
+        s.trim_end = s.trim_end.min(frames).max(s.trim_start + 1);
+        s.loop_start = lp(s.loop_start);
+    }
 }
 
 /// The `[SAMPLE]` fields the Octatrack writes for a sample with this `.ot`, in the upper-case
@@ -287,6 +341,12 @@ pub fn carry(source_audio: &Path, dest_audio: &Path) -> Result<Option<OtCarry>, 
         clamped,
     };
 
+    // A .ot another file of that name still reads (kick.aif beside kick.wav) is left to it,
+    // unless the new audio brings its own
+    let source_ot = companion(source_audio);
+    if source_ot.is_none() && shared(dest_audio) {
+        return Ok(None);
+    }
     // Whatever sits next to the new audio describes the file it replaced
     let leftover = companion(dest_audio);
     if let Some(old) = &leftover {
@@ -294,7 +354,7 @@ pub fn carry(source_audio: &Path, dest_audio: &Path) -> Result<Option<OtCarry>, 
     }
     let replaced = leftover.is_some();
 
-    let Some(source_ot) = companion(source_audio) else {
+    let Some(source_ot) = source_ot else {
         return Ok(
             leftover.map(|old| carried(name_of(&old), OtOutcome::Removed, None, None, true, false))
         );
@@ -327,7 +387,13 @@ pub fn carry(source_audio: &Path, dest_audio: &Path) -> Result<Option<OtCarry>, 
     let clamped = fits(&ot, src_frames).is_err();
 
     let dest_ot = dest_audio.with_extension("ot");
-    write(&rescale(&ot, src_rate, dest_frames), &dest_ot)?;
+    if src_rate == OT_RATE && !clamped {
+        // Nothing to rescale or cut: the user's file lands exactly as it was
+        std::fs::copy(&source_ot, &dest_ot)
+            .map_err(|e| format!("Copying {}: {e}", name_of(&source_ot)))?;
+    } else {
+        write(&rescale(&ot, src_rate, dest_frames), &dest_ot)?;
+    }
     let (outcome, from_rate) = if src_rate == OT_RATE {
         (OtOutcome::Copied, None)
     } else {
@@ -343,6 +409,85 @@ pub fn carry(source_audio: &Path, dest_audio: &Path) -> Result<Option<OtCarry>, 
     )))
 }
 
+/// Whether another audio file next to `audio` has the same name (`kick.wav` and `kick.aif`): it
+/// reads the same `.ot`, so that `.ot` must stay where it is.
+pub fn shared(audio: &Path) -> bool {
+    let (Some(dir), Some(stem)) = (audio.parent(), audio.file_stem()) else {
+        return false;
+    };
+    let stem = stem.to_string_lossy().to_lowercase();
+    std::fs::read_dir(dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .any(|e| {
+            let p = e.path();
+            p != audio
+                && p.is_file()
+                && crate::audio_pool::is_audio_file(&name_of(&p))
+                && p.file_stem()
+                    .is_some_and(|s| s.to_string_lossy().to_lowercase() == stem)
+        })
+}
+
+/// Keep a `.ot` with its audio when the audio is copied, moved or renamed unchanged: the frames
+/// are the same, so the `.ot` goes along byte for byte, under the audio's new name. Any other
+/// `.ot` already there is put out of the way first (see `retire`). Ok(true) when a `.ot` came
+/// along.
+pub fn follow(src_audio: &Path, dest_audio: &Path, moved: bool) -> Result<bool, String> {
+    let Some(src_ot) = companion(src_audio) else {
+        return Ok(false);
+    };
+    let dest_ot = dest_audio.with_extension("ot");
+    if src_ot == dest_ot {
+        return Ok(true);
+    }
+    if let Some(old) = companion(dest_audio).filter(|old| *old != src_ot) {
+        retire(&old)?;
+    }
+    let what = format!("{} along with {}", name_of(&src_ot), name_of(dest_audio));
+    if moved {
+        if std::fs::rename(&src_ot, &dest_ot).is_err() {
+            // Another file system: copy, then remove
+            std::fs::copy(&src_ot, &dest_ot).map_err(|e| format!("Moving {what}: {e}"))?;
+            std::fs::remove_file(&src_ot).map_err(|e| format!("Moving {what}: {e}"))?;
+        }
+    } else {
+        std::fs::copy(&src_ot, &dest_ot).map_err(|e| format!("Copying {what}: {e}"))?;
+    }
+    Ok(true)
+}
+
+/// After `old_audio` was converted in place into `new_audio` (resampled from `from_rate`, maybe
+/// renamed to .wav), rescale its `.ot` to the new audio and give it the new name. A `.ot` that
+/// can't be read is left as it is.
+pub fn follow_conversion(old_audio: &Path, new_audio: &Path, from_rate: u32) -> Result<(), String> {
+    let Some(old_ot) = companion(old_audio) else {
+        return Ok(());
+    };
+    let new_ot = new_audio.with_extension("ot");
+    if from_rate == OT_RATE {
+        // Same rate (a bit-depth change): no position moved, so the .ot keeps its bytes and
+        // only follows a new name
+        if new_ot != old_ot {
+            std::fs::rename(&old_ot, &new_ot)
+                .map_err(|e| format!("Renaming {}: {e}", name_of(&old_ot)))?;
+        }
+        return Ok(());
+    }
+    let (Ok(ot), Some((frames, _))) = (
+        read_valid(&old_ot),
+        crate::project_reader::audio_frames_and_rate(new_audio),
+    ) else {
+        return Ok(());
+    };
+    write(&rescale(&ot, from_rate, frames), &new_ot)?;
+    if new_ot != old_ot {
+        std::fs::remove_file(&old_ot).map_err(|e| format!("Removing {}: {e}", name_of(&old_ot)))?;
+    }
+    Ok(())
+}
+
 fn name_of(p: &Path) -> String {
     p.file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -351,27 +496,6 @@ fn name_of(p: &Path) -> String {
 
 fn used(ot: &SampleSettingsFile) -> usize {
     (ot.slices_len as usize).min(64)
-}
-
-/// Keep every position inside `frames` and each slice's start before its end; "no loop" stays.
-fn clamp(ot: &mut SampleSettingsFile, frames: u32) {
-    let frames = frames.max(1);
-    let lp = |v: u32| {
-        if v == SLICE_LOOP_POINT_DISABLED {
-            v
-        } else {
-            v.min(frames - 1)
-        }
-    };
-    ot.trim_start = ot.trim_start.min(frames - 1);
-    ot.trim_end = ot.trim_end.min(frames).max(ot.trim_start + 1);
-    ot.loop_start = lp(ot.loop_start);
-    let n = used(ot);
-    for s in ot.slices[..n].iter_mut() {
-        s.trim_start = s.trim_start.min(frames - 1);
-        s.trim_end = s.trim_end.min(frames).max(s.trim_start + 1);
-        s.loop_start = lp(s.loop_start);
-    }
 }
 
 /// Fixtures shared with `project_reader`'s assign tests.
@@ -568,6 +692,77 @@ mod tests {
     }
 
     #[test]
+    fn rescale_markers_moves_a_slots_positions_to_the_new_grid() {
+        // OTIMPDEV F2 on our Octatrack: a 48 kHz sample assigned with trim 0..192000 and
+        // slices every 24000; converted to 44.1 kHz the audio is 176400 frames long
+        let m = slot_markers(&ot(192_000, &[(24_000, 48_000, SLICE_LOOP_POINT_DISABLED)]));
+        let r = rescale_markers(&m, 48_000, 176_400);
+        assert_eq!((r.trim_offset, r.trim_end, r.slice_count), (0, 176_400, 1));
+        assert_eq!(
+            (
+                r.slices[0].trim_start,
+                r.slices[0].trim_end,
+                r.slices[0].loop_start
+            ),
+            (22_050, 44_100, SLICE_LOOP_POINT_DISABLED)
+        );
+    }
+
+    #[test]
+    fn rescale_markers_leaves_an_unset_slot_alone() {
+        let empty = SlotMarkers::default();
+        assert_eq!(rescale_markers(&empty, 48_000, 1000), empty);
+    }
+
+    #[test]
+    fn follow_conversion_rescales_the_ot_in_place() {
+        let dir = TempDir::new().unwrap();
+        let audio = dir.path().join("loop.wav");
+        write(
+            &ot(48_000, &[(24_000, 48_000, SLICE_LOOP_POINT_DISABLED)]),
+            &dir.path().join("loop.ot"),
+        )
+        .unwrap();
+        wav(&audio, OT_RATE, 44_100); // the converted file, same name
+        follow_conversion(&audio, &audio, 48_000).unwrap();
+        let o = read_valid(&dir.path().join("loop.ot")).unwrap();
+        assert_eq!((o.trim_end, o.slices[0].trim_start), (44_100, 22_050));
+    }
+
+    #[test]
+    fn follow_conversion_at_44k1_leaves_the_ot_untouched() {
+        // A bit-depth-only conversion moves no position: the .ot keeps its exact bytes (a
+        // DigiChain tempo of 24 is not raised to 720 on disk)
+        let dir = TempDir::new().unwrap();
+        let audio = dir.path().join("chain.wav");
+        wav(&audio, OT_RATE, 1000);
+        let mut o = ot(1000, &[]);
+        o.tempo = 24;
+        write(&o, &dir.path().join("chain.ot")).unwrap();
+        let before = std::fs::read(dir.path().join("chain.ot")).unwrap();
+        follow_conversion(&audio, &audio, OT_RATE).unwrap();
+        assert_eq!(std::fs::read(dir.path().join("chain.ot")).unwrap(), before);
+    }
+
+    #[test]
+    fn follow_conversion_renames_the_ot_with_a_converted_file() {
+        // loop.aif converted to loop-1.wav (loop.wav was taken): its .ot follows the new name
+        let dir = TempDir::new().unwrap();
+        let old = dir.path().join("loop.aif");
+        std::fs::write(&old, b"gone").unwrap();
+        write(&ot(48_000, &[]), &dir.path().join("loop.ot")).unwrap();
+        let new = dir.path().join("loop-1.wav");
+        wav(&new, OT_RATE, 44_100);
+        std::fs::remove_file(&old).unwrap();
+        follow_conversion(&old, &new, 48_000).unwrap();
+        assert!(!dir.path().join("loop.ot").exists());
+        assert_eq!(
+            read_valid(&dir.path().join("loop-1.ot")).unwrap().trim_end,
+            44_100
+        );
+    }
+
+    #[test]
     fn slot_markers_keep_all_64_entries_and_the_count() {
         let m = slot_markers(&ot(900, &[(10, 20, SLICE_LOOP_POINT_DISABLED)]));
         assert_eq!((m.trim_offset, m.trim_end, m.slice_count), (0, 900, 1));
@@ -664,6 +859,23 @@ mod tests {
     }
 
     #[test]
+    fn carry_copies_the_ot_byte_for_byte_when_nothing_moves() {
+        // 44.1 kHz and inside the audio: nothing to rescale or cut, so the user's .ot lands as
+        // it was (a DigiChain tempo of 24 stays 24 on disk; the device raises it on assign)
+        let mut o = ot(1000, &[]);
+        o.tempo = 24;
+        let (_root, src, project) = setup("kick.wav", OT_RATE, 1000, Some(o));
+        let dest = project.join("kick.wav");
+        std::fs::copy(&src, &dest).unwrap();
+
+        carry(&src, &dest).unwrap().unwrap();
+        assert_eq!(
+            std::fs::read(project.join("kick.ot")).unwrap(),
+            std::fs::read(src.with_extension("ot")).unwrap()
+        );
+    }
+
+    #[test]
     fn carry_refuses_an_unreadable_ot() {
         let (_root, src, project) = setup("kick.wav", OT_RATE, 1000, None);
         std::fs::write(src.with_extension("ot"), b"not a .ot").unwrap();
@@ -693,6 +905,19 @@ mod tests {
             .filter(|e| e.file_name().to_string_lossy().ends_with(".bak"))
             .collect();
         assert_eq!(baks.len(), 1);
+    }
+
+    #[test]
+    fn carry_keeps_a_ot_another_file_of_the_same_name_reads() {
+        // kick.wav arrives without a .ot next to kick.aif + kick.ot: that .ot is kick.aif's
+        let (_root, src, project) = setup("kick.wav", OT_RATE, 1000, None);
+        wav(&project.join("kick.aif"), OT_RATE, 1000);
+        write(&ot(1000, &[]), &project.join("kick.ot")).unwrap();
+        let dest = project.join("kick.wav");
+        std::fs::copy(&src, &dest).unwrap();
+
+        assert_eq!(carry(&src, &dest).unwrap(), None);
+        assert!(project.join("kick.ot").exists());
     }
 
     #[test]

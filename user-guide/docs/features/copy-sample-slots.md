@@ -50,28 +50,28 @@ When **Copy** is selected, a warning badge is displayed if any source audio file
 :::
 
 :::note
-Audio file operations **never** copy or move `.ot` sidecar files. `.ot` files are part of Audio Editor settings, not sample assignments. On **Move all to Pool**, any `.ot` files alongside audio files in the project directory are re-integrated into `project.work` and `markers.work` before being deleted (the Octatrack ignores `.ot` files placed in the Audio Pool anyway).
+A `.ot` settings file next to an audio file goes wherever the audio goes: copied with it into the destination project, or moved with it to the Audio Pool. The Octatrack reads a `.ot` when its sample is assigned, in a project or the Audio Pool alike, so it stays useful there. Slots are not changed by it: each slot keeps its own settings in `project.work` and `markers.work`.
 :::
 
 ### Sample Attributes
 
 Controls whether Audio Editor (AED) settings are copied to the destination slots.
 
-- **Copy:** Copy selected attributes from source to destination. Gain, BPM, timestretch, loop mode and trig quantization are taken from the source slot in `project.work`, which is what the Octatrack plays. For trim points, loop point and slices, a `.ot` next to a sample in the source project folder takes priority over `markers.work`. Attributes are always written to `project.work` and `markers.work` only - `.ot` files are never created.
-- **Don't Copy:** Destination slot attributes are left untouched — useful when the destination project has its own purposefully configured Audio Editor settings.
+- **Copy:** Copy selected attributes from source to destination, taken from the source slot itself (`project.work` and `markers.work`), which is what the Octatrack plays. A `.ot` next to the sample is not read: the Octatrack only reads it when a sample is assigned.
+- **Don't Copy:** Destination slot attributes are left untouched - useful when the destination project has its own purposefully configured Audio Editor settings. The slot's trim, loop and slices follow the new sample, as on the Octatrack when a slot is given another sample. A destination slot that held nothing gets what the Octatrack writes for a newly assigned sample (or the settings of a `.ot` next to it).
 
 When **Copy** is selected, individual attribute toggle buttons let you select exactly which settings to copy (all are selected by default):
 
-| Attribute | Source (project file) | Source (`.ot`, when present) |
-|-----------|----------------------|----------------------|
-| **Gain** | `GAIN=` field | - |
-| **BPM / Tempo** | `BPMx24=` field | - |
-| **Timestretch** | `TSMODE=` field | - |
-| **Loop mode** | `LOOPMODE=` field | - |
-| **Trig quantization** | `TRIGQUANTIZATION=` field | - |
-| **Trim points** | Markers file: trim_offset, trim_end | `.ot` trim_start, trim_end |
-| **Loop point** | Markers file: loop_point | `.ot` loop_start |
-| **Slices** | Markers file: slices, slice_count | `.ot` slices, slices_len |
+| Attribute | Source |
+|-----------|--------|
+| **Gain** | `GAIN=` field |
+| **BPM / Tempo** | `BPMx24=` field |
+| **Timestretch** | `TSMODE=` field |
+| **Loop mode** | `LOOPMODE=` field |
+| **Trig quantization** | `TRIGQUANTIZATION=` field |
+| **Trim points** | Markers file: trim_offset, trim_end |
+| **Loop point** | Markers file: loop_point |
+| **Slices** | Markers file: slices, slice_count |
 
 Use **None** to deselect all, or **All** to select all attributes.
 

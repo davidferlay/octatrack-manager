@@ -505,23 +505,36 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   useEffect(() => { doAssignFilesRef.current = doAssignFiles; });
 
   // Assign files to the first empty slot (context-menu action from the Audio Pool pane).
-  const assignToFirstEmpty = useCallback((paths: string[]) => {
+  // Dropped or picked pool items -> the audio files they stand for: a folder becomes the audio
+  // files in it, and anything else (a .ot next to its sample, artwork) is left out.
+  const expandPaths = useCallback(async (paths: string[]): Promise<string[]> => {
+    try {
+      const out = await invoke<string[]>('expand_audio_paths', { paths });
+      return Array.isArray(out) ? out : paths;
+    } catch {
+      return paths;
+    }
+  }, []);
+
+  const assignToFirstEmpty = useCallback(async (paths: string[]) => {
     const firstEmpty = slots.find(s => !s.path);
     if (!firstEmpty) {
       setViewModeToast(false);
       return;
     }
-    doAssignFiles(paths, firstEmpty);
-  }, [slots, doAssignFiles]);
+    const files = await expandPaths(paths);
+    if (files.length > 0) await doAssignFiles(files, firstEmpty);
+  }, [slots, doAssignFiles, expandPaths]);
 
   // Assign files starting at the currently-selected slot (cursor, else lowest selected id).
-  const assignToSelected = useCallback((paths: string[]) => {
+  const assignToSelected = useCallback(async (paths: string[]) => {
     const targetId = lastClickedSlotId != null && selectedSlots.has(lastClickedSlotId)
       ? lastClickedSlotId
       : Math.min(...Array.from(selectedSlots));
     const target = slots.find(s => s.slot_id === targetId);
-    if (target) doAssignFiles(paths, target);
-  }, [slots, selectedSlots, lastClickedSlotId, doAssignFiles]);
+    const files = await expandPaths(paths);
+    if (target && files.length > 0) await doAssignFiles(files, target);
+  }, [slots, selectedSlots, lastClickedSlotId, doAssignFiles, expandPaths]);
 
   const slotType = tableType === 'flex' ? 'FLEX' : 'STATIC';
 
@@ -558,8 +571,9 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
 
   // Delete the entire [SAMPLE] block for every target slot that has one, returning it to the
   // hardware's fully-empty state (no sample, attributes back to OT defaults). For slots still
-  // referencing a sample, first back up + delete the sibling .ot so it can't re-impose attributes
-  // if that audio is assigned again later. Works even on already-cleared slots (blank PATH but a
+  // referencing a sample, first back up + delete a sibling .ot in the project folder so it can't
+  // re-impose attributes if that audio is assigned again later (one in the Audio Pool stays: other
+  // projects read it). Works even on already-cleared slots (blank PATH but a
   // lingering block) — the block is dropped regardless.
   const clearAndResetSlots = useCallback(async (targets: SampleSlot[]) => {
     if (!isEditMode || !projectPath) return;
@@ -587,7 +601,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
 
   // Reset the given slots' audio-editor attributes to OT defaults. Attributes are tied to the
   // slot (not the audio file), so this also applies to empty slots; the backend additionally
-  // deletes any sibling .ot file (after backing it up). Keeps each sample assigned.
+  // deletes a sibling .ot in the project folder (after backing it up). Keeps each sample assigned.
   const resetSlotsAttributes = useCallback(async (targets: SampleSlot[]) => {
     if (!isEditMode || !projectPath) return;
     const slotIndices = targets.map(s => s.slot_id);
@@ -777,17 +791,6 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [audioPoolPath, showAudioPool, isEditMode, selectedSlots, slotMenu, handleDeleteKey, player, activePane, moveSlotSelection, onToggleTransfers]);
-
-  // Expand any dragged/dropped directories into their (recursive) audio files so the
-  // copy/assign flows never choke on a folder. Plain audio files pass through unchanged.
-  const expandPaths = useCallback(async (paths: string[]): Promise<string[]> => {
-    try {
-      const out = await invoke<string[]>('expand_audio_paths', { paths });
-      return Array.isArray(out) ? out : paths;
-    } catch {
-      return paths;
-    }
-  }, []);
 
   // Handle drop on a slot row (HTML5 drag — works on Linux; macOS uses dnd-kit via handleDndDragEnd)
   const handleSlotDrop = useCallback(async (e: React.DragEvent, targetSlot: SampleSlot) => {
