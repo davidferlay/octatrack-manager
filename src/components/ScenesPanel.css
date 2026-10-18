@@ -48,6 +48,8 @@
   background: #1a1a1a;
   border: 1px solid #333;
   border-radius: 6px;
+  /* Shift+click picks a run of scenes in the matrix; without this it selects text */
+  user-select: none;
 }
 
 .scene-card {
@@ -143,7 +145,6 @@
 
 .scene-empty-message {
   padding: 16px 0;
-  max-width: 60ch;
   line-height: 1.5;
 }
 
@@ -755,6 +756,7 @@
   border-radius: 3px 3px 0 0;
   cursor: pointer;
   width: 100%;
+  user-select: none;
 }
 
 .scene-matrix-table th.scene-matrix-head button:hover {
@@ -994,11 +996,17 @@
   align-items: center;
 }
 
+/* Inside the value box's right edge rather than straddling its border; the fill
+   matches the box so a wide value under it does not show through. */
 .scene-cell .scene-clear-one {
   position: absolute;
-  right: -5px;
+  right: 3px;
   top: 50%;
   transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  font-size: 14px;
+  background: #1a1a1a;
   opacity: 0;
   transition: opacity 0.12s;
   pointer-events: none;
@@ -1007,6 +1015,11 @@
 .scene-cell:hover .scene-clear-one {
   opacity: 1;
   pointer-events: auto;
+}
+
+/* Room for the cross, so it never sits over the value's last digit */
+.scene-cell:hover input.scene-value.editable {
+  padding-right: 18px;
 }
 
 /* Randomize with bounds

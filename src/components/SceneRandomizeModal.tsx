@@ -8,8 +8,8 @@ import {
 interface SceneRandomizeModalProps {
   /** Every parameter the Part holds, which the scene selection then narrows. */
   rows: AssignmentRow[];
-  /** The scene the grid has selected, where this starts. */
-  selected: number;
+  /** The scenes the panel is acting on, where this starts. */
+  selected: number[];
   onApply: (scenes: number[], rows: AssignmentRow[], bounds: RandomizeBounds) => void;
   onClose: () => void;
 }
@@ -26,8 +26,8 @@ export function SceneRandomizeModal({
    * sixteen buttons to read: the grid only appears once the user asks to pick.
    */
   const [pickingScenes, setPickingScenes] = useState(false);
-  const [picked, setPicked] = useState<number[]>([selected]);
-  const scenes = pickingScenes ? picked : [selected];
+  const [picked, setPicked] = useState<number[]>(selected);
+  const scenes = pickingScenes ? picked : selected;
   const setScenes = setPicked;
   /*
    * The parameters explicitly turned off, rather than the ones turned on.
@@ -172,9 +172,9 @@ export function SceneRandomizeModal({
             type="button"
             className={`tools-toggle-btn ${pickingScenes ? '' : 'selected'}`}
             onClick={() => setPickingScenes(false)}
-            title="Reroll the scene the grid has selected"
+            title="Reroll the scene(s) the grid has selected"
           >
-            Current Scene
+            {selected.length > 1 ? 'Current Scenes' : 'Current Scene'}
           </button>
           <button
             type="button"

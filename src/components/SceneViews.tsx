@@ -111,15 +111,21 @@ export type SetAssignment = (
  * The scene is chosen in the grid above, as everywhere else, so the headings here are
  * plain labels rather than a second set of buttons that do the same thing.
  */
-export function SceneMatrix({ data, selected, editable, showAll, onSet, onSceneChange }: {
+export function SceneMatrix({
+  data, selected, targets, editable, showAll, onSet, onSceneChange, onPick,
+}: {
   data: ScenesResponse;
   selected: number;
+  /** Every scene the operations act on: the selected one plus any Shift/Ctrl picked. */
+  targets: number[];
   /** Values can be changed in place, as they can in the scene list. */
   editable: boolean;
   /** Every position a scene could reach for, not only the ones some scene holds. */
   showAll: boolean;
   onSet: SetAssignment;
   onSceneChange: (sceneId: number) => void;
+  /** A heading click, modifiers included, so Shift and Ctrl can pick several. */
+  onPick: (sceneId: number, mods: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean }) => void;
 }) {
   // The headings choose a scene and step with the wheel, as the grid above does
   const headWheelRef = useWheelStep(
@@ -158,12 +164,12 @@ export function SceneMatrix({ data, selected, editable, showAll, onSet, onSceneC
                     key={scene.scene_id}
                     className={[
                       'scene-matrix-head',
-                      scene.scene_id === selected ? 'selected' : '',
+                      targets.includes(scene.scene_id) ? 'selected' : '',
                       end ? 'crossfader-end' : '',
                     ].filter(Boolean).join(' ')}
                   >
                     <button
-                      onClick={() => onSceneChange(scene.scene_id)}
+                      onClick={event => onPick(scene.scene_id, event)}
                       title={end
                         ? `Scene ${scene.scene_id + 1}, the ${end} end of the crossfader`
                         : `Scene ${scene.scene_id + 1}`}
@@ -185,7 +191,7 @@ export function SceneMatrix({ data, selected, editable, showAll, onSet, onSceneC
                     className={[
                       'scene-matrix-cell',
                       value === null ? 'unheld' : '',
-                      scene === selected ? 'selected' : '',
+                      targets.includes(scene) ? 'selected' : '',
                     ].filter(Boolean).join(' ')}
                   >
                     <Cell row={row} scene={scene} editable={editable} onSet={onSet} />

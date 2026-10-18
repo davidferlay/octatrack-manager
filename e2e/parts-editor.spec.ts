@@ -3802,6 +3802,56 @@ test.describe('Scenes', () => {
         .poll(async () => (await getInvokeCalls(page, 'save_scene')).length, { timeout: 3000 })
         .toBe(1)
     })
+
+    /** Paste, Clear and Randomize act on every scene picked with Shift or Ctrl. */
+    test.describe('picking several scenes', () => {
+      const cleared = async (page: Page) =>
+        (await getInvokeCalls(page, 'save_scene')).map(c => c.args.sceneId).sort((a, b) => a - b)
+
+      test.beforeEach(async ({ page }) => {
+        await page.locator('.mode-toggle').click()
+        await open(page)
+      })
+
+      test('Shift+click on a heading picks a run, and Clear empties all of it', async ({ page }) => {
+        await page.locator('.scene-matrix-head button').nth(0).click()
+        await page.locator('.scene-matrix-head button').nth(2).click({ modifiers: ['Shift'] })
+        await expect(page.locator('.scene-matrix-head.selected')).toHaveCount(3)
+        await expect(page.locator('.scene-card.active')).toHaveCount(3)
+
+        await page.locator('.scene-action', { hasText: 'Clear' }).click()
+        await expect.poll(() => cleared(page), { timeout: 3000 }).toEqual([0, 1, 2])
+        await expect(page.locator('.toast-notification.tip')).toContainText('Scenes 1, 2, 3 emptied')
+      })
+
+      test('Ctrl+click on the grid adds one scene at a time', async ({ page }) => {
+        await card(page, 1).click()
+        await card(page, 3).click({ modifiers: ['Control'] })
+        await card(page, 6).click({ modifiers: ['Control'] })
+        await expect(page.locator('.scene-matrix-head.selected')).toHaveCount(3)
+
+        await page.locator('.scene-action', { hasText: 'Clear' }).click()
+        await expect.poll(() => cleared(page), { timeout: 3000 }).toEqual([0, 2, 5])
+      })
+
+      test('a plain click goes back to one scene', async ({ page }) => {
+        await card(page, 1).click()
+        await card(page, 3).click({ modifiers: ['Shift'] })
+        await card(page, 5).click()
+        await expect(page.locator('.scene-matrix-head.selected')).toHaveCount(1)
+      })
+    })
+
+    test('the comparison acts on both of its sides', async ({ page }) => {
+      await page.locator('.mode-toggle').click()
+      await page.locator('.scene-view-tab', { hasText: 'Compare' }).click()
+      // It opens on the two ends, scenes 1 and 9
+      await page.locator('.scene-action', { hasText: 'Clear' }).click()
+      await expect
+        .poll(async () => (await getInvokeCalls(page, 'save_scene'))
+          .map(c => c.args.sceneId).sort((a, b) => a - b), { timeout: 3000 })
+        .toEqual([0, 8])
+    })
   })
 
   /**

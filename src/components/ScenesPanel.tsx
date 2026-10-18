@@ -244,6 +244,55 @@ export function ScenesPanel({
     left: number | null; right: number | null;
   }>({ left: null, right: null });
 
+  /**
+   * The scenes Paste, Clear and Randomize act on.
+   *
+   * The matrix lays every scene out at once, so it is where several are picked at a
+   * time (Shift for a run, Ctrl for one more); the comparison acts on both of its
+   * sides; the scene view on the one it shows.
+   */
+  const [extra, setExtra] = useState<number[]>([]);
+  const targets = useMemo(() => {
+    if (view === 'compare' && data) {
+      return [...new Set([compareSides.left ?? data.scene_a, compareSides.right ?? data.scene_b])];
+    }
+    if (view === 'matrix') return [...new Set([selected, ...extra])].sort((a, b) => a - b);
+    return [selected];
+  }, [view, data, compareSides, selected, extra]);
+  const scenesNamed = (ids: number[]) => (ids.length === 1
+    ? `Scene ${ids[0] + 1}`
+    : `Scenes ${ids.map(id => id + 1).join(', ')}`);
+
+  const selectOne = useCallback((sceneId: number) => {
+    setExtra([]);
+    onSceneChange(sceneId);
+  }, [onSceneChange]);
+
+  /** A click on a scene in the grid or a matrix heading, with its modifier keys. */
+  const pickScene = useCallback((
+    sceneId: number, mods: { shiftKey: boolean; ctrlKey: boolean; metaKey: boolean },
+  ) => {
+    if (view === 'matrix' && mods.shiftKey) {
+      // A run from the selected scene, which stays the anchor
+      const lo = Math.min(selected, sceneId);
+      setExtra(Array.from({ length: Math.abs(selected - sceneId) + 1 }, (_, i) => lo + i));
+      return;
+    }
+    if (view === 'matrix' && (mods.ctrlKey || mods.metaKey)) {
+      const next = targets.includes(sceneId)
+        ? targets.filter(id => id !== sceneId)
+        : [...targets, sceneId];
+      if (next.length === 0) return;
+      if (!next.includes(selected)) onSceneChange(Math.min(...next));
+      setExtra(next);
+      return;
+    }
+    selectOne(sceneId);
+    // In the comparison the grid picks what is being compared against, which is the
+    // thing being looked at there
+    if (view === 'compare') setCompareSides(prev => ({ ...prev, left: sceneId }));
+  }, [view, selected, targets, onSceneChange, selectOne]);
+
   const [tip, setTip] = useState<string | null>(null);
   const tipTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const showTip = useCallback((message: string) => {
@@ -329,7 +378,7 @@ export function ScenesPanel({
   // The row of sixteen is one control, so the wheel runs through it anywhere over the
   // grid rather than only over a card - there is no "label" here to keep clear
   const gridWheelRef = useWheelStep(
-    (by: 1 | -1) => onSceneChange(Math.min(15, Math.max(0, selected + by))),
+    (by: 1 | -1) => selectOne(Math.min(15, Math.max(0, selected + by))),
     null,
   );
 
@@ -364,39 +413,41 @@ export function ScenesPanel({
   }, [data, writeScene, showTip]);
 
   /**
-   * Gives every value the selected scene holds a new one, at random.
+   * Gives every value each target scene holds a new one, at random.
    *
    * Only the parameters it already holds are touched: which parameters a scene reaches
    * for is the musical decision, and the values are the part worth shuffling. Each one
    * stays inside its own legal range, gaps included.
    */
   const randomise = useCallback(() => {
-    if (!data || !scene) return;
+    if (!data) return;
     const roll = (spec: FieldSpec) =>
       clampToSpec(spec.min + Math.floor(Math.random() * (spec.max - spec.min + 1)), spec);
 
-    const tracks = scene.tracks.map(track => {
-      const slots = slotsForTrack(
-        track,
-        data.machine_types[track.track_id],
-        data.fx1_types[track.track_id],
-        data.fx2_types[track.track_id],
-      );
-      const next: SceneTrackLocks = {
-        ...track,
-        machine: [...track.machine], lfo: [...track.lfo], amp: [...track.amp],
-        fx1: [...track.fx1], fx2: [...track.fx2],
-      };
-      for (const slot of slots) {
-        if (slot.value === null) continue;
-        if (slot.page === 'xlv') next.xlv = roll(slot.spec);
-        else next[slot.page][slot.index] = roll(slot.spec);
-      }
-      return next;
-    });
-    writeScene(scene.scene_id, tracks);
-    showTip(`Scene ${scene.scene_id + 1} randomized, within each parameter's own range`);
-  }, [data, scene, writeScene, showTip]);
+    for (const id of targets) {
+      const tracks = data.scenes[id].tracks.map(track => {
+        const slots = slotsForTrack(
+          track,
+          data.machine_types[track.track_id],
+          data.fx1_types[track.track_id],
+          data.fx2_types[track.track_id],
+        );
+        const next: SceneTrackLocks = {
+          ...track,
+          machine: [...track.machine], lfo: [...track.lfo], amp: [...track.amp],
+          fx1: [...track.fx1], fx2: [...track.fx2],
+        };
+        for (const slot of slots) {
+          if (slot.value === null) continue;
+          if (slot.page === 'xlv') next.xlv = roll(slot.spec);
+          else next[slot.page][slot.index] = roll(slot.spec);
+        }
+        return next;
+      });
+      writeScene(id, tracks);
+    }
+    showTip(`${scenesNamed(targets)} randomized, within each parameter's own range`);
+  }, [data, targets, writeScene, showTip]);
 
   /** Every parameter this Part holds, which is what the popover offers to reroll. */
   const assignments = useMemo(() => (data ? sceneAssignments(data) : []), [data]);
@@ -500,6 +551,8 @@ export function ScenesPanel({
     return <div className="scenes-panel-loading">Reading scenes...</div>;
   }
 
+  const targetsEmpty = targets.every(id => data.scenes[id].locked_count === 0);
+
   const endLabel = (id: number) => [
     id === data.scene_a ? 'A' : null,
     id === data.scene_b ? 'B' : null,
@@ -566,7 +619,7 @@ export function ScenesPanel({
       {randomizeOpen && (
         <SceneRandomizeModal
           rows={assignments}
-          selected={selected}
+          selected={targets}
           onApply={randomiseWithin}
           onClose={() => setRandomizeOpen(false)}
         />
@@ -609,18 +662,11 @@ export function ScenesPanel({
               key={s.scene_id}
               className={[
                 'scene-card',
-                selected === s.scene_id ? 'active' : '',
+                targets.includes(s.scene_id) ? 'active' : '',
                 s.locked_count === 0 ? 'empty' : '',
                 end ? 'crossfader-end' : '',
               ].filter(Boolean).join(' ')}
-              onClick={() => {
-                onSceneChange(s.scene_id);
-                // In the comparison the grid picks what is being compared against,
-                // which is the thing being looked at there
-                if (view === 'compare') {
-                  setCompareSides(prev => ({ ...prev, left: s.scene_id }));
-                }
-              }}
+              onClick={event => pickScene(s.scene_id, event)}
               onContextMenu={event => {
                 event.preventDefault();
                 setSceneMenu({ x: event.clientX, y: event.clientY, sceneId: s.scene_id });
@@ -664,8 +710,8 @@ export function ScenesPanel({
         ))}
       </div>
 
-      {/* The same operations whichever way the Part is being read: they act on the
-          selected scene, which the grid above chooses in every view. */}
+      {/* The same operations whichever way the Part is being read: Copy takes the
+          selected scene, the others act on every scene in `targets`. */}
         <div className="scene-actions">
           {isEditMode && (
             <>
@@ -684,23 +730,23 @@ export function ScenesPanel({
                 disabled={!clipboard}
                 onClick={() => {
                   if (!clipboard) return;
-                  writeScene(selected, clipboard.tracks);
-                  showTip(`Scene ${clipboard.from + 1} pasted into scene ${selected + 1}`);
+                  for (const id of targets) writeScene(id, clipboard.tracks);
+                  showTip(`Scene ${clipboard.from + 1} pasted into ${scenesNamed(targets).toLowerCase()}`);
                 }}
                 title={clipboard
-                  ? `Put scene ${clipboard.from + 1} here, replacing what this one holds`
+                  ? `Put scene ${clipboard.from + 1} into ${scenesNamed(targets).toLowerCase()}, replacing what they hold`
                   : 'Copy a scene first'}
               >
                 Paste
               </button>
               <button
                 className="scene-action danger"
-                disabled={scene.locked_count === 0}
+                disabled={targetsEmpty}
                 onClick={() => {
-                  writeScene(selected, emptyTracks(scene.tracks));
-                  showTip(`Scene ${selected + 1} emptied`);
+                  for (const id of targets) writeScene(id, emptyTracks(data.scenes[id].tracks));
+                  showTip(`${scenesNamed(targets)} emptied`);
                 }}
-                title="Empty this scene, so the crossfader leaves everything as the Part sets it"
+                title={`Empty ${scenesNamed(targets).toLowerCase()}, so the crossfader leaves everything as the Part sets it`}
               >
                 Clear
               </button>
@@ -709,9 +755,9 @@ export function ScenesPanel({
               <div className="scene-split">
                 <button
                   className="scene-action scene-split-main"
-                  disabled={scene.locked_count === 0}
+                  disabled={targetsEmpty}
                   onClick={randomise}
-                  title="Give every value this scene holds a new one at random, within each parameter's own range. Which parameters it holds stays as it is."
+                  title={`${scenesNamed(targets)}: give every value held a new one at random, within each parameter's own range. Which parameters are held stays as it is.`}
                 >
                   Randomize
                 </button>
@@ -768,10 +814,12 @@ export function ScenesPanel({
         <SceneMatrix
           data={data}
           selected={selected}
+          targets={targets}
           editable={!!isEditMode}
           showAll={showAll}
           onSet={setAssignment}
-          onSceneChange={onSceneChange}
+          onSceneChange={selectOne}
+          onPick={pickScene}
         />
       )}
 
