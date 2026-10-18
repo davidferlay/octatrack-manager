@@ -41,11 +41,12 @@ The **Overview** tab shows your mixer, MIDI, memory, and metronome settings. Thi
 At the top of the project view, you can switch between several specialized views:
 
 - **Parts:** Manage the 4 sound snapshots (kits) for each bank.
+- **Scenes:** Read and edit the 16 scenes of each Part, and the crossfader ends.
 - **Patterns:** Visualize your sequences and triggers in detail.
 - **Flex / Static:** Browse, search, filter sample slots and [assign samples](../features/sample-slots.md#assigning--managing-samples) to them from the Audio Pool or your computer.
 - **Tools:** Access bulk copy operations between projects.
 
-## 4. Edit a Part
+## 4. Edit Parts
 
 To modify a part, navigate to the **Parts** tab and select a bank (A–P).
 
@@ -54,10 +55,22 @@ To modify a part, navigate to the **Parts** tab and select a bank (A–P).
 3. Use the knobs and fields to modify machine parameters, effects, and LFOs.
 4. Each change is **written to project immediately** as you make it, in the form of 'un-saved' changes - Just like on the Octatrack.
 5. Changes can then be saved to the current Part, All Parts, or reverted (reloads to 'saved' state of Part).
+6. Any change can also be taken back with the Undo button in the header, and brought back with Redo. See [Undo / Redo](../features/undo-redo.md).
 
 ![Parts Editor](/img/screenshots/parts-editor.png)
 
-## 5. Manage Your Audio Pool
+## 5. Edit Scenes
+
+To modify the 16 scenes of a Part, navigate to the Scenes tab and select a bank (A–P).
+
+1. Select a Bank and one of the 4 Parts, and toggle Edit mode.
+2. Click a scene in the grid to see what it holds, or switch to the Matrix view to see all 16 at once, or Compare to read two side by side.
+3. Change values in place, or use Copy, Paste, Clear and Randomize on one or several scenes.
+4. Pick which scenes sit at the A and B ends of the crossfader.
+
+Scene changes are saved with the Part, like any other Part edit. See [Edit Scenes](../features/scenes.md) for details.
+
+## 6. Manage Audio Pool
 
 In the **Audio Pool** view, you can move samples from your computer into your Set.
 
@@ -68,7 +81,7 @@ In the **Audio Pool** view, you can move samples from your computer into your Se
 
 ![Audio Pool conversion](/img/screenshots/audio-pool-conversion.png)
 
-## 6. Manage Sample Slots
+## 7. Manage Sample Slots
 
 On the **Flex** and **Static** tabs you can assign samples to your project's 256 slots - no hardware needed. Slot editing requires **Edit mode** (toggle in the header, or press <kbd>E</kbd>).
 
@@ -80,7 +93,7 @@ On the **Flex** and **Static** tabs you can assign samples to your project's 256
 
 See [Assigning & Managing Samples](../features/sample-slots.md#assigning--managing-samples) for the full details.
 
-## 7. Copy Content Within and Between Projects
+## 8. Copy Content Within and Between Projects
 
 The **Tools** tab lets you copy content between banks and projects without touching the hardware. Select an operation from the dropdown, configure source, options, and destination, then execute.
 
@@ -108,13 +121,13 @@ The destination project can be selected from your scanned locations or browsed m
 Your copy settings (selected operation, destination project, slot ranges, etc.) are remembered for each project during your session — you can switch tabs and come back without losing selected values.
 :::
 
-## 8. Fix Missing Samples
+## 9. Fix Missing Samples
 
 The **Tools** tab also includes a **[Fix Missing Samples](../features/fix-missing-samples.md)** operation that scans your project for broken sample slot references and automatically locates and reconnects missing audio files.
 
 It searches the project directory, Audio Pool, and sibling projects, with the option to browse additional directories manually.
 
-## 9. Fix Incompatible Samples
+## 10. Fix Incompatible Samples
 
 The Tools tab includes a **[Fix Incompatible Samples](../features/fix-incompatible-samples.md)** operation which will bulk fix any incompatible audio files the Octatrack can't read (wrong sample rate, wrong bit depth, or a format like MP3).
 
@@ -124,7 +137,7 @@ It is the same operation in both places, scoped by where it is opened from:
 
 Both convert affected files to 44.1 kHz 16/24-bit WAV in place and repoint every sample slot that referenced them, across the whole Set.
 
-## 10. Purge Unused Samples
+## 11. Purge Unused Samples
 
 The Tools tab also includes a **[Purge Unused Samples](../features/purge-unused-samples.md)** operation that finds audio files no sample slot references anywhere, then deletes them (to the Trash Bin) or moves them into a user-selected folder.
 
@@ -134,7 +147,7 @@ This can be done from either:
 
 ---
 
-## 11. Clear Parts of a Project
+## 12. Clear Parts of a Project
 
 The Tools tab also includes a **[Clear Project](../features/clear-project.md)** operation, the counterpart to the copy operations: it resets parts of the loaded project back to the factory-default state:
 - Banks - whole banks, parts and patterns included
@@ -145,7 +158,20 @@ The Tools tab also includes a **[Clear Project](../features/clear-project.md)** 
 
 ---
 
-## 12. Automatic Backups
+## 13. Undo / Redo
+
+Every change made in Edit mode is written to the project right away, so the project header offers Undo and Redo buttons beside the View/Edit toggle to take changes back.
+
+1. Toggle Edit mode: the two buttons appear in the header.
+2. Hover Undo to see what it would take back, for example "Undo: Change scene 3".
+3. Click Undo to restore the project as it was before that change. Click it again to go further back, up to the last 50 changes.
+4. Click Redo to bring an undone change back.
+
+It covers Part, scene, crossfader, memory setting and sample slot edits, in one history per project, whichever tab they were made from. Tools operations are not covered: use [Automatic Backups](#automatic-backups) for those. See [Undo / Redo](../features/undo-redo.md) for details.
+
+---
+
+## 14. Automatic Backups {#automatic-backups}
 
 Octatrack Manager automatically backs up your project files before any write operation — whether you are enabling Edit mode, saving a Part, or executing a copy operation via Tools.
 
@@ -172,7 +198,7 @@ This means you can always revert changes by copying the backed-up files back int
 | Fix Missing Samples | `project.work` (and sibling projects' `project.work` when using Move to Pool) |
 | Purge Unused Samples (Clear unused sample slot assignments) | `project.work` - only when the option is enabled and at least one slot is cleared |
 | Clear Project | Targeted bank file(s), or `project.work` when clearing sample slots |
-| Edit mode toggle (in header)| Current bank file |
+| Edit mode toggle (in header)| Current bank file and `project.work` |
 
 
 <img src={require('@site/static/img/screenshots/project-backup-files.png').default} alt="Automated backups" style={{width: '38%', display: 'block', margin: '0 auto'}} />

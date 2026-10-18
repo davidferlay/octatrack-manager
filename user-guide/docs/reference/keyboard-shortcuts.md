@@ -43,6 +43,8 @@ These shortcuts work across the entire application:
 | <kbd>←</kbd> / <kbd>→</kbd> | Move between bank buttons (A–P), parts (1–4), or patterns (1–16). |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Move between the bank, track, and pattern selector groups. |
 | <kbd>Enter</kbd> | Select the currently focused bank, part, or pattern. |
+| <kbd>Shift</kbd> + click | Scenes tab, Matrix view: select the range of scenes from the selected one to this one. See [Acting on several scenes](../features/scenes.md#acting-on-several-scenes). |
+| <kbd>Ctrl</kbd> + click | Scenes tab, Matrix view: add or remove one scene, keeping the rest. <kbd>Cmd</kbd> on macOS. |
 
 ---
 
@@ -61,7 +63,7 @@ These shortcuts work across the entire application:
 | <kbd>Ctrl</kbd> + <kbd>Click</kbd> | Add or remove individual files from the selection. |
 | <kbd>A</kbd> | Toggle the Audio Pool pane on a Flex/Static tab (when the Set has a pool). |
 | <kbd>T</kbd> | Toggle the Transfers pane (Audio Pool page and Flex/Static tabs). |
-| <kbd>Shift</kbd> + <kbd>1</kbd>..<kbd>9</kbd> | Switch tabs: Files/Tools on the Audio Pool page; Overview, Parts, Patterns, Flex, Static, Tools on the project page. |
+| <kbd>Shift</kbd> + <kbd>1</kbd>..<kbd>7</kbd> | Switch tabs: Files/Tools on the Audio Pool page (1-2); Overview, Parts, Scenes, Patterns, Flex, Static, Tools on the project page (1-7). |
 | <kbd>Delete</kbd> / <kbd>Backspace</kbd> | In Edit mode: clear the selected slots' samples, or reset attributes on slots that are already empty. |
 
 ---

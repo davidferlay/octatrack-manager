@@ -247,14 +247,14 @@ export function ProjectDetail() {
   // Set once by a Sample Slots tab's health glyph, so ToolsPanel opens with
   // "Fix Project Samples" pre-selected instead of whatever was last used.
   const [toolsInitialOperation, setToolsInitialOperation] = useState<"fix_project_samples" | undefined>(undefined);
-  // Shift+1..6: switch between the page tabs (same order as the header)
+  // Shift+1..7: switch between the page tabs (same order as the header)
   useEffect(() => {
     const tabOrder: TabType[] = ["overview", "parts", "scenes", "patterns", "flex-slots", "static-slots", "tools"];
     function onKey(e: KeyboardEvent) {
       if (!e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
-      const m = /^Digit([1-6])$/.exec(e.code);
+      const m = /^Digit([1-7])$/.exec(e.code);
       if (!m) return;
       e.preventDefault();
       setActiveTab(tabOrder[Number(m[1]) - 1]);

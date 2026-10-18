@@ -197,6 +197,8 @@ Live changes made can easily be discarded; allowing you to return to the last sa
 - Click the **Reload** button in the bank header.
 - This will clear the unsaved changes.
 
+To take back only the last few changes rather than everything since the last Save, use [Undo](./undo-redo.md) instead.
+
 <img src={require('@site/static/img/screenshots/parts-editor-reload.png').default} alt="Reload, Save, and Save All buttons" style={{width: '50%', display: 'block', margin: '0 auto'}} />
 
 ### 3. Saving to Part
@@ -212,7 +214,7 @@ To commit your edits to the Part:
 ## Data Safety
 
 :::warning
-**Important:** Editing parts directly modifies your project files. While [automatic backups](../getting-started/quick-start.md#12-automatic-backups) provide a safety net, it’s strongly advised to keep your own copies of your projects as well.
+**Important:** Editing parts directly modifies your project files. While [automatic backups](../getting-started/quick-start.md#automatic-backups) provide a safety net, it’s strongly advised to keep your own copies of your projects as well.
 :::
 
 - **Check Your Bank:** Ensure you have selected the correct bank (A–P) before you start editing.

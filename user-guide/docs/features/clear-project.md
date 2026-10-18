@@ -9,7 +9,7 @@ Clear Project resets parts of project back to the factory-default state.
 It can be found in the Tools tab of the project page.
 
 :::warning
-This is destructive and the app has no undo. Each file it is about to rewrite is however automatically backed up first (see [Automatic Backups](../getting-started/quick-start.md#12-automatic-backups)), so the previous state is manually recoverable from the project directory.
+This is destructive and the app has no undo. Each file it is about to rewrite is however automatically backed up first (see [Automatic Backups](../getting-started/quick-start.md#automatic-backups)), so the previous state is manually recoverable from the project directory.
 :::
 
 ## Workflow

@@ -45,5 +45,6 @@ All sound design data for both audio and MIDI tracks:
 
 - **All Tracks Affected:** Part data includes parameters **of all Audio and MIDI tracks** of current bank - it's not tied to individual tracks.
 - **Patterns Not Affected:** This operation only copies sound design settings (the Part), not sequences or triggers.
-- **Automatic Backup:** The app automatically backs up destination bank files before executing. See [Quick Start](../getting-started/quick-start.md#12-automatic-backups) for details.
+- **Scenes Included:** A Part carries its 16 scenes and its crossfader ends, so they are copied along with it. To copy scenes alone and leave the destination Part's sound design untouched, use [Copy Scenes](./copy-scenes.md).
+- **Automatic Backup:** The app automatically backs up destination bank files before executing. See [Quick Start](../getting-started/quick-start.md#automatic-backups) for details.
 - **Sample Slot References:** This tool only copies the **reference to a sample slot id** (which Slot is assigned to track), not the Sample Slot metadata, nor audio file itself. Use [Copy Sample Slots](./copy-sample-slots.md) to transfer audio files.

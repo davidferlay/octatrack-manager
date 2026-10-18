@@ -56,4 +56,4 @@ Both the saved and the unsaved (working) state of the destination Part are writt
 - The source is left alone, including when source and destination are the same Part.
 - Scenes hold values, not samples. A lock on a sample slot refers to a slot id; use [Copy Sample Slots](./copy-sample-slots.md) to move the slots themselves.
 - When a bank is both read and written in the same run, it is written last, so the other destination banks read the original scenes rather than ones already overwritten.
-- The app automatically backs up every destination bank file before executing. See [Quick Start](../getting-started/quick-start.md#12-automatic-backups) for details.
+- The app automatically backs up every destination bank file before executing. See [Quick Start](../getting-started/quick-start.md#automatic-backups) for details.

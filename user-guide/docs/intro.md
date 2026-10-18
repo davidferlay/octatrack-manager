@@ -14,11 +14,12 @@ Whether you are preparing for a live set, organizing years of studio work, or de
 
 The Octatrack is a deep and powerful machine, but its small screen can make certain tasks tedious. Octatrack Manager bridges this gap by bringing your projects to your computer, allowing you to:
 
-- **Save Time:** Perform bulk operations like copying banks, parts, patterns, tracks, and sample slots between projects.
+- **Save Time:** Perform bulk operations like copying banks, parts, scenes, patterns, tracks, and sample slots between projects.
 - **Visualize Your Projects:** See your patterns, triggers, and parameter locks clearly on a large screen.
 - **Organize Your Library:** Manage your sample library with automatic format conversion and high-quality resampling.
-- **Design Sounds Comfortably:** Edit machine parameters, effects, and LFOs with a dedicated interface, including a custom LFO designer.
-- **Maintain Data Integrity:** Inspect projects safely with a read-only view, or use the "Edit" mode to make intentional changes. An automatic backup system protects your data before any write operation.
+- **Edit Parts:** Edit machine parameters, effects, and LFOs with a dedicated interface, including a custom LFO designer.
+- **Edit Scenes:** Read all 16 scenes of a Part at once, compare them side by side, and edit, copy or randomize what they hold.
+- **Maintain Data Integrity:** Inspect projects safely with a read-only view, or use the "Edit" mode to make intentional changes. An automatic backup system protects your data before any write operation, and edits can be taken back with Undo / Redo.
 
 ## Core Capabilities
 
@@ -27,8 +28,9 @@ The Octatrack is a deep and powerful machine, but its small screen can make cert
 - **Pattern Visualization:** Explore every step of your sequences, including micro-timing, trig conditions, and chord information for MIDI tracks.
 - **Audio Pool Management:** Browse your samples with detailed metadata (channels, bit depth, sample rate) and transfer files with automatic WAV conversion.
 - **Sample Slot Assignment:** Assign samples to Flex/Static Sample Slots by dragging them from the Audio Pool or your computer.
-- **Cross-Project Copying:** Copy banks, parts, patterns, tracks, and sample slots between projects, with configurable options for each operation.
+- **Cross-Project Copying:** Copy banks, parts, scenes, patterns, tracks, and sample slots between projects, with configurable options for each operation.
 - **Parts Editing:** Modify sound design snapshots for both audio and MIDI tracks, with full support for machine parameters and effects.
+- **Scenes Editing:** See which parameters each of a Part's 16 scenes holds, as a list, a matrix or a side-by-side comparison, set the crossfader ends and mutes, and edit, copy, clear or randomize scenes.
 
 ## Essential Concepts
 

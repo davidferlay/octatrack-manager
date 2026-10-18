@@ -54,6 +54,9 @@ At the top of the project header, you can switch between several specialized vie
 ### Parts
 The **Parts** tab takes you to the [Parts Editor](./parts-editor.md), where you can view and modify the sound design parameters of each bank. This is where you can edit Source, Amp, effects, and LFOs perameters for each track - according to machine type.
 
+### Scenes
+The **Scenes** tab shows the 16 [scenes](./scenes.md) of each Part: what each one holds, which two the crossfader sits between, and a matrix and comparison view of them all. In Edit mode, scene values, crossfader ends and mutes can be changed.
+
 ### Patterns
 The **Patterns** tab provides a visual representation of your sequencer data. Steps can be [inspected](./patterns.md) and display their trigger, parameter lock, and trig condition.
 
@@ -71,6 +74,7 @@ In addition of the menu, the header of the Project Detail page also contains sev
 
 - **Back Button:** <img src={require('@site/static/img/screenshots/project-details-menu-back.png').default} alt="Back button" style={{height: '44px', verticalAlign: 'middle'}} /> Return to the [Home Page](./project-discovery.md).
 - **View/Edit Mode:** <img src={require('@site/static/img/screenshots/project-details-menu-edit.png').default} alt="View/Edit toggle" style={{height: '44px', verticalAlign: 'middle'}} /> Use the toggle to switch between a safe, read-only view and **Edit Mode**.
+- **Undo / Redo:** In Edit mode, take back the last changes made by the editors, or redo them. See [Undo / Redo](./undo-redo.md).
 - **Refresh (↻):** <img src={require('@site/static/img/screenshots/project-details-menu-refresh.png').default} alt="Refresh button" style={{height: '44px', verticalAlign: 'middle'}} /> Reload the project from disk. Use this if you have manually replaced project files on your computer.
 - **Save Status:** <img src={require('@site/static/img/screenshots/project-details-menu-saved.png').default} alt="Save status" style={{height: '34px', verticalAlign: 'middle'}} /> Displays when changes are being saved to `.unsaved` files or committed to the project.
 - **Unsupported Banks Warning:** <img src={require('@site/static/img/screenshots/project-details-menu-bankerr.png').default} alt="Unsupported banks warning" style={{height: '34px', verticalAlign: 'middle'}} /> Appears if some bank files are from an older OS version. Click it for instructions on how to update them on your hardware.
@@ -83,7 +87,7 @@ In addition of the menu, the header of the Project Detail page also contains sev
 
 ## Multi-Bank View
 
-- In the **Parts** and **Patterns** tabs, you can use the **Bank Selector** to focus on a single bank (A–P) or select **All Banks** to see an overview of your entire project simultaneously.
+- In the **Parts**, Scenes and **Patterns** tabs, you can use the **Bank Selector** to focus on a single bank (A–P) or select **All Banks** to see an overview of your entire project simultaneously.
 
 - By viewing "All Banks", you can scroll through all 16 banks on a single page, making it much easier to organize complex projects.
 

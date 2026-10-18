@@ -2275,6 +2275,14 @@ test.describe('Scenes', () => {
     await openScenes(page)
   })
 
+  /** Seven tabs since Scenes joined, so the shortcut has to reach Shift+7 */
+  test('Shift+digit reaches every tab, Scenes and Tools included', async ({ page }) => {
+    await page.keyboard.press('Shift+Digit7')
+    await expect(page.locator('.tools-panel')).toBeVisible()
+    await page.keyboard.press('Shift+Digit3')
+    await expect(page.locator('.scenes-grid')).toBeVisible()
+  })
+
   test('shows the sixteen scenes a Part has', async ({ page }) => {
     await expect(page.locator('.scene-card')).toHaveCount(16)
     await expect(card(page, 1).locator('.scene-number')).toHaveText('1')
