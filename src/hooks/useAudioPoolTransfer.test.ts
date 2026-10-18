@@ -47,7 +47,7 @@ describe('useAudioPoolTransfer', () => {
     expect(onComplete).toHaveBeenCalledWith('/dest');
   });
 
-  it('reports copied destination paths to the per-batch onCopied callback', async () => {
+  it('reports each copied file, source and destination, to the per-batch onCopied callback', async () => {
     // The backend returns the actual destination path (which may differ after conversion).
     mockInvoke.mockImplementation(async (cmd, args) => {
       const a = (args ?? {}) as Record<string, unknown>;
@@ -60,16 +60,20 @@ describe('useAudioPoolTransfer', () => {
     });
     const { result } = renderHook(() => useAudioPoolTransfer());
 
-    const copied: string[][] = [];
+    const copied: { source: string; dest: string }[][] = [];
     await act(async () => {
       await result.current.copyFilesToPool(
         ['/a/kick.wav', '/a/snare.wav'], '/dest', undefined,
-        (paths) => copied.push(paths)
+        (files) => copied.push(files)
       );
     });
 
+    // The source comes along so the .ot next to it can follow the audio
     expect(copied).toHaveLength(1);
-    expect(copied[0].sort()).toEqual(['/dest/kick.wav', '/dest/snare.wav']);
+    expect([...copied[0]].sort((x, y) => x.dest.localeCompare(y.dest))).toEqual([
+      { source: '/a/kick.wav', dest: '/dest/kick.wav' },
+      { source: '/a/snare.wav', dest: '/dest/snare.wav' },
+    ]);
   });
 
   it('opens the overwrite modal only when the backend reports the file exists', async () => {

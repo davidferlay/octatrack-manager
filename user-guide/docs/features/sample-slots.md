@@ -222,3 +222,20 @@ These files live inside the project directory and are always used by the Octatra
 :::important
 **`.ot` files are only recognized by the Octatrack when located inside a project directory, next to their audio file.** The Octatrack ignores `.ot` files placed in the Audio Pool (`AUDIO/` folder) or in other projects' directories. Each project maintains its own independent settings in `project.work` and `markers.work`.
 :::
+
+### Importing a Sample With Its `.ot`
+
+When audio is imported from your computer into a slot (dropped on a slot row, or with Import audio file(s) / directory from system), a `.ot` next to each file comes along with it:
+
+- It is copied next to the imported audio in the project folder, under the imported file's name. Only WAV and AIFF files carry their `.ot`: the Octatrack plays no other format, so it never made one for them.
+- When the audio is resampled to 44.1 kHz on import, the `.ot` is rescaled with it, so its trim, loop point and slices still land on the same sounds.
+- The slot then takes its settings from the `.ot`, as the Octatrack does when loading a sample.
+- A `.ot` that can't be read, or that was made for other audio (a trim or slice end past the end of the audio), is left out, and the sample is assigned with default settings.
+- When the import replaces a file already in the project, that file's old `.ot` is moved to the project's `backups/` folder first.
+
+An info message is displayed to inform what happened to each `.ot`: copied, rescaled, applied with how many slices, or left out and why.
+
+The same applies when assigning a sample that already sits in the project folder with its `.ot`.
+
+An `.ot` file next to an Audio Pool sample is never used, as on the Octatrack.
+

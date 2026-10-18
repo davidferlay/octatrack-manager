@@ -22,6 +22,8 @@ import { invalidatePoolUsage } from '../hooks/usePoolUsage';
 import { useSearchShortcut } from '../hooks/useSearchShortcut';
 import { SamplePlayerBar } from './SamplePlayerBar';
 import { formatBankRef } from './BankSelector';
+import { otNotices, type OtCarry, type OtApplied } from '../utils/otNotices';
+import type { CopiedFile } from '../hooks/useAudioPoolTransfer';
 
 // Droppable slot row for dnd-kit (pointer-based, cross-platform)
 function DroppableSlotRow({
@@ -90,6 +92,8 @@ interface AssignSamplesResult {
   updated_slots: SampleSlot[];
   flex_ram_free_mb: number | null;
   flex_ram_free_bytes?: number | null;
+  /** Slots that took (or could not take) the settings of a .ot next to their audio. */
+  ot_notes?: OtApplied[];
 }
 
 interface SampleSlotsTableProps {
@@ -104,7 +108,7 @@ interface SampleSlotsTableProps {
   onSlotsUpdated?: (updatedSlots: SampleSlot[]) => void; // Callback when slots are assigned
   onFlexRamUpdated?: (freeMb: number, freeBytes?: number | null) => void; // Callback when flex RAM changes after assignment
   onImportToAudioPool?: (paths: string[], destPath: string) => void; // Callback to import files to audio pool (uses parent's transfer hook)
-  onImportToProject?: (sourcePaths: string[]) => Promise<string[]>; // Copy files into the project dir via the transfer pane; resolves with dest paths
+  onImportToProject?: (sourcePaths: string[]) => Promise<CopiedFile[]>; // Copy files into the project dir via the transfer pane; resolves with each file written
   sidebarRefreshTrigger?: number; // Increment to trigger sidebar refresh from parent
   onPoolFixed?: () => void; // Pool files converted in place — project slot paths may have changed
   onOpenFixProjectSamples?: () => void; // Health glyph clicked — parent should open Tools > Fix Project Samples
@@ -365,7 +369,6 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   const projectPathRef = useRef(projectPath);
   const audioPoolPathRef = useRef(audioPoolPath);
   const onImportToAudioPoolRef = useRef(onImportToAudioPool);
-  const onImportToProjectRef = useRef(onImportToProject);
   const sidebarCurrentPathRef = useRef<string | null>(null);
   // Tracks the current OS drag target so the 'drop' handler doesn't need elementFromPoint
   const osDragTargetRef = useRef<{ slotId: number | null; sidebar: boolean }>({ slotId: null, sidebar: false });
@@ -373,7 +376,6 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   useEffect(() => { projectPathRef.current = projectPath; }, [projectPath]);
   useEffect(() => { audioPoolPathRef.current = audioPoolPath; }, [audioPoolPath]);
   useEffect(() => { onImportToAudioPoolRef.current = onImportToAudioPool; }, [onImportToAudioPool]);
-  useEffect(() => { onImportToProjectRef.current = onImportToProject; }, [onImportToProject]);
 
   // When parent increments sidebarRefreshTrigger, refresh the sidebar file list
   useEffect(() => {
@@ -400,7 +402,9 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   // Core assignment logic — shared by all slot-drop/assign entry points. Validates the drop:
   // assigns what fits (single → exact target, multiple → consecutive empty slots), blocks
   // files that would exceed Flex RAM, and warns about skipped/incompatible files.
-  const doAssignFiles = useCallback(async (filePaths: string[], targetSlot: SampleSlot) => {
+  const doAssignFiles = useCallback(async (
+    filePaths: string[], targetSlot: SampleSlot, carries: OtCarry[] = [],
+  ) => {
     if (!isEditMode) {
       setViewModeToast(true);
       setTimeout(() => setViewModeToast(false), 2500);
@@ -463,10 +467,12 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         }
       }
 
+      let applied: OtApplied[] = [];
       if (assignments.length > 0) {
         const result = await invoke<AssignSamplesResult>("assign_samples_to_slots", {
           path: projectPath, slotType: slotTypeU, assignments,
         });
+        applied = result.ot_notes ?? [];
         if (onSlotsUpdated && result.updated_slots.length > 0) onSlotsUpdated(result.updated_slots);
         if (onFlexRamUpdated && result.flex_ram_free_mb != null) onFlexRamUpdated(result.flex_ram_free_mb, result.flex_ram_free_bytes);
         if (audioPoolPath) invalidatePoolUsage(audioPoolPath);
@@ -477,16 +483,22 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
       if (skippedNoSlot > 0) warns.push(`${skippedNoSlot} skipped (not enough empty slots)`);
       if (blockedRam > 0) warns.push(`${blockedRam} skipped (not enough Flex RAM)`);
       if (incompatCount > 0) warns.push(`${incompatCount} not OT-compatible (may play incorrectly)`);
+      // What happened to each .ot comes first: it is what this import did beyond the audio
+      const ot = otNotices(carries, applied, slotPrefix);
+      const lines = [...ot.lines];
       if (warns.length > 0) {
         const prefix = assignments.length > 0 ? `Assigned ${assignments.length}. ` : 'Nothing assigned. ';
-        showNotice(prefix + warns.join('; '));
+        lines.push(prefix + warns.join('; '));
+      }
+      if (lines.length > 0) {
+        showNotice(lines.join('. '), ot.warning || warns.length > 0 ? 'warning' : 'info');
       }
     } catch (error) {
       console.error("Error assigning samples to slots:", error);
     } finally {
       setIsAssigning(false);
     }
-  }, [isEditMode, projectPath, tableType, slots, memorySettings, buildRelativePath, onSlotsUpdated, onFlexRamUpdated, showNotice, audioPoolPath]);
+  }, [isEditMode, projectPath, tableType, slotPrefix, slots, memorySettings, buildRelativePath, onSlotsUpdated, onFlexRamUpdated, showNotice, audioPoolPath]);
 
   // Live ref so the mount-time OS drag-drop listener can call the latest doAssignFiles.
   const doAssignFilesRef = useRef(doAssignFiles);
@@ -609,12 +621,25 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   const importPathsToSlot = useCallback(async (sourcePaths: string[], targetSlot: SampleSlot) => {
     if (!isEditMode || !projectPath || sourcePaths.length === 0) return;
     // Prefer the transfer pipeline (opens the progress pane); fall back to a direct copy.
-    const destPaths = onImportToProject
-      ? await onImportToProject(sourcePaths)
-      : await invoke<string[]>('copy_audio_files_to_project', { sourcePaths, destinationDir: projectPath });
-    if (!destPaths || destPaths.length === 0) return;
-    await doAssignFiles(destPaths, targetSlot);
+    if (!onImportToProject) {
+      // ponytail: the app always passes onImportToProject. This direct copy reuses a file
+      // already in the project without writing it, so it carries no .ot (carrying assumes
+      // freshly written audio and would back up the existing file's .ot).
+      const destPaths = await invoke<string[]>('copy_audio_files_to_project', { sourcePaths, destinationDir: projectPath });
+      if (destPaths && destPaths.length > 0) await doAssignFiles(destPaths, targetSlot);
+      return;
+    }
+    const copied = await onImportToProject(sourcePaths);
+    if (!copied || copied.length === 0) return;
+    // Each file's .ot follows it into the project (rescaled if the audio was resampled)
+    // before the assignment reads it
+    const carried = await invoke<OtCarry[]>('carry_ot_sidecars', { imported: copied });
+    await doAssignFiles(copied.map(c => c.dest), targetSlot, Array.isArray(carried) ? carried : []);
   }, [isEditMode, projectPath, onImportToProject, doAssignFiles]);
+
+  // Live ref so the mount-time OS drag-drop listener imports the same way the menu does.
+  const importPathsToSlotRef = useRef(importPathsToSlot);
+  useEffect(() => { importPathsToSlotRef.current = importPathsToSlot; });
 
   // Import one or more audio files from the system and assign them starting at the slot.
   const importFilesToSlot = useCallback(async (slot: SampleSlot) => {
@@ -1041,15 +1066,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
               const targetSlot = slotsRef.current.find(s => s.slot_id === targetSlotId);
               if (!targetSlot) return;
               try {
-                // Route through the transfer pane when available so progress is visible.
-                const destPaths = onImportToProjectRef.current
-                  ? await onImportToProjectRef.current(paths)
-                  : await invoke<string[]>('copy_audio_files_to_project', {
-                      sourcePaths: paths,
-                      destinationDir: curProjectPath,
-                    });
-                if (!destPaths || destPaths.length === 0) return;
-                await doAssignFilesRef.current(destPaths, targetSlot);
+                await importPathsToSlotRef.current(paths, targetSlot);
               } catch (err) {
                 console.error('OS slot drop failed:', err);
               }

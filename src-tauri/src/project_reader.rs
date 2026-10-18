@@ -5101,7 +5101,11 @@ fn replace_sample_fields_surgical(
         // Apply patches if needed
         let final_block = if let Some(updates) = field_updates.get(&key) {
             applied.insert(key.clone());
-            patch_sample_block_fields(block, updates)
+            if updates.contains_key(REPLACE_BLOCK) {
+                build_new_sample_block(&slot_type, slot_id, updates)
+            } else {
+                patch_sample_block_fields(block, updates)
+            }
         } else {
             block.to_string()
         };
@@ -5274,7 +5278,7 @@ fn slot_attributes_at_default(slot: &SlotAttributes) -> bool {
 }
 
 /// Read (frame count, sample rate) from a WAV or AIFF file. Returns None if unreadable.
-fn audio_frames_and_rate(path: &Path) -> Option<(u64, u32)> {
+pub(crate) fn audio_frames_and_rate(path: &Path) -> Option<(u64, u32)> {
     if let Ok(reader) = hound::WavReader::open(path) {
         let spec = reader.spec();
         let channels = (spec.channels as u64).max(1);
@@ -5339,6 +5343,9 @@ pub struct AssignSamplesResult {
     pub flex_ram_free_mb: Option<f64>,
     /// Updated exact flex RAM free (bytes) after assignment — only set for FLEX slot type
     pub flex_ram_free_bytes: Option<u64>,
+    /// Slots that took (or could not take) the settings of a `.ot` next to their audio.
+    #[serde(default)]
+    pub ot_notes: Vec<crate::ot_sidecar::OtApplied>,
 }
 
 /// Assign audio files to sample slots in a project.
@@ -5379,6 +5386,7 @@ pub fn assign_samples_to_slots(
             updated_slots: Vec::new(),
             flex_ram_free_mb: None,
             flex_ram_free_bytes: None,
+            ot_notes: Vec::new(),
         });
     }
 
@@ -5397,9 +5405,54 @@ pub fn assign_samples_to_slots(
         std::collections::HashMap<String, String>,
     > = std::collections::HashMap::new();
 
+    // Slots whose audio has a usable .ot next to it, with the markers it gives them
+    let mut ot_markers: std::collections::HashMap<u16, SlotMarkers> =
+        std::collections::HashMap::new();
+    let mut ot_notes = Vec::new();
+
     for a in &assignments {
         let mut fields = std::collections::HashMap::new();
         fields.insert("PATH".to_string(), a.audio_path.clone());
+
+        // The device reads a .ot only when it sits with its audio in the project folder
+        // (checked on our hardware), and then takes every setting from it, whatever the slot
+        // held before - so the whole block is rebuilt, defaults or not.
+        let audio = path.join(&a.audio_path);
+        let in_project =
+            !a.audio_path.starts_with("../") && !Path::new(&a.audio_path).is_absolute();
+        let ot = match (in_project, audio_frames_and_rate(&audio)) {
+            (true, Some((frames, _))) => crate::ot_sidecar::companion(&audio)
+                .map(|ot_path| (ot_path, crate::ot_sidecar::usable_for(&audio, frames))),
+            _ => None,
+        };
+        if let Some((ot_path, usable)) = ot {
+            let ot_name = ot_path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default();
+            match usable {
+                Ok(Some(ot)) => {
+                    fields.extend(crate::ot_sidecar::slot_fields(&ot));
+                    fields.insert(REPLACE_BLOCK.to_string(), String::new());
+                    field_updates.insert((slot_type_upper.clone(), a.slot_index), fields);
+                    ot_markers.insert(a.slot_index, crate::ot_sidecar::slot_markers(&ot));
+                    ot_notes.push(crate::ot_sidecar::OtApplied {
+                        slot_index: a.slot_index,
+                        ot: ot_name,
+                        slices: ot.slices_len.min(64),
+                        error: None,
+                    });
+                    continue;
+                }
+                Ok(None) => {}
+                Err(why) => ot_notes.push(crate::ot_sidecar::OtApplied {
+                    slot_index: a.slot_index,
+                    ot: ot_name,
+                    slices: 0,
+                    error: Some(why),
+                }),
+            }
+        }
 
         if a.set_defaults {
             fields.extend(default_attr_fields(&slot_type_upper));
@@ -5419,7 +5472,8 @@ pub fn assign_samples_to_slots(
     // Mirror the hardware: write each assigned slot's trim window (trim_end = sample frame
     // count) into markers.work. The OT does NOT recompute trim_end on load, so without this the
     // playback window is empty and the slot is silent even though it shows as assigned.
-    update_markers_trim_end(path, &slot_type_upper, &assignments)?;
+    // A slot assigned from a .ot gets its trim, loop point and slices instead.
+    update_markers_trim_end(path, &slot_type_upper, &assignments, &ot_markers)?;
 
     // Re-read the affected slots to return updated state
     let metadata = read_project_metadata(project_path)?;
@@ -5452,6 +5506,7 @@ pub fn assign_samples_to_slots(
         updated_slots,
         flex_ram_free_mb,
         flex_ram_free_bytes,
+        ot_notes,
     })
 }
 
@@ -5465,6 +5520,7 @@ fn update_markers_trim_end(
     project_dir: &Path,
     slot_type_upper: &str,
     assignments: &[SlotAssignment],
+    from_ot: &std::collections::HashMap<u16, SlotMarkers>,
 ) -> Result<(), String> {
     let markers_path = if project_dir.join("markers.work").exists() {
         project_dir.join("markers.work")
@@ -5479,11 +5535,20 @@ fn update_markers_trim_end(
 
     let mut modified = false;
     for a in assignments {
+        let idx = (a.slot_index - 1) as usize;
+        if let Some(m) = from_ot.get(&a.slot_index) {
+            match slot_type_upper {
+                "FLEX" => markers.flex_slots[idx] = *m,
+                "STATIC" => markers.static_slots[idx] = *m,
+                _ => continue,
+            }
+            modified = true;
+            continue;
+        }
         let frames = match audio_frames_and_rate(&project_dir.join(&a.audio_path)) {
             Some((f, _)) if f > 0 => f as u32,
             _ => continue,
         };
-        let idx = (a.slot_index - 1) as usize;
         match slot_type_upper {
             "FLEX" => {
                 markers.flex_slots[idx].trim_offset = 0;
@@ -5518,6 +5583,15 @@ fn backup_and_delete_ot_sibling(
     if !ot_path.is_file() {
         return Ok(());
     }
+    backup_and_delete_file(project_dir, &ot_path, backup_label)
+}
+
+/// Back up `file` into the project's `backups/<timestamp>_<label>/` dir, then delete it.
+pub(crate) fn backup_and_delete_file(
+    project_dir: &Path,
+    file: &Path,
+    backup_label: &str,
+) -> Result<(), String> {
     let now = chrono::Local::now();
     let backup_dir = project_dir.join("backups").join(format!(
         "{}_{}",
@@ -5526,13 +5600,10 @@ fn backup_and_delete_ot_sibling(
     ));
     std::fs::create_dir_all(&backup_dir)
         .map_err(|e| format!("Failed to create backup directory: {}", e))?;
-    let file_name = ot_path
-        .file_name()
-        .map(|n| n.to_owned())
-        .unwrap_or_default();
-    std::fs::copy(&ot_path, backup_dir.join(&file_name))
+    let file_name = file.file_name().map(|n| n.to_owned()).unwrap_or_default();
+    std::fs::copy(file, backup_dir.join(&file_name))
         .map_err(|e| format!("Failed to back up .ot file: {}", e))?;
-    std::fs::remove_file(&ot_path).map_err(|e| format!("Failed to delete .ot file: {}", e))?;
+    std::fs::remove_file(file).map_err(|e| format!("Failed to delete .ot file: {}", e))?;
     Ok(())
 }
 
@@ -5566,6 +5637,7 @@ pub fn reset_slot_attributes(
             updated_slots: Vec::new(),
             flex_ram_free_mb: None,
             flex_ram_free_bytes: None,
+            ot_notes: Vec::new(),
         });
     }
 
@@ -5647,6 +5719,7 @@ pub fn reset_slot_attributes(
         updated_slots,
         flex_ram_free_mb,
         flex_ram_free_bytes,
+        ot_notes: Vec::new(),
     })
 }
 
@@ -5678,6 +5751,7 @@ pub fn clear_sample_keep_attributes(
             updated_slots: Vec::new(),
             flex_ram_free_mb: None,
             flex_ram_free_bytes: None,
+            ot_notes: Vec::new(),
         });
     }
 
@@ -5744,6 +5818,7 @@ pub fn clear_sample_keep_attributes(
         updated_slots,
         flex_ram_free_mb,
         flex_ram_free_bytes,
+        ot_notes: Vec::new(),
     })
 }
 
@@ -5772,6 +5847,7 @@ pub fn clear_sample_slots(
             updated_slots: Vec::new(),
             flex_ram_free_mb: None,
             flex_ram_free_bytes: None,
+            ot_notes: Vec::new(),
         });
     }
 
@@ -5877,12 +5953,18 @@ pub fn clear_sample_slots(
         updated_slots,
         flex_ram_free_mb,
         flex_ram_free_bytes,
+        ot_notes: Vec::new(),
     })
 }
 
 /// Sentinel update value meaning "delete this field line if present" (and don't insert it).
 /// Used to strip stale timing fields (e.g. BPMx24) when normalizing a slot's attributes.
-const FIELD_DELETE: &str = "\u{0}__DELETE__";
+pub(crate) const FIELD_DELETE: &str = "\u{0}__DELETE__";
+
+/// Present as a key in a slot's field updates: the slot's `[SAMPLE]` block is rebuilt from the
+/// updates, in the device's field order and spelling, rather than patched line by line.
+/// Patching appends a field the block lacked as `TRIM_BARSX100=` before `[/SAMPLE]`.
+pub(crate) const REPLACE_BLOCK: &str = "\u{0}__REPLACE__";
 
 /// Patch individual field lines within a `[SAMPLE]...[/SAMPLE]` block.
 /// Only lines whose field name (before `=`) matches an entry in `updates` are replaced.
@@ -8800,7 +8882,8 @@ fn read_slot_attributes_with_ot_priority(
                 if let Ok(ot) = SampleSettingsFile::from_data_file(&ot_path) {
                     return ResolvedAttributes {
                         gain: ot.gain as u8,
-                        bpm: (ot.tempo / 24) as u16,
+                        // .ot tempo is BPM x 24 already, like BPMx24
+                        bpm: ot.tempo.clamp(720, 7200) as u16,
                         timestretch_mode: TimeStretchMode::try_from(ot.stretch).unwrap_or_default(),
                         loop_mode: LoopMode::try_from(ot.loop_mode).unwrap_or_default(),
                         trig_quantization: TrigQuantizationMode::try_from(ot.quantization as u32)
@@ -9536,24 +9619,10 @@ fn handle_audio_file(
                         }
 
                         // Build field-level updates for source project.work with .ot attrs
-                        let mut reintegrated_fields: std::collections::HashMap<String, String> =
-                            std::collections::HashMap::new();
-                        reintegrated_fields.insert("GAIN".to_string(), (ot.gain as u8).to_string());
-                        reintegrated_fields
-                            .insert("BPMX24".to_string(), ((ot.tempo / 24) as u16).to_string());
-                        reintegrated_fields.insert("TSMODE".to_string(), {
-                            let ts = TimeStretchMode::try_from(ot.stretch).unwrap_or_default();
-                            (ts as u8).to_string()
-                        });
-                        reintegrated_fields.insert("LOOPMODE".to_string(), {
-                            let lm = LoopMode::try_from(ot.loop_mode).unwrap_or_default();
-                            (lm as u8).to_string()
-                        });
-                        reintegrated_fields.insert("TRIGQUANTIZATION".to_string(), {
-                            let tq = TrigQuantizationMode::try_from(ot.quantization as u32)
-                                .unwrap_or_default();
-                            (tq as u8).to_string()
-                        });
+                        // What the device writes into a slot from this .ot, in its own field
+                        // order and spelling
+                        let mut reintegrated_fields = crate::ot_sidecar::slot_fields(&ot);
+                        reintegrated_fields.insert(REPLACE_BLOCK.to_string(), String::new());
                         reintegrated_fields
                             .insert("PATH".to_string(), format!("../AUDIO/{}", file_name));
                         source_reintegration_blocks.insert(
@@ -16288,6 +16357,72 @@ mod tests {
                 !src_audio_dir.join("move_me.ot").exists(),
                 "Original .ot file should be deleted after move"
             );
+        }
+
+        fn ot_tempo_project_moved_to_pool() -> (TempDir, PathBuf) {
+            // A project-folder sample whose .ot says 116 BPM: tempo 2784, in BPM x 24 like
+            // BPMx24 (4TET XP on our own card stores 2784 in both)
+            let set_dir = TempDir::new().unwrap();
+            let src = set_dir.path().join("SourceProject");
+            let dest = set_dir.path().join("DestProject");
+            fs::create_dir_all(&src).unwrap();
+            fs::create_dir_all(&dest).unwrap();
+            fs::create_dir_all(set_dir.path().join("AUDIO")).unwrap();
+            fs::write(src.join("kick.wav"), b"audio data").unwrap();
+            crate::ot_sidecar::write(
+                &crate::ot_sidecar::test_support::ot(1000, &[]),
+                &src.join("kick.ot"),
+            )
+            .unwrap();
+            let mut src_pf = ProjectFile::default();
+            src_pf.slots.static_slots[0] = Some(
+                ot_tools_io::projects::SlotAttributes::new(
+                    ot_tools_io::settings::SlotType::Static,
+                    1,
+                    Some(PathBuf::from("kick.wav")),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .unwrap(),
+            );
+            src_pf.to_data_file(&src.join("project.work")).unwrap();
+            ProjectFile::default()
+                .to_data_file(&dest.join("project.work"))
+                .unwrap();
+            for project_dir in [&src, &dest] {
+                for bank_num in 1..=16 {
+                    BankFile::default()
+                        .to_data_file(&project_dir.join(format!("bank{:02}.work", bank_num)))
+                        .unwrap();
+                }
+            }
+            copy_sample_slots(
+                &src.to_string_lossy(),
+                &dest.to_string_lossy(),
+                "static",
+                vec![1],
+                vec![1],
+                true,
+                "move_to_pool",
+                true,
+                vec![
+                    "gain".to_string(),
+                    "bpm".to_string(),
+                    "timestretch".to_string(),
+                ],
+            )
+            .unwrap();
+            (set_dir, src)
+        }
+
+        #[test]
+        fn test_copy_slots_move_to_pool_keeps_the_ot_tempo_in_bpm_x24() {
+            let (_set, src) = ot_tempo_project_moved_to_pool();
+            let text = surgical_write_tests::read_raw_project_work(&src);
+            assert!(text.contains("BPMx24=2784\r"), "not 116: {text}");
         }
 
         #[test]
@@ -25806,6 +25941,193 @@ mod tests {
 
             let markers = MarkersFile::from_data_file(&dir.path().join("markers.work")).unwrap();
             assert_eq!(markers.static_slots[3].trim_end, frames as u32);
+        }
+
+        /// The raw `[SAMPLE]` block of one slot, as written to project.work.
+        fn sample_block(project_dir: &Path, slot_type: &str, slot: u16) -> String {
+            let text = surgical_write_tests::read_raw_project_work(project_dir);
+            text.split("[SAMPLE]")
+                .find(|b| {
+                    b.contains(&format!("TYPE={}\r", slot_type))
+                        && b.contains(&format!("SLOT={:0>3}\r", slot))
+                })
+                .map(|b| b.split("[/SAMPLE]").next().unwrap().to_string())
+                .unwrap_or_default()
+        }
+
+        /// A `.ot` as the device saves one with timestretch on: our AED_PROJD_OT values.
+        fn stretched_ot(trim_end: u32) -> SampleSettingsFile {
+            use ot_tools_io::slices::SLICE_LOOP_POINT_DISABLED as NO_LOOP;
+            let mut o = crate::ot_sidecar::test_support::ot(
+                trim_end,
+                &[
+                    (0, trim_end / 2, NO_LOOP),
+                    (trim_end / 2, trim_end, NO_LOOP),
+                ],
+            );
+            o.stretch = 3;
+            o.trim_bar_len = 925;
+            o.loop_mode = 2;
+            o.gain = 51;
+            o.quantization = 2;
+            o
+        }
+
+        #[test]
+        fn test_assign_applies_the_ot_next_to_a_project_sample() {
+            // On assign the device copies a project-folder .ot into the slot: attributes into
+            // project.work, trim and slices into markers.work
+            let dir = setup_project_for_assign(&[]);
+            MarkersFile::default()
+                .to_data_file(&dir.path().join("markers.work"))
+                .unwrap();
+            write_silent_wav(&dir.path().join("loop.wav"), 1000);
+            crate::ot_sidecar::write(&stretched_ot(1000), &dir.path().join("loop.ot")).unwrap();
+
+            let result = assign_samples_to_slots(
+                dir.path().to_str().unwrap(),
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "loop.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+
+            let block = sample_block(dir.path(), "FLEX", 1);
+            assert!(block.contains("TRIM_BARSx100=925\r"), "{block}");
+            assert!(
+                !block.contains("BPMx24"),
+                "timestretch on writes no BPMx24: {block}"
+            );
+            assert!(
+                block.contains("TSMODE=3\r") && block.contains("LOOPMODE=2\r"),
+                "{block}"
+            );
+            assert!(block.contains("GAIN=51\r") && block.contains("TRIGQUANTIZATION=2\r"));
+            let markers = MarkersFile::from_data_file(&dir.path().join("markers.work")).unwrap();
+            assert_eq!(markers.flex_slots[0].slice_count, 2);
+            assert_eq!(markers.flex_slots[0].slices[1].trim_start, 500);
+            assert_eq!(
+                result.ot_notes,
+                vec![crate::ot_sidecar::OtApplied {
+                    slot_index: 1,
+                    ot: "loop.ot".to_string(),
+                    slices: 2,
+                    error: None,
+                }]
+            );
+        }
+
+        #[test]
+        fn test_assign_over_an_occupied_slot_rebuilds_its_block_from_the_ot() {
+            // The old sample's BPMx24 must not survive: with timestretch on the device keeps
+            // TRIM_BARSx100 only, and it writes the fields in its own order and spelling
+            let dir = setup_project_for_assign(&[]);
+            let content = surgical_write_tests::create_raw_project_work_with_custom_fields(&[(
+                "STATIC",
+                4,
+                "old.wav",
+                Some(2880),
+                Some(-1),
+                None,
+            )]);
+            surgical_write_tests::write_raw_project_work(dir.path(), &content);
+            write_silent_wav(&dir.path().join("loop.wav"), 1000);
+            crate::ot_sidecar::write(&stretched_ot(1000), &dir.path().join("loop.ot")).unwrap();
+
+            assign_samples_to_slots(
+                dir.path().to_str().unwrap(),
+                "STATIC",
+                vec![SlotAssignment {
+                    slot_index: 4,
+                    audio_path: "loop.wav".to_string(),
+                    set_defaults: false,
+                }],
+            )
+            .unwrap();
+
+            let block = sample_block(dir.path(), "STATIC", 4);
+            assert!(!block.contains("BPMx24"), "{block}");
+            let order: Vec<&str> = block
+                .lines()
+                .filter_map(|l| l.split('=').next())
+                .filter(|k| !k.is_empty())
+                .collect();
+            assert_eq!(
+                order,
+                [
+                    "TYPE",
+                    "SLOT",
+                    "PATH",
+                    "TRIM_BARSx100",
+                    "TSMODE",
+                    "LOOPMODE",
+                    "GAIN",
+                    "TRIGQUANTIZATION"
+                ]
+            );
+        }
+
+        #[test]
+        fn test_assign_leaves_an_audio_pool_ot_alone() {
+            // Checked on our own hardware: the device only reads a .ot that sits with its
+            // audio in the project folder
+            let root = TempDir::new().unwrap();
+            let project = root.path().join("PROJECT");
+            let pool = root.path().join("AUDIO");
+            fs::create_dir_all(&project).unwrap();
+            fs::create_dir_all(&pool).unwrap();
+            let content = surgical_write_tests::create_raw_project_work_with_custom_fields(&[]);
+            surgical_write_tests::write_raw_project_work(&project, &content);
+            write_silent_wav(&pool.join("loop.wav"), 1000);
+            crate::ot_sidecar::write(&stretched_ot(1000), &pool.join("loop.ot")).unwrap();
+
+            let result = assign_samples_to_slots(
+                project.to_str().unwrap(),
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "../AUDIO/loop.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+
+            let block = sample_block(&project, "FLEX", 1);
+            assert!(
+                block.contains("GAIN=48\r") && block.contains("TSMODE=2\r"),
+                "{block}"
+            );
+            assert!(result.ot_notes.is_empty());
+        }
+
+        #[test]
+        fn test_assign_reports_an_ot_made_for_other_audio_and_uses_the_defaults() {
+            let dir = setup_project_for_assign(&[]);
+            write_silent_wav(&dir.path().join("loop.wav"), 1000);
+            crate::ot_sidecar::write(&stretched_ot(90_000), &dir.path().join("loop.ot")).unwrap();
+
+            let result = assign_samples_to_slots(
+                dir.path().to_str().unwrap(),
+                "FLEX",
+                vec![SlotAssignment {
+                    slot_index: 1,
+                    audio_path: "loop.wav".to_string(),
+                    set_defaults: true,
+                }],
+            )
+            .unwrap();
+
+            let block = sample_block(dir.path(), "FLEX", 1);
+            assert!(block.contains("GAIN=48\r"), "{block}");
+            assert_eq!(result.ot_notes.len(), 1);
+            assert!(result.ot_notes[0]
+                .error
+                .as_deref()
+                .unwrap()
+                .contains("trim end"));
         }
 
         #[test]

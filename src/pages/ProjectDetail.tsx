@@ -14,7 +14,7 @@ import { machineParamLabels } from "../utils/partFieldSpecs";
 import ToolsPanel from "../components/ToolsPanel";
 import { OverwriteModal } from "../components/OverwriteModal";
 import { TransferProgressPanel } from "../components/TransferProgressPanel";
-import { useAudioPoolTransfer } from "../hooks/useAudioPoolTransfer";
+import { useAudioPoolTransfer, type CopiedFile } from "../hooks/useAudioPoolTransfer";
 import { invalidatePoolUsage } from "../hooks/usePoolUsage";
 import { WriteStatus, IDLE_STATUS } from "../types/writeStatus";
 import { TrackBadge } from "../components/TrackBadge";
@@ -518,11 +518,11 @@ export function ProjectDetail() {
   });
 
   // Copy files into the project directory through the transfer pipeline (so the progress
-  // pane opens automatically), resolving with the resulting destination paths for slot assignment.
+  // pane opens automatically), resolving with each file written, for slot assignment.
   const importToProjectWithProgress = useCallback((sourcePaths: string[]) => {
-    return new Promise<string[]>((resolve) => {
+    return new Promise<CopiedFile[]>((resolve) => {
       if (!projectPath) { resolve([]); return; }
-      copyFilesToPool(sourcePaths, projectPath, undefined, (destPaths) => resolve(destPaths));
+      copyFilesToPool(sourcePaths, projectPath, undefined, resolve);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectPath]);

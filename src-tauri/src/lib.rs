@@ -3,6 +3,7 @@
 
 mod audio_pool;
 mod device_detection;
+mod ot_sidecar;
 pub mod project_manager;
 mod project_reader;
 mod purge;
@@ -513,6 +514,46 @@ async fn copy_audio_files_to_project(
     })
     .await
     .unwrap()
+}
+
+/// One audio file a project import wrote: where it came from and where it landed.
+#[derive(serde::Deserialize)]
+struct ImportedAudio {
+    source: String,
+    dest: String,
+}
+
+/// Bring each imported file's `.ot` into the project next to it, after the import wrote the
+/// audio and before the slots are assigned (which reads the `.ot`). Only for imports into a
+/// project folder: the Octatrack ignores a `.ot` in the Audio Pool.
+#[tauri::command]
+async fn carry_ot_sidecars(imported: Vec<ImportedAudio>) -> Vec<ot_sidecar::OtCarry> {
+    tauri::async_runtime::spawn_blocking(move || {
+        imported
+            .iter()
+            .filter_map(|f| {
+                let dest = std::path::Path::new(&f.dest);
+                match ot_sidecar::carry(std::path::Path::new(&f.source), dest) {
+                    Ok(carried) => carried,
+                    // A failed backup or write is reported like a refused .ot: the audio
+                    // is imported either way
+                    Err(why) => Some(ot_sidecar::OtCarry {
+                        audio: dest
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_default(),
+                        ot: String::new(),
+                        outcome: ot_sidecar::OtOutcome::Refused,
+                        from_rate: None,
+                        reason: Some(why),
+                        replaced: false,
+                    }),
+                }
+            })
+            .collect()
+    })
+    .await
+    .unwrap_or_default()
 }
 
 #[tauri::command]
@@ -1684,6 +1725,7 @@ pub fn run() {
             resolve_default_purge_destination,
             copy_audio_files,
             copy_audio_files_to_project,
+            carry_ot_sidecars,
             copy_audio_file_with_progress,
             cancel_audio_transfer,
             move_audio_files,

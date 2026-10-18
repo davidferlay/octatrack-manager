@@ -686,7 +686,10 @@ describe('SampleSlotsTable — selection & transfers toggle', () => {
       if (cmd === 'list_audio_files_recursive') return ['/ext/drums/a.wav', '/ext/drums/b.wav']
       return { assigned_count: 2, updated_slots: [], flex_ram_free_mb: 70 }
     })
-    const onImportToProject = vi.fn(async () => ['/proj/a.wav', '/proj/b.wav'])
+    const onImportToProject = vi.fn(async () => [
+      { source: '/ext/drums/a.wav', dest: '/proj/a.wav' },
+      { source: '/ext/drums/b.wav', dest: '/proj/b.wav' },
+    ])
     renderWithProvider(
       <SampleSlotsTable
         slots={mockSlots}
@@ -701,9 +704,49 @@ describe('SampleSlotsTable — selection & transfers toggle', () => {
     fireEvent.contextMenu(row)
     await userEvent.click(screen.getByText(/Import audio directory from system/i))
 
-    // Files are copied via the transfer pipeline, then assigned
+    // Files are copied via the transfer pipeline, their .ot files follow, then they are assigned
     await waitFor(() => expect(onImportToProject).toHaveBeenCalledWith(['/ext/drums/a.wav', '/ext/drums/b.wav']))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('carry_ot_sidecars', {
+      imported: [
+        { source: '/ext/drums/a.wav', dest: '/proj/a.wav' },
+        { source: '/ext/drums/b.wav', dest: '/proj/b.wav' },
+      ],
+    }))
     await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('assign_samples_to_slots', expect.anything()))
+  })
+
+  it('says in a badge that a .ot came along and gave the slot its settings and slices', async () => {
+    const openModule = await import('@tauri-apps/plugin-dialog')
+    vi.mocked(openModule.open).mockResolvedValue(['/ext/loop.wav'])
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'carry_ot_sidecars') {
+        return [{ audio: 'loop.wav', ot: 'loop.ot', outcome: 'rescaled', from_rate: 48000, reason: null, replaced: false }]
+      }
+      if (cmd === 'assign_samples_to_slots') {
+        return {
+          assigned_count: 1, updated_slots: [], flex_ram_free_mb: 70,
+          ot_notes: [{ slot_index: 1, ot: 'loop.ot', slices: 8, error: null }],
+        }
+      }
+      return []
+    })
+    const onImportToProject = vi.fn(async () => [{ source: '/ext/loop.wav', dest: '/proj/loop.wav' }])
+    renderWithProvider(
+      <SampleSlotsTable
+        slots={mockSlots}
+        slotPrefix="F"
+        tableType="flex"
+        isEditMode
+        projectPath="/proj"
+        onImportToProject={onImportToProject}
+      />
+    )
+    fireEvent.contextMenu(screen.getByText('kick.wav').closest('tr')!)
+    await userEvent.click(screen.getByText(/Import audio file\(s\) from system/i))
+
+    const badge = await screen.findByText(/loop\.ot rescaled from 48 kHz/)
+    expect(badge.textContent).toContain('F1 took its settings and 8 slices from loop.ot')
+    expect(badge.closest('.toast-notification')).toHaveClass('info')
   })
 })
 

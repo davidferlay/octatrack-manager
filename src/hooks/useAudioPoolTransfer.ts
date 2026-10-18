@@ -40,6 +40,12 @@ async function getConcurrency(): Promise<number> {
 
 type CopyOutcome = "ok" | "cancelled" | "conflict" | "failed";
 
+/** One file a batch wrote: where it came from and where it landed (converted names differ). */
+export interface CopiedFile {
+  source: string;
+  dest: string;
+}
+
 export function useAudioPoolTransfer(options?: { onComplete?: (destinationPath: string) => void }) {
   const onComplete = options?.onComplete;
 
@@ -47,16 +53,16 @@ export function useAudioPoolTransfer(options?: { onComplete?: (destinationPath: 
   const [isTransferQueueOpen, setIsTransferQueueOpen] = useState(false);
   const [overwriteModal, setOverwriteModal] = useState<OverwriteModalState>(INITIAL_OVERWRITE_MODAL);
 
-  // Per-batch collection of successfully-copied destination paths, plus an optional
-  // callback fired when the batch settles (used by slot imports to assign afterwards).
-  const copiedDestPathsRef = useRef<string[]>([]);
-  const onCopiedRef = useRef<((destPaths: string[]) => void) | undefined>(undefined);
+  // Per-batch collection of successfully-copied files, plus an optional callback fired when
+  // the batch settles (used by slot imports to bring each .ot along, then assign).
+  const copiedRef = useRef<CopiedFile[]>([]);
+  const onCopiedRef = useRef<((copied: CopiedFile[]) => void) | undefined>(undefined);
 
   // Fire the hook-level refresh + the per-batch onCopied callback once a batch finishes.
   async function finishBatch(destinationPath: string) {
     await onComplete?.(destinationPath);
     const cb = onCopiedRef.current;
-    if (cb) cb([...copiedDestPathsRef.current]);
+    if (cb) cb([...copiedRef.current]);
   }
 
   // Patch a transfer, but never resurrect one the user already cancelled.
@@ -92,7 +98,7 @@ export function useAudioPoolTransfer(options?: { onComplete?: (destinationPath: 
         overwrite,
       });
       markCompleted(transferId);
-      if (destPath) copiedDestPathsRef.current.push(destPath);
+      if (destPath) copiedRef.current.push({ source: sourcePath, dest: destPath });
       return "ok";
     } catch (error) {
       const errorStr = String(error);
@@ -296,11 +302,11 @@ export function useAudioPoolTransfer(options?: { onComplete?: (destinationPath: 
     sourcePaths: string[],
     destinationPath: string,
     fileSizes?: Map<string, number>,
-    onCopied?: (destPaths: string[]) => void
+    onCopied?: (copied: CopiedFile[]) => void
   ) {
     setIsTransferQueueOpen(true);
-    // Start a fresh batch: reset collected dest paths and the per-batch callback.
-    copiedDestPathsRef.current = [];
+    // Start a fresh batch: reset collected files and the per-batch callback.
+    copiedRef.current = [];
     onCopiedRef.current = onCopied;
 
     const baseTimestamp = Date.now();
