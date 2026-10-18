@@ -92,6 +92,26 @@ describe('useAudioPoolTransfer', () => {
     expect(result.current.overwriteModal.fileName).toBe('kick.wav');
   });
 
+  it('reports a file copied after Overwrite to the onCopied callback', async () => {
+    // A slot import assigns what onCopied reports: the batch must not settle before the
+    // overwriting copy has finished, or the file is replaced but never assigned
+    mockCopy((src, overwrite) => (overwrite
+      ? new Promise(res => setTimeout(() => res(`/dest/${src.split('/').pop()}`), 20))
+      : Promise.reject('File already exists: /dest/replace.wav')));
+    const { result } = renderHook(() => useAudioPoolTransfer());
+    const copied: { source: string; dest: string }[][] = [];
+
+    await act(async () => {
+      await result.current.copyFilesToPool(['/a/replace.wav'], '/dest', undefined, f => copied.push(f));
+    });
+    expect(result.current.overwriteModal.isOpen).toBe(true);
+    await act(async () => {
+      await result.current.handleOverwrite();
+    });
+
+    expect(copied).toEqual([[{ source: '/a/replace.wav', dest: '/dest/replace.wav' }]]);
+  });
+
   it('handleOverwrite re-copies the conflicting file with overwrite=true', async () => {
     const overwriteFlags: boolean[] = [];
     mockCopy((src, overwrite) => {

@@ -58,8 +58,14 @@ export function useAudioPoolTransfer(options?: { onComplete?: (destinationPath: 
   const copiedRef = useRef<CopiedFile[]>([]);
   const onCopiedRef = useRef<((copied: CopiedFile[]) => void) | undefined>(undefined);
 
-  // Fire the hook-level refresh + the per-batch onCopied callback once a batch finishes.
+  // Copies still running. An Overwrite re-copies its file in the background while the queue
+  // moves on, so the queue can reach its end first.
+  const inFlightRef = useRef<Set<Promise<CopyOutcome>>>(new Set());
+
+  // Fire the hook-level refresh + the per-batch onCopied callback once a batch finishes,
+  // after any copy still running: a slot import assigns what onCopied reports.
   async function finishBatch(destinationPath: string) {
+    await Promise.all([...inFlightRef.current]);
     await onComplete?.(destinationPath);
     const cb = onCopiedRef.current;
     if (cb) cb([...copiedRef.current]);
@@ -84,7 +90,18 @@ export function useAudioPoolTransfer(options?: { onComplete?: (destinationPath: 
       t.id === id && t.status !== "cancelled" ? { ...t, status: "failed", error } : t));
 
   // Single copy invoke + result handling. Returns the outcome so callers can sequence/queue.
-  async function runCopy(
+  function runCopy(
+    sourcePath: string,
+    transferId: string,
+    destinationPath: string,
+    overwrite: boolean
+  ): Promise<CopyOutcome> {
+    const copy = copyOnce(sourcePath, transferId, destinationPath, overwrite);
+    inFlightRef.current.add(copy);
+    return copy.finally(() => inFlightRef.current.delete(copy));
+  }
+
+  async function copyOnce(
     sourcePath: string,
     transferId: string,
     destinationPath: string,
