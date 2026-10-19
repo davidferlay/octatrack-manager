@@ -6,14 +6,22 @@ Classification parent: [`PSE_BANK_STATE_DOC_SEMANTICS_2.md`](./PSE_BANK_STATE_DO
 
 Base SHA: [`4eaf4ce9d3421786cd2c058bcb0333398522498a`](https://github.com/kaz4g/masterocta/commit/4eaf4ce9d3421786cd2c058bcb0333398522498a) (`main` after PR #235)
 
-## Judgment (Phase A — harness only)
+## Judgment (Phase B — operator capture analyzed)
+
+Operator-local bytes: `~/octa-captures/P_BANK_COPY_STATE/` (not committed). S3/S4/S5
+re-captured after correcting control-bank selection (2026-10-19).
 
 ```text
 DISPOSABLE_PROJECT = P_BANK_COPY_STATE
-FIXTURE_ROOT = src-tauri/tests/fixtures/pse_bank_copy_state_doc/
+REPO_FIXTURE_ROOT = src-tauri/tests/fixtures/pse_bank_copy_state_doc/  (still empty receptacle)
+OPERATOR_CAPTURE_ROOT = ~/octa-captures/P_BANK_COPY_STATE/
 
-DEVICE_CAPTURE = WAITING_FOR_REAL_DEVICE
-RESULT = WAITING_FOR_OPERATOR_CAPTURE
+DEVICE_CAPTURE = PASS
+DEVICE_EVIDENCE_PROMOTION = ALLOWED
+RESULT = READY_FOR_REVIEW
+CAPTURE_TRANSPORT_CONFIDENCE = PROVEN_NON_MUTATING
+PRE_SOURCE_WORK_STRD_DIVERGENCE = PASS
+IMMEDIATE_COPY_TIMING_ATTRIBUTION = PASS
 
 COPY_STATE_DOC_RULE = BLOCKED
 MOVE_STATE_DOC_RULE = BLOCKED
@@ -27,7 +35,12 @@ APPLY_AUTHORIZED = NO
 MASTER_OCTA_FILESYSTEM_WRITE = NO
 ```
 
-No device bytes are committed in Phase A. Semantic promotion waits for Phase B operator capture.
+Full hash-level transition matrix:
+[`PSE_BANK_COPY_STATE_DOC_DEVICE_EVIDENCE_PHASE_B_MATRIX.md`](./PSE_BANK_COPY_STATE_DOC_DEVICE_EVIDENCE_PHASE_B_MATRIX.md)
+(operator copy also at `~/octa-captures/P_BANK_COPY_STATE/EVIDENCE_PHASE_B_MATRIX.md`).
+
+Domain rules stay **BLOCKED** until owner review of matrix + provenance (`dest_*_provenance =
+DERIVED_OTHER` on this run). Repo fixture tree remains without device bytes.
 
 ## Scope
 
@@ -114,9 +127,25 @@ Q. Capture **S5** (binaries before extra UI navigation where practical).
 R. Record destination UI sentinel.  
 S. Rebuild and verify all manifests; set `device_generated` / `capture_sequence_proven` only after operator confirmation.
 
-## Phase B promotion (future)
+## Phase B findings (summary)
 
-When captures land and analyze passes transport + S1 gates, update this doc with raw matrix, provenance, timing, and project-state effects. Domain promotion (`COPY_STATE_DOC_RULE`, `CopySavedCheckpointSemantics`) only if evidence is conclusive. Move/Swap rules stay **BLOCKED**; `ReadinessGap::WorkingSavedCheckpointRule` stays **OPEN** (Copy-only evidence does not close the three-operation gap).
+| Question | Observation (this run) |
+| --- | --- |
+| Destination roles on Copy | `bank04.work` and `bank04.strd` both change on **NATIVE_BANK_COPY** (S1→S2). |
+| First persistence transition | `dest_work_first_changed_at` / `dest_strd_first_changed_at` = **NATIVE_BANK_COPY**. |
+| Byte provenance vs source | Classifier: `dest_work_provenance` / `dest_strd_provenance` = **DERIVED_OTHER** (not byte-equal to S2 source `.work` / `.strd` alone). |
+| `project.work` BANK/PATTERN | After Copy: bank index moves to destination (**D**); pattern changes (S0/S1 **A04** → S2+ **A01**). Control switch (S3): **B** / **A01**. |
+| Control bank `bank02` | No hash change on S2→S3 (`control_bank_immediate_change = NO`). |
+| Save / Reload | S3→S4 and S4→S5: several bank files unchanged on hash matrix; see linked doc. |
+
+Regenerate matrix after capture edits:
+
+```bash
+CAPTURE_ROOT=~/octa-captures/P_BANK_COPY_STATE
+# from repo: node --input-type=module … analyzeBankCopyEvidence(CAPTURE_ROOT)
+```
+
+Move/Swap rules stay **BLOCKED**; `ReadinessGap::WorkingSavedCheckpointRule` stays **OPEN**.
 
 ## Safety
 
