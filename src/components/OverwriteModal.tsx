@@ -124,10 +124,10 @@ export function OverwriteModal({ isOpen, fileName, remainingFiles, onOverwrite, 
           {hasMultipleRemaining ? (
             <>
               <div className="modal-buttons-row">
-                <button className={`modal-button primary commit ${selectedIndex === 0 ? 'focused' : ''}`} onClick={onOverwrite}>
+                <button className={`modal-button primary ${selectedIndex === 0 ? 'focused' : ''}`} onClick={onOverwrite}>
                   Overwrite
                 </button>
-                <button className={`modal-button commit ${selectedIndex === 1 ? 'focused' : ''}`} onClick={onOverwriteAll}>
+                <button className={`modal-button ${selectedIndex === 1 ? 'focused' : ''}`} onClick={onOverwriteAll}>
                   Overwrite All ({remainingFiles.length})
                 </button>
               </div>
@@ -148,7 +148,7 @@ export function OverwriteModal({ isOpen, fileName, remainingFiles, onOverwrite, 
           ) : (
             <>
               <div className="modal-buttons-row">
-                <button className={`modal-button primary commit ${selectedIndex === 0 ? 'focused' : ''}`} onClick={onOverwrite}>
+                <button className={`modal-button primary ${selectedIndex === 0 ? 'focused' : ''}`} onClick={onOverwrite}>
                   Overwrite
                 </button>
                 <button className={`modal-button ${selectedIndex === 1 ? 'focused' : ''}`} onClick={onSkip}>

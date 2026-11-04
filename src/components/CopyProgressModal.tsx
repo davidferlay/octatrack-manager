@@ -138,7 +138,7 @@ export function CopyProgressModal({ transferId, label, command, commandArgs, onC
                 Close
               </button>
             ) : (
-              <button className="modal-button caution" onClick={handleCancel} disabled={cancelling}>
+              <button className="modal-button" onClick={handleCancel} disabled={cancelling}>
                 {cancelling ? (
                   <><i className="fas fa-spinner fa-spin" style={{ marginRight: '0.4rem' }}></i>Cancelling...</>
                 ) : (

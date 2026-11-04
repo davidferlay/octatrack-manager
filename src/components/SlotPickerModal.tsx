@@ -399,7 +399,7 @@ export function SlotPickerModal({
             <button className="fix-cancel-btn" onClick={onClose}>Cancel</button>
             <div style={{ flex: 1 }} />
             <button
-              className="tools-execute-btn commit"
+              className="tools-execute-btn"
               disabled={!visible[cursor]}
               onClick={() => commit(visible[cursor])}
             >

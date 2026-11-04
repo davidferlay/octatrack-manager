@@ -130,7 +130,7 @@ export function CreateProjectModal({
             <button className="modal-button" onClick={onCancel} disabled={submitting}>
               Cancel
             </button>
-            <button className="modal-button primary commit" onClick={handleSubmit} disabled={!canSubmit}>
+            <button className="modal-button primary" onClick={handleSubmit} disabled={!canSubmit}>
               {submitting ? <><i className="fas fa-spinner fa-spin" style={{ marginRight: '0.4rem' }}></i>Creating...</> : buttonLabel}
             </button>
           </div>

@@ -347,17 +347,6 @@ test.describe('Tools Tab - UI Tests', () => {
     await expect(toolsTab).toBeVisible({ timeout: 10000 })
   })
 
-  test('a selected option is outlined in orange rather than filled', async ({ page }) => {
-    await page.locator('.header-tab', { hasText: 'Tools' }).click()
-    await page.addStyleTag({ content: '* { transition: none !important; }' })
-    for (const selector of ['.tools-toggle-btn.selected', '.tools-multi-btn.selected']) {
-      const chosen = page.locator(selector).first()
-      await expect(chosen).toHaveCSS('border-top-color', 'rgb(255, 102, 0)')
-      await expect(chosen).toHaveCSS('color', 'rgb(255, 102, 0)')
-      await expect(chosen).not.toHaveCSS('background-color', 'rgb(255, 102, 0)')
-    }
-  })
-
   test('clicking Tools tab shows Tools panel', async ({ page }) => {
     const toolsTab = page.locator('.header-tab', { hasText: 'Tools' })
     await toolsTab.click()

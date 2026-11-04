@@ -207,7 +207,7 @@ export function ProjectSelectorModal({
                 <p className="no-matches-title">
                   No projects match <span className="no-matches-term">{search}</span>
                 </p>
-                <button className="scan-button browse-button dismiss" onClick={() => setSearch('')}>
+                <button className="scan-button browse-button" onClick={() => setSearch('')}>
                   Clear search
                 </button>
               </div>

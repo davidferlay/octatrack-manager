@@ -1371,23 +1371,6 @@ test.describe('Parts Editor - Diffs against the saved copy', () => {
     await expect(track).toHaveCSS('background-color', 'rgb(26, 26, 26)')
   })
 
-  test('Reload, Save and Close outline in the colour of what they do', async ({ page }) => {
-    await page.addStyleTag({ content: '* { transition: none !important; }' })
-    await page.getByRole('button', { name: 'See diffs' }).click()
-    const dialog = page.getByRole('dialog')
-    const cases: [RegExp, string, string][] = [
-      [/^Reload/, 'caution', 'rgb(245, 158, 11)'],
-      [/^Save/, 'commit', 'rgb(16, 185, 129)'],
-      [/^Close$/, '', 'rgb(209, 213, 219)'],
-    ]
-    for (const [name, cls, colour] of cases) {
-      const button = dialog.getByRole('button', { name })
-      if (cls) await expect(button).toHaveClass(new RegExp(`\\b${cls}\\b`))
-      await button.hover()
-      await expect(button).toHaveCSS('border-top-color', colour)
-    }
-  })
-
   test('Escape closes the diffs', async ({ page }) => {
     await page.getByRole('button', { name: 'See diffs' }).click()
     await expect(page.getByRole('dialog')).toBeVisible()
@@ -3014,27 +2997,6 @@ test.describe('Scenes', () => {
       await page.locator('.scene-randomize-more').click()
       await expect(dialog(page)).toBeVisible()
     }
-
-    test('the bounds slider draws its range as a thin orange line', async ({ page }) => {
-      await open(page)
-      const fill = dialog(page).locator('.tools-dual-range-track-fill').first()
-      await expect(fill).toHaveCSS('height', '2px')
-      await expect(fill).toHaveCSS('opacity', '1')
-      await expect(fill).toHaveCSS('background-color', 'rgb(255, 102, 0)')
-    })
-
-    test('a chosen option is outlined in orange, and Randomize is neutral until pointed at', async ({ page }) => {
-      await open(page)
-      await page.addStyleTag({ content: '* { transition: none !important; }' })
-      const chosen = dialog(page).locator('.tools-toggle-btn.selected').first()
-      await expect(chosen).toHaveCSS('border-top-color', 'rgb(255, 102, 0)')
-      await expect(chosen).toHaveCSS('color', 'rgb(255, 102, 0)')
-      await expect(chosen).not.toHaveCSS('background-color', 'rgb(255, 102, 0)')
-      await expect(go(page)).not.toHaveCSS('background-color', 'rgb(255, 102, 0)')
-      await go(page).hover()
-      // It writes the scenes: green
-      await expect(go(page)).toHaveCSS('border-top-color', 'rgb(16, 185, 129)')
-    })
 
     /** The scene grid is behind "Selected Scenes"; the common case needs no grid. */
     const pickScenes = async (page: Page) => {

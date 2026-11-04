@@ -684,7 +684,7 @@ export function HomePage() {
             No projects match <span className="no-matches-term">{searchText}</span>
           </p>
           <button
-            className="scan-button browse-button dismiss"
+            className="scan-button browse-button"
             onClick={() => { setSearchText(''); searchInputRef.current?.focus(); }}
           >
             Clear search

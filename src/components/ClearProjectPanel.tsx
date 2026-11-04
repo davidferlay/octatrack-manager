@@ -749,7 +749,7 @@ export function ClearProjectPanel({
             <div className="modal-footer">
               <div className="modal-buttons-row">
                 <button className="modal-button" onClick={() => setConfirming(false)}>Cancel</button>
-                <button className="modal-button danger" onClick={execute}>Clear</button>
+                <button className="modal-button primary" onClick={execute}>Clear</button>
               </div>
             </div>
           </div>

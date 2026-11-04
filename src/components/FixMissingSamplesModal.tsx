@@ -936,7 +936,7 @@ export function FixMissingSamplesModal({
               {/* Done button after apply */}
               {phase === "done" && (
                 <div className="fix-done-actions">
-                  <button className="tools-execute-btn dismiss" onClick={onClose} title="Close this dialog">
+                  <button className="tools-execute-btn" onClick={onClose} title="Close this dialog">
                     Done
                   </button>
                 </div>
@@ -1034,7 +1034,7 @@ export function FixMissingSamplesModal({
                 </button>
                 <div style={{ flex: 1 }} />
                 {resolvedFiles.length > 0 && (
-                  <button className="tools-execute-btn commit" onClick={handleApply}>
+                  <button className="tools-execute-btn" onClick={handleApply}>
                     Apply Changes
                   </button>
                 )}

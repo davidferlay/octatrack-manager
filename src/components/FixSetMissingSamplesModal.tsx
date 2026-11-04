@@ -458,7 +458,7 @@ export function FixSetMissingSamplesModal({
 
               {phase === "done" && (
                 <div className="fix-done-actions">
-                  <button className="tools-execute-btn dismiss" onClick={onClose} title="Close this dialog">Done</button>
+                  <button className="tools-execute-btn" onClick={onClose} title="Close this dialog">Done</button>
                 </div>
               )}
             </div>
@@ -501,7 +501,7 @@ export function FixSetMissingSamplesModal({
                 </button>
                 <div style={{ flex: 1 }} />
                 {resolvedTotal > 0 && (
-                  <button className="tools-execute-btn commit" onClick={() => setPhase("applying")}>
+                  <button className="tools-execute-btn" onClick={() => setPhase("applying")}>
                     Apply Changes
                   </button>
                 )}

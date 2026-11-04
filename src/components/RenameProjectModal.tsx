@@ -107,7 +107,7 @@ export function RenameProjectModal({
               Cancel
             </button>
             <button
-              className="modal-button primary commit"
+              className="modal-button primary"
               onClick={handleSubmit}
               disabled={!canSubmit}
               title={unchanged ? 'Name is unchanged' : undefined}

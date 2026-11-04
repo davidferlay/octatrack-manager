@@ -414,7 +414,7 @@ function PartDiffsModal({ state, partIndex, partNames }: {
         <div className="modal-footer">
           <div className="modal-buttons-row">
             <button
-              className="modal-button caution"
+              className="modal-button"
               aria-label={`Reload ${name}`}
               title="Reload puts the Saved values back"
               disabled={busy || partsSavedState[partIndex] !== 1}
@@ -423,7 +423,7 @@ function PartDiffsModal({ state, partIndex, partNames }: {
               Reload
             </button>
             <button
-              className="modal-button commit"
+              className="modal-button"
               aria-label={`Save ${name}`}
               title="Save makes the Current values the saved ones"
               disabled={busy}

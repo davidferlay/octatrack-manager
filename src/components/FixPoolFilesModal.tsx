@@ -1088,7 +1088,7 @@ export function FixSamplesModal({
                 <div className="fix-done-actions">
                   <button className="fix-cancel-btn" onClick={onClose} title="Close without applying any changes">Cancel</button>
                   <div style={{ flex: 1 }} />
-                  <button className="tools-execute-btn commit" onClick={() => setPhase('converting')}>
+                  <button className="tools-execute-btn" onClick={() => setPhase('converting')}>
                     Apply Changes
                   </button>
                 </div>
@@ -1104,7 +1104,7 @@ export function FixSamplesModal({
               </div>
               <div className="fix-pool-progress-file" title={currentFile}>{relName(currentFile)}</div>
               <div className="fix-done-actions">
-                <button className="fix-cancel-btn caution" onClick={handleCancelConvert}>Cancel</button>
+                <button className="fix-cancel-btn" onClick={handleCancelConvert}>Cancel</button>
               </div>
             </div>
           )}
@@ -1140,7 +1140,7 @@ export function FixSamplesModal({
                 </div>
               )}
               <div className="fix-done-actions">
-                <button className="tools-execute-btn dismiss" onClick={onClose}>Close</button>
+                <button className="tools-execute-btn" onClick={onClose}>Close</button>
               </div>
             </div>
           )}

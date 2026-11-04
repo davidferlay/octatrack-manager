@@ -53,15 +53,6 @@ test.describe('HomePage', () => {
     await expect(page.getByText('Discover and manage your Elektron Octatrack projects')).toBeVisible()
   })
 
-  test('the scan button is neutral at rest and orange under the pointer', async ({ page }) => {
-    await page.addStyleTag({ content: '* { transition: none !important; }' })
-    const scanButton = page.getByRole('button', { name: 'Scan for Projects' })
-    await expect(scanButton).not.toHaveCSS('background-color', 'rgb(255, 102, 0)')
-    await scanButton.hover()
-    await expect(scanButton).toHaveCSS('border-top-color', 'rgb(255, 102, 0)')
-    await expect(scanButton).toHaveCSS('color', 'rgb(255, 102, 0)')
-  })
-
   test('has scan button', async ({ page }) => {
     const scanButton = page.getByRole('button', { name: 'Scan for Projects' })
     await expect(scanButton).toBeVisible()

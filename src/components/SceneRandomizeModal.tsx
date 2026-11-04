@@ -285,7 +285,7 @@ export function SceneRandomizeModal({
           <div className="modal-buttons-row">
         <button className="modal-button" onClick={onClose}>Cancel</button>
         <button
-          className="modal-button primary commit"
+          className="modal-button primary"
           disabled={chosen.length === 0 || scenes.length === 0}
           onClick={() => onApply(scenes, chosen, bounds)}
           title={chosen.length === 0

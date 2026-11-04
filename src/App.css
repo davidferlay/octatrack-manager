@@ -81,30 +81,26 @@ h1 {
   border-bottom: 1px solid var(--elektron-border-gray);
 }
 
-/* Neutral at rest; under the pointer the border and label take the colour of what
-   the button does - orange to run or open something, grey to undo a view setting. */
 .scan-button {
-  border: 1px solid #555;
+  border: none;
   padding: 0.75rem 2rem;
   font-size: 0.875rem;
   font-weight: 600;
   font-family: inherit;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: var(--elektron-text-primary);
-  background-color: transparent;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  color: var(--elektron-black);
+  background-color: var(--elektron-orange);
+  transition: background-color 0.15s ease;
   cursor: pointer;
 }
 
 .scan-button:hover:not(:disabled) {
-  border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
+  background-color: var(--elektron-orange-hover);
 }
 
-.scan-button.dismiss:hover:not(:disabled) {
-  border-color: #d1d5db;
-  color: #d1d5db;
+.scan-button:active:not(:disabled) {
+  background-color: var(--elektron-orange-dark);
 }
 
 .scan-button:disabled {
@@ -112,6 +108,16 @@ h1 {
   cursor: not-allowed;
 }
 
+.browse-button {
+  background-color: transparent;
+  color: var(--elektron-orange);
+  border: 1px solid var(--elektron-orange);
+}
+
+.browse-button:hover:not(:disabled) {
+  background-color: var(--elektron-orange);
+  color: var(--elektron-black);
+}
 
 .browse-button:active:not(:disabled) {
   background-color: var(--elektron-orange-dark);
@@ -973,7 +979,9 @@ h1 {
 }
 
 .back-button:hover {
-  border-color: #d1d5db;
+  background-color: var(--elektron-orange);
+  color: var(--elektron-black);
+  border-color: var(--elektron-orange);
 }
 
 /* Toolbar button (used in project headers for refresh, etc.) */
@@ -1280,28 +1288,20 @@ h1 {
   color: var(--elektron-text-primary);
 }
 
-/* A secondary button says what it does by the colour its border takes under the
-   pointer, and nothing else changes: light grey to leave without doing anything,
-   green to write, amber to throw edits away or stop work half way, red to destroy.
-   Filled primary buttons keep their own fill. */
-.modal-button:hover:not(:disabled) {
-  border-color: #d1d5db;
+.modal-button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: var(--elektron-text-secondary);
 }
 
-.modal-button.commit:hover:not(:disabled),
-.fix-cancel-btn.commit:hover:not(:disabled) {
-  border-color: #10b981;
-}
-
-.modal-button.caution:hover:not(:disabled),
-.fix-cancel-btn.caution:hover:not(:disabled) {
-  border-color: #f59e0b;
-}
-
-/* The dialog's default action: neutral like the rest, set apart by weight only. Its
-   hover colour comes from what it does (.commit and the like). */
 .modal-button.primary {
-  font-weight: 600;
+  background-color: var(--elektron-orange);
+  border-color: var(--elektron-orange);
+  color: var(--elektron-black);
+}
+
+.modal-button.primary:hover {
+  background-color: rgba(255, 102, 0, 0.8);
+  border-color: rgba(255, 102, 0, 0.8);
 }
 
 .modal-button.primary:disabled {
@@ -1315,8 +1315,9 @@ h1 {
   color: #dc3545;
 }
 
-.modal-button.danger:hover:not(:disabled) {
-  border-color: #dc3545;
+.modal-button.danger:hover {
+  background-color: rgba(220, 53, 69, 0.25);
+  border-color: rgba(220, 53, 69, 0.7);
 }
 
 .modal-button.focused {
@@ -1324,6 +1325,9 @@ h1 {
   outline-offset: 2px;
 }
 
+.modal-button.primary.focused {
+  outline-color: white;
+}
 
 .modal-button.danger.focused {
   outline-color: #dc3545;
@@ -2767,7 +2771,7 @@ h1 {
 .reset-filters-btn {
   background: none;
   border: 1px solid var(--elektron-border-gray);
-  color: var(--elektron-text-secondary);
+  color: var(--elektron-orange);
   padding: 0.2rem 0.5rem;
   border-radius: 3px;
   font-size: 0.75rem;
@@ -2778,8 +2782,8 @@ h1 {
 }
 
 .reset-filters-btn:hover {
-  border-color: #d1d5db;
-  color: #d1d5db;
+  background-color: var(--elektron-orange);
+  color: var(--elektron-black);
 }
 
 /* Copy Table Button */
@@ -3761,11 +3765,9 @@ h1 {
   border-left: 1px solid #333;
 }
 
-/* The chosen segment is outlined in orange, as selected toggles are elsewhere -
-   inset, since the segments have no border of their own */
 .tri-toggle-option.active {
-  color: var(--elektron-orange);
-  box-shadow: inset 0 0 0 1px var(--elektron-orange);
+  background: var(--elektron-orange);
+  color: #fff;
 }
 
 /* Recorder trig grid: red accent matching the recorder R. The separator
@@ -4651,13 +4653,15 @@ th.col-usage .header-content .sort-indicator {
 }
 
 .tools-part-cross.disabled .tools-toggle-btn.part-btn.selected {
+  background-color: var(--elektron-orange);
   border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
+  color: #000;
 }
 
 .tools-part-cross.disabled .tools-toggle-btn.part-btn:hover {
+  background-color: var(--elektron-orange);
   border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
+  color: #000;
 }
 
 .tools-multi-select.disabled .tools-multi-btn.pattern-btn {
@@ -4666,13 +4670,15 @@ th.col-usage .header-content .sort-indicator {
 }
 
 .tools-multi-select.disabled .tools-multi-btn.pattern-btn.selected {
+  background-color: var(--elektron-orange);
   border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
+  color: #000;
 }
 
 .tools-multi-select.disabled .tools-multi-btn.pattern-btn:hover {
+  background-color: var(--elektron-orange);
   border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
+  color: #000;
 }
 
 /* Disabled track buttons when All mode is active */
@@ -4682,13 +4688,15 @@ th.col-usage .header-content .sort-indicator {
 }
 
 .tools-multi-select.tracks-stacked.disabled .tools-track-row-buttons .tools-multi-btn.track-btn.selected {
+  background-color: var(--elektron-orange);
   border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
+  color: #000;
 }
 
 .tools-multi-select.tracks-stacked.disabled .tools-track-row-buttons .tools-multi-btn.track-btn:hover {
+  background-color: var(--elektron-orange);
   border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
+  color: #000;
 }
 
 .tools-multi-btn.track-btn.disabled {
@@ -4698,8 +4706,9 @@ th.col-usage .header-content .sort-indicator {
 
 .tools-multi-btn.track-btn.disabled.selected {
   opacity: 1;
+  background-color: var(--elektron-orange);
   border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
+  color: #000;
 }
 
 .tools-part-cross-spacer {
@@ -4749,17 +4758,15 @@ th.col-usage .header-content .sort-indicator {
   text-align: center;
 }
 
-/* Selected chips and toggles are outlined in orange on their usual background, not
-   filled; an unselected one only lightens its border under the pointer, so orange
-   means chosen and nothing else */
 .tools-multi-btn:hover {
-  border-color: #d1d5db;
+  background-color: var(--elektron-medium-gray);
+  color: var(--elektron-text-primary);
 }
 
-.tools-multi-btn.selected,
-.tools-multi-btn.selected:hover {
+.tools-multi-btn.selected {
+  background-color: var(--elektron-orange);
   border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
+  color: #000;
 }
 
 .tools-multi-btn.tools-select-all {
@@ -4776,14 +4783,16 @@ th.col-usage .header-content .sort-indicator {
 }
 
 .tools-multi-btn.tools-select-all.selected {
+  background-color: var(--elektron-orange);
   border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
   border-style: solid;
+  color: #000;
 }
 
 .tools-multi-btn.tools-select-all.selected:hover {
+  background-color: var(--elektron-orange);
   border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
+  color: #000;
 }
 
 .tools-slot-range {
@@ -4931,13 +4940,15 @@ th.col-usage .header-content .sort-indicator {
 }
 
 .tools-toggle-btn:hover {
-  border-color: #d1d5db;
+  background-color: var(--elektron-medium-gray);
+  color: var(--elektron-text-primary);
+  border-color: var(--elektron-orange);
 }
 
-.tools-toggle-btn.selected,
-.tools-toggle-btn.selected:hover {
+.tools-toggle-btn.selected {
+  background-color: var(--elektron-orange);
   border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
+  color: #000;
 }
 
 .tools-toggle-btn:disabled {
@@ -5311,30 +5322,22 @@ th.col-usage .header-content .sort-indicator {
   font-size: 1.1rem;
   font-weight: 600;
   background-color: transparent;
-  border: 2px solid #555;
+  border: 2px solid var(--elektron-orange);
   border-radius: 8px;
-  color: var(--elektron-text-primary);
+  color: var(--elektron-orange);
   cursor: pointer;
   transition: all 0.2s;
 }
 
-/* Neutral at rest, as the dialogs' buttons are. Under the pointer the border and
-   label take the colour of what the button does, with no fill: the app's orange to
-   open a step; green to write; grey to leave; red to destroy. Red ones are red at
-   rest too, as the dialogs' danger buttons are. */
 .tools-execute-btn:hover:not(:disabled) {
-  border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
+  background-color: var(--elektron-orange);
+  color: #000;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(255, 138, 0, 0.3);
 }
 
-.tools-execute-btn.commit:hover:not(:disabled) {
-  border-color: #10b981;
-  color: #10b981;
-}
-
-.tools-execute-btn.dismiss:hover:not(:disabled) {
-  border-color: #d1d5db;
-  color: #d1d5db;
+.tools-execute-btn:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 /* ---- Clear Project ---------------------------------------------------- */
@@ -5438,10 +5441,17 @@ th.col-usage .header-content .sort-indicator {
   color: #e05252;
 }
 
-.tools-execute-btn.tools-clear-btn:hover:not(:disabled),
-.tools-execute-btn.tools-execute-btn-danger:hover:not(:disabled) {
-  border-color: #ff4d5e;
-  color: #ff4d5e;
+.tools-execute-btn.tools-clear-btn:hover:not(:disabled) {
+  background-color: #e05252;
+  border-color: #e05252;
+  color: var(--elektron-black);
+}
+
+/* Modal action rows (Apply Changes, Review changes...): no hover lift */
+.fix-done-actions .tools-execute-btn:hover:not(:disabled),
+.fix-confirm-actions .tools-execute-btn:hover:not(:disabled) {
+  transform: none;
+  box-shadow: none;
 }
 
 .tools-execute-btn:disabled {
@@ -5469,6 +5479,11 @@ th.col-usage .header-content .sort-indicator {
   color: #dc3545;
 }
 
+.tools-execute-btn.tools-execute-btn-danger:hover:not(:disabled) {
+  background-color: #dc3545;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(220, 53, 69, 0.3);
+}
 
 .loading-spinner-small {
   width: 1rem;
@@ -5624,18 +5639,93 @@ th.col-usage .header-content .sort-indicator {
 }
 
 .tools-slot-all-btn:hover {
-  border-color: #d1d5db;
+  background-color: rgba(255, 138, 0, 0.1);
+  border-color: var(--elektron-orange);
   border-style: solid;
+  color: var(--elektron-orange);
 }
 
 /* One / Range already set .selected in both Copy Sample Slots and Clear
    Project, but nothing styled it - the active mode looked identical to the
    inactive one. */
-.tools-slot-all-btn.selected,
-.tools-slot-all-btn.selected:hover {
+.tools-slot-all-btn.selected {
+  background-color: var(--elektron-orange);
   border-color: var(--elektron-orange);
-  color: var(--elektron-orange);
   border-style: solid;
+  color: #000;
+}
+
+.tools-slot-all-btn.selected:hover {
+  background-color: var(--elektron-orange);
+  color: #000;
+}
+
+.tools-slot-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tools-slot-slider-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.tools-slot-label {
+  font-size: 0.75rem;
+  color: var(--elektron-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  min-width: 35px;
+}
+
+.tools-slot-slider-group input[type="range"] {
+  flex: 1;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--elektron-medium-gray);
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+}
+
+.tools-slot-slider-group input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: var(--elektron-orange);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.tools-slot-slider-group input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 8px rgba(255, 138, 0, 0.5);
+}
+
+.tools-slot-slider-group input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: var(--elektron-orange);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.tools-slot-slider-group input[type="range"]::-moz-range-thumb:hover {
+  transform: scale(1.15);
+  box-shadow: 0 0 8px rgba(255, 138, 0, 0.5);
+}
+
+.tools-slot-slider-group input[type="range"]::-moz-range-track {
+  background: var(--elektron-medium-gray);
+  height: 6px;
+  border-radius: 3px;
 }
 
 /* Dual Range Slider */
@@ -5652,20 +5742,22 @@ th.col-usage .header-content .sort-indicator {
   top: 50%;
   left: 0;
   right: 0;
-  height: 2px;
+  height: 6px;
   background: var(--elektron-medium-gray);
+  border-radius: 3px;
   transform: translateY(-50%);
   pointer-events: none;
 }
 
-/* The chosen range: orange, which means chosen everywhere else too */
 .tools-dual-range-track-fill {
   position: absolute;
   top: 50%;
-  height: 2px;
+  height: 6px;
   background: var(--elektron-orange);
+  border-radius: 3px;
   transform: translateY(-50%);
   pointer-events: none;
+  opacity: 0.6;
 }
 
 .tools-dual-range-input {
@@ -5691,39 +5783,41 @@ th.col-usage .header-content .sort-indicator {
   z-index: 3;
 }
 
-/* The thumb is an orange ring rather than a solid dot, like the outlined controls
-   elsewhere. Its size is unchanged, so a drag lands where it always did. */
 .tools-dual-range-input::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 18px;
   height: 18px;
-  background: var(--elektron-dark-gray);
+  background: var(--elektron-orange);
   border-radius: 50%;
   cursor: pointer;
   pointer-events: auto;
-  transition: border-color 0.15s ease;
-  border: 2px solid var(--elektron-orange);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  border: 2px solid var(--elektron-dark-gray);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   margin-top: -6px; /* Center thumb on track: -(thumbHeight - trackHeight) / 2 */
 }
 
 .tools-dual-range-input::-webkit-slider-thumb:hover {
-  border-color: #ff8a3d;
+  transform: scale(1.15);
+  box-shadow: 0 0 8px rgba(255, 138, 0, 0.5);
 }
 
 .tools-dual-range-input::-moz-range-thumb {
   width: 18px;
   height: 18px;
-  background: var(--elektron-dark-gray);
+  background: var(--elektron-orange);
   border-radius: 50%;
   cursor: pointer;
   pointer-events: auto;
-  transition: border-color 0.15s ease;
-  border: 2px solid var(--elektron-orange);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  border: 2px solid var(--elektron-dark-gray);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .tools-dual-range-input::-moz-range-thumb:hover {
-  border-color: #ff8a3d;
+  transform: scale(1.15);
+  box-shadow: 0 0 8px rgba(255, 138, 0, 0.5);
 }
 
 .tools-dual-range-input::-webkit-slider-runnable-track {
@@ -6840,9 +6934,9 @@ th.col-drag-over {
   transition: all 0.15s;
 }
 
-.fix-cancel-btn:hover:not(:disabled) {
+.fix-cancel-btn:hover {
   color: var(--elektron-text-primary);
-  border-color: #d1d5db;
+  border-color: var(--elektron-light-gray);
 }
 
 /* Applying */
