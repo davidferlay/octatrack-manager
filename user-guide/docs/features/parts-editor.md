@@ -164,6 +164,18 @@ To commit your edits to the Part:
 
 <img src={require('@site/static/img/screenshots/parts-editor-save.png').default} alt="Parts Editor Save Button" style={{width: '50%', display: 'block', margin: '0 auto'}} />
 
+### 4. Seeing what Save and Reload overwrite
+See diffs, the icon after Save All (or the <kbd>D</kbd> key), lists every value of the selected Part that differs between its edited copy and its saved one:
+
+- Each row gives the page and parameter, then the saved value and the current one.
+- Rows come one track at a time: its own values first, then its scene locks.
+- Reload and Save at the bottom act on that Part. <kbd>D</kbd> or <kbd>Esc</kbd> closes the window.
+- A Part the device has never saved has no saved copy to compare with.
+
+Right-clicking a Part tab in Edit mode offers: Reload, Save and See diffs for that Part.
+
+In Edit mode, a value of the Part on screen that differs from its saved copy reads in orangei, or an asterisk at the top right of certain fields. Hovering over it shows the saved value. Pameter chances in Scenes are also identified the same way.
+
 ---
 
 ## Data Safety
