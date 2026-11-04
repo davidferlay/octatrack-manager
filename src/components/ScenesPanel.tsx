@@ -6,7 +6,7 @@ import { FieldSpec, clampToSpec } from '../utils/partFieldSpecs';
 import { fieldHelp, helpTitle } from '../utils/partFieldHelp';
 import {
   Slot, SceneTrackLocks, ScenesResponse, slotsForTrack, emptyTracks, countLocks,
-  sceneAssignments, AssignmentRow, lockAt,
+  sceneAssignments, AssignmentRow, lockAt, savedNote,
 } from './sceneModel';
 import { randomizedTracks, type RandomizeBounds } from './sceneRandomize';
 import { SceneRandomizeModal } from './SceneRandomizeModal';
@@ -127,6 +127,10 @@ export function ScenesPanel({
     );
     return () => { live = false; };
   }, [comparing, partId, readCopies, reloadKey]);
+
+  /** What the saved copy holds at a position of the selected scene, when compared. */
+  const savedAt = (trackId: number, slot: Slot) =>
+    (saved ? lockAt(saved, selected, trackId, slot.page, slot.index) : undefined);
 
   const reload = useCallback(() => {
     invoke<ScenesResponse>('load_scenes', { path: projectPath, bankId, partId })
@@ -939,12 +943,18 @@ export function ScenesPanel({
                         <td className="scene-lock-value">
                           {slot.value === null ? (
                             <button
-                              className="scene-add"
+                              className={`scene-add${savedAt(track.track_id, slot) != null ? ' param-changed' : ''}`}
                               disabled={!isEditMode}
                               onClick={() => setSlot(track.track_id, slot, slot.spec.default)}
-                              title={isEditMode
-                                ? 'Put this parameter into the scene, at its default'
-                                : 'Turn on Edit mode to change what a scene holds'}
+                              title={[
+                                isEditMode
+                                  ? 'Put this parameter into the scene, at its default'
+                                  : 'Turn on Edit mode to change what a scene holds',
+                                // A lock the edits took out: say what Reload would put back
+                                savedAt(track.track_id, slot) != null
+                                  ? savedNote(savedAt(track.track_id, slot)!, slot.spec)
+                                  : null,
+                              ].filter(Boolean).join('\n')}
                             >
                               -
                             </button>
@@ -953,9 +963,7 @@ export function ScenesPanel({
                               slot={slot}
                               editable={isEditMode}
                               onChange={value => setSlot(track.track_id, slot, value)}
-                              saved={saved
-                                ? lockAt(saved, selected, track.track_id, slot.page, slot.index)
-                                : undefined}
+                              saved={savedAt(track.track_id, slot)}
                             />
                           )}
                         </td>

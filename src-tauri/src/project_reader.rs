@@ -20944,6 +20944,129 @@ mod tests {
         }
 
         #[test]
+        fn part_copies_reject_an_unknown_bank() {
+            let project = TestProject::new();
+            assert!(read_part_copies(&project.path, "Z", 0).is_err());
+        }
+
+        #[test]
+        fn the_edited_copy_reads_exactly_as_the_editors_read_the_part() {
+            // The editors read through read_parts_data and read_bank_scenes; the diff
+            // must compare the same values, or it would report differences they never show
+            let project = TestProject::new();
+            edit_unsaved_part(&project, |part| {
+                part.audio_track_params_values[2].amp.vol = 99;
+                part.scenes[4].0[1].amp.vol = 33;
+            });
+            let parts = read_parts_data(&project.path, "A").unwrap();
+            let scenes = read_bank_scenes(&project.path, "A").unwrap();
+            for part_id in 0..4u8 {
+                let copies = read_part_copies(&project.path, "A", part_id).unwrap();
+                assert_eq!(
+                    serde_json::to_value(&copies.edited.part).unwrap(),
+                    serde_json::to_value(&parts.parts[part_id as usize]).unwrap(),
+                    "Part {} values",
+                    part_id + 1
+                );
+                assert_eq!(
+                    serde_json::to_value(&copies.edited.scenes).unwrap(),
+                    serde_json::to_value(&scenes[part_id as usize]).unwrap(),
+                    "Part {} scenes",
+                    part_id + 1
+                );
+            }
+        }
+
+        #[test]
+        fn the_saved_copy_keeps_the_machine_and_crossfader_it_was_saved_with() {
+            let project = TestProject::new();
+            commit_part_data(&project.path, "A", 0).unwrap();
+            let before = read_part_copies(&project.path, "A", 0).unwrap().edited;
+
+            edit_unsaved_part(&project, |part| {
+                part.audio_track_machine_types[0] = 2; // Thru
+                part.active_scenes.scene_a = 5;
+            });
+            let copies = read_part_copies(&project.path, "A", 0).unwrap();
+            let saved = copies.saved.unwrap();
+
+            assert_eq!(
+                saved.part.machines[0].machine_type,
+                before.part.machines[0].machine_type
+            );
+            assert_eq!(copies.edited.part.machines[0].machine_type, "Thru");
+            // The scenes are named after the machine each copy runs
+            assert_eq!(
+                saved.scenes.machine_types[0],
+                before.scenes.machine_types[0]
+            );
+            assert_eq!(copies.edited.scenes.machine_types[0], "Thru");
+            assert_eq!(saved.scenes.scene_a, before.scenes.scene_a);
+            assert_eq!(copies.edited.scenes.scene_a, 5);
+            assert!(!copies.identical);
+        }
+
+        #[test]
+        fn part_copies_are_identical_again_after_a_reload() {
+            let project = TestProject::new();
+            commit_part_data(&project.path, "A", 0).unwrap();
+            edit_unsaved_part(&project, |part| {
+                part.audio_track_params_values[0].amp.vol = 3
+            });
+            assert!(!read_part_copies(&project.path, "A", 0).unwrap().identical);
+
+            reload_part_data(&project.path, "A", 0).unwrap();
+            assert!(read_part_copies(&project.path, "A", 0).unwrap().identical);
+        }
+
+        #[test]
+        fn edits_turned_back_by_hand_leave_the_copies_identical() {
+            // The device keeps the Part flagged as edited; the bytes say nothing differs
+            let project = TestProject::new();
+            commit_part_data(&project.path, "A", 0).unwrap();
+            let bank_path = Path::new(&project.path).join("bank01.work");
+            let mut bank = BankFile::from_data_file(&bank_path).unwrap();
+            bank.parts_edited_bitmask |= 1;
+            bank.checksum = bank.calculate_checksum().unwrap();
+            bank.to_data_file(&bank_path).unwrap();
+
+            let copies = read_part_copies(&project.path, "A", 0).unwrap();
+            assert!(copies.saved.is_some());
+            assert!(copies.identical);
+            assert_eq!(copies.edited.scenes.parts_edited_bitmask & 1, 1);
+        }
+
+        #[test]
+        fn each_part_has_its_own_saved_copy() {
+            let project = TestProject::new();
+            commit_part_data(&project.path, "A", 2).unwrap();
+            assert!(read_part_copies(&project.path, "A", 2)
+                .unwrap()
+                .saved
+                .is_some());
+            for other in [0u8, 1, 3] {
+                assert!(
+                    read_part_copies(&project.path, "A", other)
+                        .unwrap()
+                        .saved
+                        .is_none(),
+                    "Part {} was never saved",
+                    other + 1
+                );
+            }
+        }
+
+        #[test]
+        fn reading_the_copies_writes_nothing() {
+            let project = TestProject::new();
+            commit_part_data(&project.path, "A", 0).unwrap();
+            let bank_path = Path::new(&project.path).join("bank01.work");
+            let before = std::fs::read(&bank_path).unwrap();
+            read_part_copies(&project.path, "A", 0).unwrap();
+            assert_eq!(std::fs::read(&bank_path).unwrap(), before);
+        }
+
+        #[test]
         fn test_reload_part_data_invalid_part() {
             let project = TestProject::new();
             commit_part_data(&project.path, "A", 0).unwrap();

@@ -265,13 +265,26 @@ export function PartSaveControls({ state, activePartIndex, partNames, visible }:
 function PartTabMenu({ state }: { state: PartCommitState }) {
   const { tabMenu, modifiedPartIds, partsSavedState, isCommitting, isReloading, closeTabMenu } = state;
   const ref = useRef<HTMLDivElement>(null);
-  useEscapeClose(closeTabMenu);
   useEffect(() => {
     const outside = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) closeTabMenu();
     };
+    // Escape is handled here rather than through useEscapeClose, which stands aside
+    // while any context menu is open - this one included - and would let the key
+    // through to the project page, whose Escape leaves the project. Taken in the
+    // capture phase and stopped, so nothing further down sees it.
+    const escape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      closeTabMenu();
+    };
     document.addEventListener('mousedown', outside);
-    return () => document.removeEventListener('mousedown', outside);
+    document.addEventListener('keydown', escape, true);
+    return () => {
+      document.removeEventListener('mousedown', outside);
+      document.removeEventListener('keydown', escape, true);
+    };
   }, [closeTabMenu]);
   if (!tabMenu) return null;
 

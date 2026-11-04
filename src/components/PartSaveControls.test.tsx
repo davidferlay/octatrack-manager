@@ -3,7 +3,7 @@ import { render, screen, act, renderHook, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { usePartCommits, PartSaveControls, PartCommitState } from './PartSaveControls'
 import { WriteStatus } from '../types/writeStatus'
-import { copy } from '../utils/partDiff.fixtures'
+import { copy, copiesWith } from '../utils/partDiff.fixtures'
 import type { PartCopies } from '../utils/partDiff'
 
 const invokeMock = vi.fn()
@@ -757,5 +757,189 @@ describe('which diffs and which menu are open', () => {
     expect(result.current.tabMenu).toEqual({ partIndex: 3, x: 40, y: 60 })
     act(() => result.current.closeTabMenu())
     expect(result.current.tabMenu).toBeNull()
+  })
+})
+
+/** The hook's state as the buttons, the window and the menu see it, with every action a spy. */
+const commitState = (over: Partial<PartCommitState> = {}): PartCommitState => ({
+  modifiedPartIds: new Set([0]),
+  partsSavedState: [1, 1, 1, 1],
+  isCommitting: false,
+  isReloading: false,
+  commitPart: vi.fn().mockResolvedValue(undefined),
+  commitAllParts: vi.fn(),
+  reloadPart: vi.fn().mockResolvedValue(undefined),
+  markModified: vi.fn(),
+  adoptBankState: vi.fn(),
+  readCopies: vi.fn(),
+  diffsFor: null,
+  showDiffs: vi.fn(),
+  hideDiffs: vi.fn(),
+  tabMenu: null,
+  openTabMenu: vi.fn(),
+  closeTabMenu: vi.fn(),
+  ...over,
+})
+
+const renderControls = (state: PartCommitState, activePartIndex = 0) =>
+  render(<PartSaveControls state={state} activePartIndex={activePartIndex} partNames={NAMES} visible />)
+
+
+describe('the diffs window, further', () => {
+  const opened = (copies: PartCopies | Promise<PartCopies>, over: Partial<PartCommitState> = {}) => {
+    const state = commitState({
+      diffsFor: 0,
+      readCopies: vi.fn().mockReturnValue(copies instanceof Promise ? copies : Promise.resolve(copies)),
+      ...over,
+    })
+    renderControls(state)
+    return state
+  }
+
+  it('says why when the Part cannot be read', async () => {
+    opened(Promise.reject(new Error('bank file locked')))
+    expect(await screen.findByText(/Could not read the Part: Error: bank file locked/)).toBeInTheDocument()
+  })
+
+  it('closes once its Save has run', async () => {
+    const state = opened(copiesWith(c => { c.part.amps[0].vol = 70 }))
+    await userEvent.setup().click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Save PART 1' }))
+    expect(state.commitPart).toHaveBeenCalledWith(0)
+    expect(state.hideDiffs).toHaveBeenCalled()
+  })
+
+  it('closes once its Reload has run', async () => {
+    const state = opened(copiesWith(c => { c.part.amps[0].vol = 70 }))
+    await userEvent.setup().click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Reload PART 1' }))
+    expect(state.reloadPart).toHaveBeenCalledWith(0)
+    expect(state.hideDiffs).toHaveBeenCalled()
+  })
+
+  it('refuses Save and Reload while a write is in flight', async () => {
+    opened(copiesWith(c => { c.part.amps[0].vol = 70 }), { isCommitting: true })
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('button', { name: 'Save PART 1' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Reload PART 1' })).toBeDisabled()
+  })
+
+  it('refuses Reload, but not Save, on a Part never saved', async () => {
+    opened({ saved: null, edited: copy(), identical: false }, { partsSavedState: [0, 1, 1, 1] })
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('button', { name: 'Reload PART 1' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Save PART 1' })).toBeEnabled()
+  })
+
+  it('counts several differences in the plural', async () => {
+    opened(copiesWith(c => { c.part.amps[0].vol = 70; c.part.amps[1].vol = 70 }))
+    expect(await screen.findByText(/- 2 diffs$/)).toBeInTheDocument()
+  })
+
+  it('shows a MIDI track with the MIDI badge, numbered as elsewhere in the app', async () => {
+    opened(copiesWith(c => { c.part.midi_notes[2].note = 60 }))
+    const row = await within(await screen.findByRole('dialog')).findByRole('row', { name: /NOTE/ })
+    expect(row.querySelector('.track-badge.midi')).toHaveTextContent('T3')
+  })
+
+  it('leaves the track empty for the crossfader, which belongs to no track', async () => {
+    opened(copiesWith(c => { c.scenes.scene_a = 3 }))
+    const row = await within(await screen.findByRole('dialog')).findByRole('row', { name: /CROSSFADER/ })
+    const [track] = within(row).getAllByRole('cell')
+    expect(track).toHaveTextContent('')
+    expect(track.querySelector('.track-badge')).toBeNull()
+  })
+})
+
+describe('the Part tab menu, further', () => {
+  const menuFor = (over: Partial<PartCommitState> = {}) => {
+    const state = commitState({ modifiedPartIds: new Set([1]), tabMenu: { partIndex: 1, x: 40, y: 60 }, ...over })
+    renderControls(state)
+    return { state, menu: screen.getByRole('menu') }
+  }
+
+  it('opens where the pointer was', () => {
+    const { menu } = menuFor()
+    expect(menu).toHaveStyle({ left: '40px', top: '60px' })
+  })
+
+  it('closes on Escape', () => {
+    const { state } = menuFor()
+    act(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })) })
+    expect(state.closeTabMenu).toHaveBeenCalled()
+  })
+
+  it('closes on a click outside it, and not on a click inside', () => {
+    const { state, menu } = menuFor()
+    act(() => { menu.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })) })
+    expect(state.closeTabMenu).not.toHaveBeenCalled()
+    act(() => { document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true })) })
+    expect(state.closeTabMenu).toHaveBeenCalled()
+  })
+
+  it('refuses Reload and Save while a write is in flight, but still shows the diffs', () => {
+    const { menu } = menuFor({ isReloading: true })
+    expect(within(menu).getByRole('menuitem', { name: 'Reload' })).toBeDisabled()
+    expect(within(menu).getByRole('menuitem', { name: 'Save' })).toBeDisabled()
+    expect(within(menu).getByRole('menuitem', { name: 'See diffs' })).toBeEnabled()
+  })
+
+  it('reloads the Part right-clicked', async () => {
+    const { state, menu } = menuFor()
+    await userEvent.setup().click(within(menu).getByRole('menuitem', { name: 'Reload' }))
+    expect(state.reloadPart).toHaveBeenCalledWith(1)
+    expect(state.closeTabMenu).toHaveBeenCalled()
+  })
+})
+
+describe('the d key, further', () => {
+  const press = (init: KeyboardEventInit) =>
+    act(() => { document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, ...init })) })
+
+  it('takes an upper-case D too', () => {
+    const state = commitState()
+    renderControls(state)
+    press({ key: 'D', shiftKey: true })
+    expect(state.showDiffs).toHaveBeenCalledWith(0)
+  })
+
+  it('leaves Ctrl, Cmd and Alt with D to whatever else they do', () => {
+    const state = commitState()
+    renderControls(state)
+    press({ key: 'd', ctrlKey: true })
+    press({ key: 'd', metaKey: true })
+    press({ key: 'd', altKey: true })
+    expect(state.showDiffs).not.toHaveBeenCalled()
+  })
+
+  it('leaves D to another window that is open', () => {
+    const state = commitState()
+    renderControls(state)
+    const other = document.createElement('div')
+    other.className = 'modal-overlay'
+    document.body.appendChild(other)
+    press({ key: 'd' })
+    expect(state.showDiffs).not.toHaveBeenCalled()
+    other.remove()
+  })
+
+  it('does nothing while more than one bank is on screen, as there is no one Part to mean', () => {
+    const state = commitState()
+    render(
+      <>
+        <PartSaveControls state={state} activePartIndex={0} partNames={NAMES} visible />
+        <PartSaveControls state={state} activePartIndex={0} partNames={NAMES} visible />
+      </>,
+    )
+    press({ key: 'd' })
+    expect(state.showDiffs).not.toHaveBeenCalled()
+  })
+
+  it('types a d into a text area or an editable field rather than opening anything', () => {
+    const state = commitState()
+    renderControls(state)
+    const area = document.createElement('textarea')
+    document.body.appendChild(area)
+    act(() => { area.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', bubbles: true })) })
+    expect(state.showDiffs).not.toHaveBeenCalled()
+    area.remove()
   })
 })

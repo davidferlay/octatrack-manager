@@ -45,7 +45,7 @@ the device first, save the project there, then open the same bank in the app.
 | # | Operation | Test | Steps | Pass Criteria |
 |---|-----------|------|-------|---------------|
 | PE19 | Mode | Edit controls hidden in View | Open the Parts tab in View mode | No Reload, Save, Save All or See diffs buttons are shown |
-| PE20 | Mode | Edit controls shown in Edit | Switch to Edit mode | Reload, Save, Save All and the See diffs icon appear, in that order |
+| PE20 | Mode | Edit controls shown in Edit | Switch to Edit mode | Reload, Save, Save All and See diffs appear |
 | PE21 | Mode | Keyboard toggle | Press E with no text field focused | Mode toggles between View and Edit |
 | PE22 | Mode | Values read-only in View | In View mode, click into a parameter value and type | Nothing changes; no save is triggered |
 | PE23 | Mode | Knobs inert in View | In View mode, drag a knob | The knob does not move and no value changes |
@@ -341,22 +341,26 @@ Up is more, down is less, throughout.
 | PE233 | Values | The widget drags too | Drag a parameter's knob rather than its readout | The value follows the drag |
 
 | PE234 | Values | A click on a two-setting field still flips it | Click SLIC on the SRC page | It switches ON, and again OFF: a click on a toggle inside a draggable field is a click, not a drag |
-| PE235 | Diffs | Lists what differs | Save a Part, change two values on different pages, press See diffs | Both are listed with their track, page, parameter, saved value and current value, read as the editor shows them; the heading counts them in grey |
+| PE235 | Diffs | Lists what differs | Save a Part, change two values on different pages, press See diffs | Both are listed with their track, page, parameter, saved value and current value, read as the editor shows them; the heading names the Part and counts them |
 | PE236 | Diffs | Matches the device | Change a value, open See diffs and note the Saved value, then press Reload in it | The value returns to what the Saved column said, and the window closes |
 | PE237 | Diffs | Only the Part on screen | Modify Parts 1 and 3, show Part 1, press See diffs | Only Part 1 is listed |
 | PE238 | Diffs | Scenes are listed | Change a scene lock and a crossfader end, press See diffs in the Parts or Scenes tab | The lock is listed under its scene and track, and the end under CROSSFADER |
 | PE239 | Diffs | Machine or effect changed | Change FX1 from FILTER to CHORUS, press See diffs | TYPE reads FILTER against CHORUS, and a knob that moved reads its FILTER name in the Saved column |
 | PE240 | Diffs | Never saved | Edit a Part the device has never saved, press See diffs | It says there is no saved copy yet, and lists nothing |
 | PE241 | Diffs | Edits turned back | Change a value, then set it back by hand, press See diffs | The Part is still marked modified, and the window says nothing differs |
-| PE242 | Diffs | Values marked in place | Change a value in Edit mode | Its value fades to orange, and hovering it shows the saved value; unchanged values are not marked |
+| PE242 | Diffs | Values marked in place | On a saved Part, change a value in Edit mode | Its value is marked as changed, and hovering it shows the saved value; unchanged values are not marked, and nothing is marked in View mode |
 | PE243 | Diffs | Marks clear on Save or Reload | With values marked, press Save, then edit and press Reload | No value is marked after either |
 | PE244 | Diffs | Nothing written | Open See diffs, close it, press Undo | Undo takes back the last edit, not anything See diffs did: reading both copies writes nothing |
-| PE245 | Diffs | Header fields marked | Change TRK and the slot on a Flex track | TRK and SLOT read in orange with the saved value on hover; CUE does not |
-| PE246 | Diffs | Machine and effect marked | Change a track's machine, then its FX1 effect | Each picker shows an asterisk at its top right, on the FX pages and on ALL; the FX2 picker, unchanged, shows none |
+| PE245 | Diffs | Header fields marked | On a saved Part, change TRK and the slot of a Flex track | TRK and SLOT are marked as changed, and hovering each shows the saved value; CUE is not marked |
+| PE246 | Diffs | Machine and effect marked | On a saved Part, change a track's machine, then its FX1 effect | Each picker shows an unsaved asterisk, on the FX pages and on ALL, and hovering it names the saved machine or effect; the unchanged FX2 picker shows none |
 | PE247 | Diffs | Tab menu | In Edit mode, right-click a Part tab other than the one on screen | Reload, Save and See diffs are offered and act on that Part; all three are refused on a Part without edits, Reload on one never saved |
-| PE248 | Diffs | Tooltips say which column wins | Hover Reload and Save in the See diffs window | Reload says it puts the Saved values back, Save that it makes the Current values the saved ones; Save is drawn like Reload and Close |
+| PE248 | Diffs | Tooltips say which column wins | Hover Reload and Save in the See diffs window | Reload says it puts the Saved values back, Save that it makes the Current values the saved ones |
 | PE249 | Diffs | D key | In Edit mode, on a Part holding edits, press D, then D again | The diffs open, then close; on a Part without edits, or while typing in a field, D does nothing |
 | PE250 | Diffs | D with All Banks | Show All Banks in Edit mode and press D | Nothing opens: there is no single Part on screen |
-| PE251 | Diffs | Parameter help | Hover a parameter's name in the diffs window | It shows the help the Parts editor gives that parameter; the rest of the row shows none, and pointing at a track lights up no row |
-| PE252 | Diffs | One block per track | Change values on T1 and T2 and a T1 scene lock, open the diffs | T1's rows come together, its scene lock after its own values, with one T1 badge centred beside them and no lines across it; a line separates T2 |
-| PE253 | Diffs | Opens at its size | Open the diffs on a Part with many changes | The window appears with its list already filled, without a placeholder that resizes |
+| PE251 | Diffs | Parameter help | Hover a parameter's name in the diffs window | It shows the help the Parts editor gives that parameter |
+| PE252 | Diffs | One block per track | Change values on T1 and T2, a MIDI track and a T1 scene lock, and move a crossfader end; open the diffs | T1's rows come together, its scene lock after its own values, with T1 named once; then T2, then the MIDI track, then the crossfader end |
+| PE253 | Diffs | Escape on the tab menu | In Edit mode, right-click a Part tab, press Escape | The menu closes and the project stays open |
+| PE254 | Diffs | Save from the window | Open See diffs on a saved Part holding edits, press Save in it | The Part is saved, the window closes, the Part tab loses its asterisk and no value is marked |
+| PE255 | Diffs | No tab menu in View mode | In View mode, right-click a Part tab | No Reload / Save / See diffs menu opens |
+| PE256 | Diffs | Every page is named | Change a MIDI track's NOTE, SRC SETUP TSNS, an LFO2 WAVE, a recorder RLEN and a CTRL1 CC number; open the diffs | Each is listed under its own page as the editor names it: NOTE, SRC SETUP, LFO SETUP (LFO2 WAVE), REC, CTRL1 SETUP (CC#), the MIDI track named as a MIDI track |
+| PE257 | Diffs | Sample slot numbering | Move a Flex track from slot 1 to slot 5, open the diffs | SLOT reads F001 against F005, counted from 1 as on the device |

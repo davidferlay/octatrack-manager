@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { partChanges } from './partDiff'
+import { machineHelp } from './partFieldHelp'
 import { copy } from './partDiff.fixtures'
 
 describe('partChanges', () => {
@@ -110,5 +111,122 @@ describe('partChanges', () => {
     current.scenes.scene_a = 3
     expect(partChanges(saved, current).map(r => `${r.track} ${r.page}`))
       .toEqual(['T1 Scene 3 AMP', 'T2 AMP', ' CROSSFADER'])
+  })
+
+  /** The rows for one change made to the current copy only. */
+  const changed = (edit: (current: ReturnType<typeof copy>) => void) => {
+    const current = copy()
+    edit(current)
+    return partChanges(copy(), current)
+  }
+
+  it('names a SETUP page knob after the machine, under SRC SETUP', () => {
+    expect(changed(c => { c.part.machines[0].machine_setup.tsns = 70 })).toMatchObject([
+      { track: 'T1', page: 'SRC SETUP', param: 'TSNS' },
+    ])
+  })
+
+  it('puts each page\'s setup fields on its SETUP page, named as the editor names them', () => {
+    const cases: [(c: ReturnType<typeof copy>) => void, string, string, string][] = [
+      [c => { c.part.amps[0].amp_setup_sync = 0 }, 'T1', 'AMP SETUP', 'SYNC'],
+      [c => { c.part.lfos[0].lfo2_wave = 1 }, 'T1', 'LFO SETUP', 'LFO2 WAVE'],
+      [c => { c.part.midi_notes[0].chan = 3 }, 'M1', 'NOTE SETUP', 'CHAN'],
+      [c => { c.part.midi_arps[0].key = 2 }, 'M1', 'ARP SETUP', 'KEY'],
+      [c => { c.part.midi_arps[0].spd = 6 }, 'M1', 'ARP', 'SPD'],
+      [c => { c.part.midi_lfos[0].spd1 = 40 }, 'M1', 'LFO', 'SPD1'],
+      [c => { c.part.midi_ctrl1s[0].cc2_num = 5 }, 'M1', 'CTRL1 SETUP', 'CC2#'],
+      [c => { c.part.midi_ctrl2s[0].cc5 = 9 }, 'M1', 'CTRL2', 'CC5'],
+    ]
+    for (const [edit, track, page, param] of cases) {
+      expect(changed(edit), `${page} ${param}`).toMatchObject([{ track, page, param }])
+    }
+  })
+
+  it('names an effect SETUP knob after the effect loaded in that block', () => {
+    // FX2 holds the delay, whose first setup knob is X
+    expect(changed(c => { (c.part.fxs[0] as unknown as Record<string, number>).fx2_setup1 = 5 }))
+      .toMatchObject([{ track: 'T1', page: 'FX2 SETUP', param: 'X' }])
+  })
+
+  it('names the recorder setup fields as the REC page does', () => {
+    expect(changed(c => {
+      c.part.recorders[0].rlen = 10
+      c.part.recorders[0].xloop = 0
+      c.part.recorders[0].in_ab = 2
+    }).map(r => `${r.page} ${r.param}`)).toEqual(['REC INAB', 'REC RLEN', 'REC LOOP'])
+  })
+
+  it('names a Sample Slot by its pool, counting from 1 as the device does', () => {
+    expect(changed(c => { c.part.machines[0].flex_slot_id = 4 })).toMatchObject([
+      { track: 'T1', page: 'SRC', param: 'SLOT', saved: 'F001', current: 'F005' },
+    ])
+    expect(changed(c => { c.part.machines[1].static_slot_id = 9 })).toMatchObject([
+      { track: 'T2', page: 'SRC', param: 'SLOT', saved: 'S002', current: 'S010' },
+    ])
+  })
+
+  it('reads CUE as a level, like TRK', () => {
+    expect(changed(c => { c.part.volumes[0].cue = 100 })).toMatchObject([
+      { track: 'T1', page: 'LEVELS', param: 'CUE', saved: '108', current: '100' },
+    ])
+  })
+
+  it('reads XVOL by its two settings', () => {
+    expect(changed(c => { c.part.amps[0].xvol = 0 })).toMatchObject([
+      { track: 'T1', page: 'AMP', param: 'XVOL', saved: 'MAX', current: 'MIN' },
+    ])
+  })
+
+  it('lists the B end of the crossfader too', () => {
+    expect(changed(c => { c.scenes.scene_b = 2 })).toMatchObject([
+      { track: '', page: 'CROSSFADER', param: 'B', saved: 'Scene 9', current: 'Scene 3' },
+    ])
+  })
+
+  it('lists a scene lock taken out, with "-" on the current side', () => {
+    const saved = copy()
+    saved.scenes.scenes[2].tracks[0].amp[3] = 80
+    expect(partChanges(saved, copy())).toMatchObject([
+      { track: 'T1', page: 'Scene 3 AMP', param: 'VOL', saved: '16', current: '-' },
+    ])
+  })
+
+  it('names a scene\'s crossfader level XLV, by its two settings', () => {
+    expect(changed(c => { c.scenes.scenes[0].tracks[1].xlv = 127 })).toMatchObject([
+      { track: 'T2', page: 'Scene 1 XLV', param: 'XLV', saved: '-', current: 'MAX' },
+    ])
+  })
+
+  it('names a scene\'s effect lock after the effect the track loads', () => {
+    expect(changed(c => { c.scenes.scenes[0].tracks[0].fx1[0] = 40 })).toMatchObject([
+      { track: 'T1', page: 'Scene 1 FLTR', param: 'BASE', saved: '-', current: '40' },
+    ])
+  })
+
+  it('still lists a difference at a position neither copy uses, so none goes unseen', () => {
+    // The DJ EQ leaves its second knob unused; a byte there that differs is still listed
+    const saved = copy()
+    const current = copy()
+    saved.part.fxs[0].fx1_type = 13
+    current.part.fxs[0].fx1_type = 13
+    ;(current.part.fxs[0] as unknown as Record<string, number>).fx1_param2 = 30
+    expect(partChanges(saved, current)).toMatchObject([
+      { track: 'T1', saved: '64', current: '30' },
+    ])
+  })
+
+  it('carries the machine\'s help on a machine change, and the effect\'s on an effect knob', () => {
+    const [machine] = changed(c => { c.part.machines[0].machine_type = 'Thru' })
+    expect(machine.help).toBe(machineHelp('Thru'))
+    const [knob] = changed(c => { c.part.fxs[0].fx1_param1 = 30 })
+    expect(knob.help).toMatch(/^BASE - /)
+  })
+
+  it('lists the audio tracks, then the MIDI tracks, then the crossfader', () => {
+    expect(changed(c => {
+      c.scenes.scene_a = 2
+      c.part.midi_notes[0].note = 60
+      c.part.amps[7].vol = 70
+    }).map(r => r.track)).toEqual(['T8', 'M1', ''])
   })
 })

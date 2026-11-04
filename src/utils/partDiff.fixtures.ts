@@ -1,7 +1,7 @@
 /** A plain factory Part and its scenes, in the shapes read_part_copies returns. */
 import type { PartData } from '../context/ProjectsContext'
 import type { ScenesResponse } from '../components/sceneModel'
-import type { PartCopy } from './partDiff'
+import type { PartCopy, PartCopies } from './partDiff'
 
 const tracks = Array.from({ length: 8 }, (_, i) => i)
 const lfo = (track_id: number) => ({
@@ -75,3 +75,10 @@ export function makeScenes(): ScenesResponse {
 }
 
 export const copy = (): PartCopy => ({ part: makePart(), scenes: makeScenes() })
+
+/** Both copies of a Part, the current one changed by `edit` and the saved one factory. */
+export const copiesWith = (edit: (current: PartCopy) => void): PartCopies => {
+  const edited = copy()
+  edit(edited)
+  return { saved: copy(), edited, identical: false }
+}
