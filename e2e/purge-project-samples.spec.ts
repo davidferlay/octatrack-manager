@@ -1,4 +1,4 @@
-import { test, expect, Page } from '@playwright/test'
+import { test, expect, Page, Locator } from '@playwright/test'
 
 /**
  * Purge Project Samples E2E Tests
@@ -443,6 +443,48 @@ test.describe('Purge Project Samples', () => {
     await page.getByRole('button', { name: 'Move files to folder' }).click()
     await expect(reviewCheckbox).toBeEnabled()
     await expect(reviewCheckbox).toBeChecked()
+  })
+
+  /** Hovers a button and checks it shows its meaning in border and label, unfilled. */
+  const hoverColours = async (button: Locator, colour: string) => {
+    await button.hover()
+    await expect(button).toHaveCSS('border-top-color', colour)
+    await expect(button).toHaveCSS('color', colour)
+    await expect(button).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  }
+
+  test('its buttons take the colour of what they do under the pointer, with no fill', async ({ page }) => {
+    await openPurgeOperation(page)
+    await page.addStyleTag({ content: '* { transition: none !important; }' })
+    await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
+
+    // At rest it is neutral, like the dialogs' buttons: the colour is what hovering adds
+    const execute = page.locator('.tools-execute-btn', { hasText: 'Execute' })
+    await expect(execute).toHaveCSS('border-top-color', 'rgb(85, 85, 85)')
+    await expect(execute).toHaveCSS('color', 'rgb(255, 255, 255)')
+    // Execute only opens the review: the app's orange
+    await hoverColours(execute, 'rgb(255, 102, 0)')
+    await execute.click()
+
+    // Moving the files to a folder writes: green
+    const modal = page.locator('.missing-samples-list-modal')
+    await hoverColours(modal.getByRole('button', { name: 'Apply Changes' }), 'rgb(16, 185, 129)')
+    await modal.getByRole('button', { name: 'Apply Changes' }).click()
+
+    // Close only leaves: light grey
+    await hoverColours(modal.getByRole('button', { name: 'Close' }), 'rgb(209, 213, 219)')
+  })
+
+  test('a delete turns a brighter red under the pointer', async ({ page }) => {
+    await openPurgeOperation(page)
+    await page.addStyleTag({ content: '* { transition: none !important; }' })
+    await expect(page.locator('.tools-missing-files-summary')).toContainText('1')
+    await page.getByRole('button', { name: 'Delete files' }).click()
+    await page.locator('.tools-execute-btn', { hasText: 'Execute' }).click()
+    await hoverColours(
+      page.locator('.missing-samples-list-modal').getByRole('button', { name: 'Apply Changes' }),
+      'rgb(255, 77, 94)',
+    )
   })
 
   test('Execute opens the review modal and Apply Changes calls purge_project_files', async ({ page }) => {

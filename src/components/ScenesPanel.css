@@ -1226,10 +1226,6 @@
   cursor: not-allowed;
 }
 
-.scene-randomize-modal .modal-button.primary:disabled:hover {
-  background-color: var(--elektron-orange);
-  border-color: var(--elektron-orange);
-}
 
 /* The write buttons share the header's first column with the bank name here, and the
    fader in the middle column keeps its width, so they sit tighter than on the Parts tab */

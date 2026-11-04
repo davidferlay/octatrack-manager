@@ -2640,7 +2640,7 @@ export function AudioPoolPage() {
                 <button className="modal-button" onClick={() => setCreateFolderModal({ isOpen: false, panel: 'dest', folderName: '' })}>
                   Cancel
                 </button>
-                <button className="modal-button primary" onClick={handleCreateFolderConfirm} disabled={!createFolderModal.folderName.trim()}>
+                <button className="modal-button primary commit" onClick={handleCreateFolderConfirm} disabled={!createFolderModal.folderName.trim()}>
                   Create
                 </button>
               </div>

@@ -39,7 +39,7 @@ export function RenameFileModal({ name, onCancel, onConfirm }: {
         <div className="modal-footer">
           <div className="modal-buttons-row">
             <button className="modal-button" onClick={onCancel}>Cancel</button>
-            <button className="modal-button primary" onClick={submit} disabled={!trimmed}>
+            <button className="modal-button primary commit" onClick={submit} disabled={!trimmed}>
               Rename
             </button>
           </div>

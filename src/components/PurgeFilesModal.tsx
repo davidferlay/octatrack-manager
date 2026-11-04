@@ -981,7 +981,7 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
                   <button className="fix-cancel-btn" onClick={onClose} title="Close without applying any changes">Cancel</button>
                   <div style={{ flex: 1 }} />
                   <button
-                    className={`tools-execute-btn${isDelete ? ' tools-execute-btn-danger' : ''}`}
+                    className={`tools-execute-btn ${isDelete ? 'tools-execute-btn-danger' : 'commit'}`}
                     onClick={start}
                   >
                     Apply Changes
@@ -1009,7 +1009,7 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
               {!slotsOnly && (
                 <div className="fix-done-actions">
                   <button
-                    className="fix-cancel-btn"
+                    className="fix-cancel-btn caution"
                     disabled={cancelRequested}
                     onClick={() => {
                       setCancelRequested(true);
@@ -1073,7 +1073,7 @@ export function PurgeFilesModal({ scope, units, mode, skipReview = false, slotsT
                 </div>
               )}
               <div className="fix-done-actions">
-                <button className="tools-execute-btn" onClick={onClose}>Close</button>
+                <button className="tools-execute-btn dismiss" onClick={onClose}>Close</button>
               </div>
             </div>
           )}

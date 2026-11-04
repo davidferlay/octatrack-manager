@@ -1544,15 +1544,3 @@
 .part-changes-table td.part-changes-current {
   color: #f59e0b;
 }
-
-/* Reload and Save in the diffs window: plain until pointed at, then outlined in the
-   colour of what they act on - the edits Reload throws away, the green of Save */
-.part-changes-modal .modal-button[aria-label^="Reload"]:hover:not(:disabled) {
-  border-color: #f59e0b;
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
-.part-changes-modal .modal-button[aria-label^="Save"]:hover:not(:disabled) {
-  border-color: #10b981;
-  background-color: rgba(255, 255, 255, 0.05);
-}
