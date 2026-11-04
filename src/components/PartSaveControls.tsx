@@ -1,6 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { invoke } from '@tauri-apps/api/core';
 import { WriteStatus, writeStatus } from '../types/writeStatus';
+import { useEscapeClose } from '../hooks/useEscapeClose';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { partChanges, type PartCopies } from '../utils/partDiff';
+import { TrackBadge } from './TrackBadge';
 
 /**
  * The device's own Reload / Save / Save All, and the state behind them.
@@ -15,6 +21,8 @@ import { WriteStatus, writeStatus } from '../types/writeStatus';
  *   exist, which is why a never-saved Part cannot be reloaded.
  * - Save copies the edited Part over the saved one.
  * - Save All does that for every Part holding edits.
+ * - See diffs lists what differs between the two copies of a Part, which is exactly
+ *   what its Save and Reload overwrite. A Part tab's right-click menu offers all three.
  */
 
 /** Bank state the device keeps: which Parts hold edits, and which have a saved copy. */
@@ -30,6 +38,16 @@ export interface PartCommitState {
   markModified: (partIndex: number) => void;
   /** Seeds the state from what the bank file already says, on load. */
   adoptBankState: (editedBitmask: number, savedState: number[]) => void;
+  /** Both copies of a Part, as they are on disk. */
+  readCopies: (partIndex: number) => Promise<PartCopies>;
+  /** The Part whose diffs are open, if any. */
+  diffsFor: number | null;
+  showDiffs: (partIndex: number) => void;
+  hideDiffs: () => void;
+  /** The Part tab right-clicked, and where. */
+  tabMenu: { partIndex: number; x: number; y: number } | null;
+  openTabMenu: (e: ReactMouseEvent, partIndex: number) => void;
+  closeTabMenu: () => void;
 }
 
 export function usePartCommits<T>({
@@ -125,13 +143,31 @@ export function usePartCommits<T>({
     });
   }, [projectPath, bankId, named, run, onReloaded]);
 
+  const readCopies = useCallback(
+    (partIndex: number) => invoke<PartCopies>('read_part_copies', {
+      path: projectPath, bankId, partId: partIndex,
+    }),
+    [projectPath, bankId],
+  );
+
+  // Shared here rather than kept by the buttons, so a Part tab's menu can open them too
+  const [diffsFor, setDiffsFor] = useState<number | null>(null);
+  const hideDiffs = useCallback(() => setDiffsFor(null), []);
+  const [tabMenu, setTabMenu] = useState<PartCommitState['tabMenu']>(null);
+  const openTabMenu = useCallback((e: ReactMouseEvent, partIndex: number) => {
+    e.preventDefault();
+    setTabMenu({ partIndex, x: e.clientX, y: e.clientY });
+  }, []);
+  const closeTabMenu = useCallback(() => setTabMenu(null), []);
+
   return {
     modifiedPartIds, partsSavedState, isCommitting, isReloading,
-    commitPart, commitAllParts, reloadPart, markModified, adoptBankState,
+    commitPart, commitAllParts, reloadPart, markModified, adoptBankState, readCopies,
+    diffsFor, showDiffs: setDiffsFor, hideDiffs, tabMenu, openTabMenu, closeTabMenu,
   };
 }
 
-/** The three buttons, in the device's own order. */
+/** The device's three buttons in its own order, then See diffs. */
 export function PartSaveControls({ state, activePartIndex, partNames, visible }: {
   state: PartCommitState;
   activePartIndex: number;
@@ -141,11 +177,36 @@ export function PartSaveControls({ state, activePartIndex, partNames, visible }:
 }) {
   const {
     modifiedPartIds, partsSavedState, isCommitting, isReloading,
-    commitPart, commitAllParts, reloadPart,
+    commitPart, commitAllParts, reloadPart, diffsFor, showDiffs, hideDiffs, tabMenu,
   } = state;
   const busy = isCommitting || isReloading;
   const dirty = modifiedPartIds.has(activePartIndex);
   const name = partNames[activePartIndex] || `Part ${activePartIndex + 1}`;
+
+  // D opens and closes the diffs of the Part on screen, in Edit mode
+  useEffect(() => {
+    if (!visible) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key !== 'd' && e.key !== 'D') || e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName ?? '')) return;
+      // ponytail: with All Banks on screen every bank's controls listen and none can
+      // claim the key, so it waits for a single bank. Route it through the selected
+      // bank if All Banks needs it.
+      if (document.querySelectorAll('.parts-edit-controls.visible').length !== 1) return;
+      if (diffsFor !== null) {
+        e.preventDefault();
+        hideDiffs();
+        return;
+      }
+      // Another window is open, and the key is not for the page behind it
+      if (document.querySelector('.modal-overlay') || !dirty) return;
+      e.preventDefault();
+      showDiffs(activePartIndex);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [visible, diffsFor, dirty, activePartIndex, showDiffs, hideDiffs]);
 
   return (
     <div className={`parts-edit-controls ${visible ? 'visible' : 'hidden'}`}>
@@ -183,6 +244,203 @@ export function PartSaveControls({ state, activePartIndex, partNames, visible }:
       >
         Save All
       </button>
+      <button
+        className="cancel-button parts-diffs-button"
+        aria-label="See diffs"
+        onClick={() => showDiffs(activePartIndex)}
+        disabled={!dirty}
+        title={dirty
+          ? `See diffs (D): what part ${name} holds against its saved copy, which Save and Reload overwrite`
+          : 'No diff to display'}
+      >
+        <i className="fas fa-not-equal" />
+      </button>
+      {diffsFor !== null && <PartDiffsModal state={state} partIndex={diffsFor} partNames={partNames} />}
+      {tabMenu && <PartTabMenu state={state} />}
     </div>
   );
+}
+
+/** Right-click on a Part tab: the same three actions, for that Part. */
+function PartTabMenu({ state }: { state: PartCommitState }) {
+  const { tabMenu, modifiedPartIds, partsSavedState, isCommitting, isReloading, closeTabMenu } = state;
+  const ref = useRef<HTMLDivElement>(null);
+  useEscapeClose(closeTabMenu);
+  useEffect(() => {
+    const outside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) closeTabMenu();
+    };
+    document.addEventListener('mousedown', outside);
+    return () => document.removeEventListener('mousedown', outside);
+  }, [closeTabMenu]);
+  if (!tabMenu) return null;
+
+  const index = tabMenu.partIndex;
+  const busy = isCommitting || isReloading;
+  const dirty = modifiedPartIds.has(index);
+  const item = (label: string, icon: string, enabled: boolean, act: () => void) => (
+    <button
+      role="menuitem"
+      className="context-menu-item"
+      disabled={!enabled}
+      onClick={() => { closeTabMenu(); act(); }}
+    >
+      <i className={`fas ${icon}`} /> {label}
+    </button>
+  );
+
+  return createPortal(
+    <div
+      ref={ref}
+      role="menu"
+      className="context-menu"
+      style={{ position: 'fixed', left: tabMenu.x, top: tabMenu.y }}
+    >
+      {item('Reload', 'fa-rotate-left', !busy && dirty && partsSavedState[index] === 1,
+        () => state.reloadPart(index))}
+      {item('Save', 'fa-floppy-disk', !busy && dirty, () => state.commitPart(index))}
+      <div className="context-menu-separator" />
+      {item('See diffs', 'fa-not-equal', dirty, () => state.showDiffs(index))}
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * Each value that differs between one Part's saved and edited copies, which is what
+ * its Save and Reload overwrite.
+ */
+function PartDiffsModal({ state, partIndex, partNames }: {
+  state: PartCommitState;
+  partIndex: number;
+  partNames: string[];
+}) {
+  const { partsSavedState, isCommitting, isReloading, readCopies, hideDiffs } = state;
+  useEscapeClose(hideDiffs);
+  useBodyScrollLock();
+  const busy = isCommitting || isReloading;
+  const name = partNames[partIndex] || `Part ${partIndex + 1}`;
+  const [read, setRead] = useState<PartCopies | string>();
+
+  // ponytail: reads the files, so an edit still inside the editors' 500 ms save
+  // debounce is missed - Save has the same window. Flush pending saves first if it bites.
+  useEffect(() => {
+    let live = true;
+    readCopies(partIndex).then(
+      copies => live && setRead(copies),
+      err => live && setRead(String(err)),
+    );
+    return () => { live = false; };
+  }, [partIndex, readCopies]);
+
+  const rows = read && typeof read !== 'string' && read.saved && !read.identical
+    ? partChanges(read.saved, read.edited)
+    : null;
+
+  const body = () => {
+    if (read === undefined) return null;
+    if (typeof read === 'string') return <p className="part-changes-note">Could not read the Part: {read}</p>;
+    if (!read.saved) {
+      return <p className="part-changes-note">No saved copy yet: Save makes the Part as it is now the one Reload goes back to.</p>;
+    }
+    if (read.identical) {
+      return <p className="part-changes-note">Nothing differs from the saved copy: the edits were turned back by hand.</p>;
+    }
+    if (!rows || rows.length === 0) {
+      return <p className="part-changes-note">The two copies differ only in data not shown by the editor.</p>;
+    }
+    return (
+      <table className="samples-table part-changes-table">
+        <thead>
+          <tr>
+            <th>Track</th><th>Page</th><th>Param</th>
+            <th className="part-changes-saved">Saved</th>
+            <th className="part-changes-current">Current</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => {
+            // The rows come a track at a time, so each track is named once, in one cell
+            // spanning all of its rows
+            const first = i === 0 || rows[i - 1].track !== r.track;
+            let span = 1;
+            while (first && rows[i + span]?.track === r.track) span++;
+            return (
+            <tr key={i} className={first && i > 0 ? 'part-changes-group' : undefined}>
+              {first && (
+                <td rowSpan={span} className="part-changes-track">
+                  {r.track && <TrackBadge trackId={trackIdOf(r.track)} />}
+                </td>
+              )}
+              <td>{r.page}</td>
+              <td title={r.help}>{r.param}</td>
+              <td className="part-changes-saved">{r.saved}</td>
+              <td className="part-changes-current">{r.current}</td>
+            </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    );
+  };
+
+  // Opened once both copies are in, at its full size, rather than as a placeholder
+  // that jumps when the list arrives - the read takes a few milliseconds
+  if (read === undefined) return null;
+
+  // Portalled: the controls slide in with a transform, which would otherwise pin a
+  // fixed overlay to them instead of to the window
+  return createPortal(
+    <div className="modal-overlay" onClick={hideDiffs}>
+      <div
+        className="modal-content part-changes-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Edited params against saved"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-header">
+          <h3>Edited params against saved</h3>
+          <h4 className="part-changes-heading">
+            Part {partIndex + 1}: {name}
+            {rows && rows.length > 0 && (
+              <span className="part-changes-count"> - {rows.length} {rows.length === 1 ? 'diff' : 'diffs'}</span>
+            )}
+          </h4>
+        </div>
+        <div className="modal-body">
+          {body()}
+        </div>
+        <div className="modal-footer">
+          <div className="modal-buttons-row">
+            <button
+              className="modal-button"
+              aria-label={`Reload ${name}`}
+              title="Reload puts the Saved values back"
+              disabled={busy || partsSavedState[partIndex] !== 1}
+              onClick={async () => { await state.reloadPart(partIndex); hideDiffs(); }}
+            >
+              Reload
+            </button>
+            <button
+              className="modal-button"
+              aria-label={`Save ${name}`}
+              title="Save makes the Current values the saved ones"
+              disabled={busy}
+              onClick={async () => { await state.commitPart(partIndex); hideDiffs(); }}
+            >
+              Save
+            </button>
+            <button className="modal-button" onClick={hideDiffs}>Close</button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/** T1-T8 are the audio tracks 0-7, M1-M8 the MIDI tracks 8-15, as TrackBadge counts them. */
+function trackIdOf(track: string): number {
+  return (track[0] === 'M' ? 8 : 0) + Number(track.slice(1)) - 1;
 }

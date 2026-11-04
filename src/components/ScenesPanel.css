@@ -367,6 +367,7 @@
   border: 1px solid #555;
   border-radius: 3px;
   outline: none;
+  transition: color 0.4s ease;
 }
 
 .crossfader-scene:not(:disabled) {
@@ -510,7 +511,7 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
   cursor: default;
   outline: none;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.4s ease;
 }
 
 .scene-value.editable {
@@ -535,6 +536,7 @@
   border-radius: 3px;
   cursor: pointer;
   font-family: inherit;
+  transition: color 0.4s ease;
 }
 
 /* The same element in both modes, just disabled, so entering Edit mode cannot change
@@ -1227,4 +1229,23 @@
 .scene-randomize-modal .modal-button.primary:disabled:hover {
   background-color: var(--elektron-orange);
   border-color: var(--elektron-orange);
+}
+
+/* The write buttons share the header's first column with the bank name here, and the
+   fader in the middle column keeps its width, so they sit tighter than on the Parts tab */
+.scenes-panel .parts-edit-controls {
+  margin-left: 10px;
+}
+
+.scenes-panel .parts-edit-controls button {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+/* A value that differs from the Part's saved copy, as on the Parts tab - a lock the
+   edits took out shows its dash in the same colour */
+.scene-value-wrap.param-changed .scene-value,
+.scene-add.param-changed,
+.crossfader-scene.param-changed {
+  color: #f59e0b;
 }

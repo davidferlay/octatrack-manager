@@ -421,6 +421,20 @@ async fn reload_part(path: String, bank_id: String, part_id: u8) -> Result<PartD
 }
 
 #[tauri::command]
+async fn read_part_copies(
+    path: String,
+    bank_id: String,
+    part_id: u8,
+) -> Result<project_reader::PartCopies, String> {
+    // Both copies of a Part, so the editors can show what Save and Reload would overwrite
+    tauri::async_runtime::spawn_blocking(move || {
+        project_reader::read_part_copies(&path, &bank_id, part_id)
+    })
+    .await
+    .unwrap()
+}
+
+#[tauri::command]
 async fn list_audio_directory(path: String) -> Result<Vec<AudioFileInfo>, String> {
     // Run on a blocking thread pool to avoid blocking the main event loop
     tauri::async_runtime::spawn_blocking(move || list_directory(&path))
@@ -1738,6 +1752,7 @@ pub fn run() {
             commit_part,
             commit_all_parts,
             reload_part,
+            read_part_copies,
             list_audio_directory,
             list_audio_files_recursive,
             list_audio_directory_recursive,

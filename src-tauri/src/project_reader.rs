@@ -2666,7 +2666,7 @@ pub fn read_scenes(
 
     Ok(scenes_for_part(
         &bank,
-        part_id,
+        &bank.parts.unsaved.0[part_id as usize],
         scene_end_mutes(project_path),
     ))
 }
@@ -2682,17 +2682,16 @@ pub fn read_bank_scenes(project_path: &str, bank_id: &str) -> Result<Vec<ScenesR
 
     let mutes = scene_end_mutes(project_path);
     Ok((0..4)
-        .map(|part_id| scenes_for_part(&bank, part_id, mutes))
+        .map(|part_id| scenes_for_part(&bank, &bank.parts.unsaved.0[part_id], mutes))
         .collect())
 }
 
 /// One Part's sixteen scenes, out of a bank already in hand.
 fn scenes_for_part(
     bank: &BankFile,
-    part_id: u8,
+    part: &ot_tools_io::parts::Part,
     (scene_a_muted, scene_b_muted): (bool, bool),
 ) -> ScenesResponse {
-    let part = &bank.parts.unsaved.0[part_id as usize];
     let six = |values: [u8; 6]| values.iter().map(|v| scene_lock(*v)).collect::<Vec<_>>();
 
     let scenes = part
@@ -2973,434 +2972,434 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
     let bank_data = BankFile::from_data_file(&bank_file_path)
         .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
 
-    let mut parts_data = Vec::new();
-
-    // Each bank has 4 parts (0-3)
-    // Use parts.unsaved which is the working state loaded by the Octatrack
-    // (parts.saved is only used when explicitly saving a Part via the Part menu)
-    for part_id in 0..4 {
-        let part = &bank_data.parts.unsaved.0[part_id as usize];
-
-        let mut machines = Vec::new();
-        let mut volumes = Vec::new();
-        let mut amps = Vec::new();
-        let mut lfos = Vec::new();
-        let mut fxs = Vec::new();
-        let mut recorders = Vec::new();
-
-        // Process 8 audio tracks (tracks 0-7)
-        for track_id in 0..8 {
-            // Get machine type (0=Static, 1=Flex, 2=Thru, 3=Neighbor, 4=Pickup)
-            let machine_type_id = part.audio_track_machine_types[track_id as usize];
-            let machine_type = machine_type_name(machine_type_id).to_string();
-
-            // Get machine parameters (SRC page)
-            let machine_params_values = &part.audio_track_machine_params[track_id as usize];
-            let machine_params_setup = &part.audio_track_machine_setup[track_id as usize];
-
-            let machine_params = match machine_type_id {
-                0 | 1 => {
-                    // Static or Flex machine
-                    let params_std = &machine_params_values.static_machine;
-                    MachineParamValues {
-                        ptch: Some(params_std.ptch),
-                        strt: Some(params_std.strt),
-                        len: Some(params_std.len),
-                        rate: Some(params_std.rate),
-                        rtrg: Some(params_std.rtrg),
-                        rtim: Some(params_std.rtim),
-                        in_ab: None,
-                        vol_ab: None,
-                        in_cd: None,
-                        vol_cd: None,
-                        dir: None,
-                        gain: None,
-                        op: None,
-                    }
-                }
-                2 => {
-                    // Thru machine
-                    let params_thru = &machine_params_values.thru_machine;
-                    MachineParamValues {
-                        ptch: None,
-                        strt: None,
-                        len: None,
-                        rate: None,
-                        rtrg: None,
-                        rtim: None,
-                        in_ab: Some(params_thru.in_ab),
-                        vol_ab: Some(params_thru.vol_ab),
-                        in_cd: Some(params_thru.in_cd),
-                        vol_cd: Some(params_thru.vol_cd),
-                        dir: None,
-                        gain: None,
-                        op: None,
-                    }
-                }
-                4 => {
-                    // Pickup machine
-                    let params_pickup = &machine_params_values.pickup_machine;
-                    MachineParamValues {
-                        ptch: Some(params_pickup.ptch),
-                        strt: None,
-                        len: Some(params_pickup.len),
-                        rate: None,
-                        rtrg: None,
-                        rtim: None,
-                        in_ab: None,
-                        vol_ab: None,
-                        in_cd: None,
-                        vol_cd: None,
-                        dir: Some(params_pickup.dir),
-                        gain: Some(params_pickup.gain),
-                        op: Some(params_pickup.op),
-                    }
-                }
-                _ => {
-                    // Neighbor (type 3) or unknown - no parameters
-                    MachineParamValues {
-                        ptch: None,
-                        strt: None,
-                        len: None,
-                        rate: None,
-                        rtrg: None,
-                        rtim: None,
-                        in_ab: None,
-                        vol_ab: None,
-                        in_cd: None,
-                        vol_cd: None,
-                        dir: None,
-                        gain: None,
-                        op: None,
-                    }
-                }
-            };
-
-            let machine_setup = match machine_type_id {
-                0 | 1 => {
-                    // Static or Flex machine
-                    let setup_std = &machine_params_setup.static_machine;
-                    MachineSetupValues {
-                        xloop: Some(setup_std.xloop),
-                        slic: Some(setup_std.slic),
-                        len: Some(setup_std.len),
-                        rate: Some(setup_std.rate),
-                        tstr: Some(setup_std.tstr),
-                        tsns: Some(setup_std.tsns),
-                    }
-                }
-                4 => {
-                    // Pickup machine
-                    let setup_pickup = &machine_params_setup.pickup_machine;
-                    MachineSetupValues {
-                        xloop: None,
-                        slic: None,
-                        len: None,
-                        rate: None,
-                        tstr: Some(setup_pickup.tstr),
-                        tsns: Some(setup_pickup.tsns),
-                    }
-                }
-                _ => {
-                    // Thru (type 2), Neighbor (type 3), or unknown - no setup params
-                    MachineSetupValues {
-                        xloop: None,
-                        slic: None,
-                        len: None,
-                        rate: None,
-                        tstr: None,
-                        tsns: None,
-                    }
-                }
-            };
-
-            let machine_slots = &part.audio_track_machine_slots[track_id as usize];
-            machines.push(PartTrackMachine {
-                track_id,
-                machine_type,
-                machine_params,
-                machine_setup,
-                static_slot_id: machine_slots.static_slot_id,
-                flex_slot_id: machine_slots.flex_slot_id,
-            });
-
-            let track_volume = &part.audio_track_volumes[track_id as usize];
-            volumes.push(PartTrackVolume {
-                track_id,
-                main: track_volume.main,
-                cue: track_volume.cue,
-            });
-
-            // Get AMP parameters
-            let amp_params = &part.audio_track_params_values[track_id as usize].amp;
-            let amp_setup = &part.audio_track_params_setup[track_id as usize].amp;
-
-            amps.push(PartTrackAmp {
-                track_id,
-                atk: amp_params.atk,
-                hold: amp_params.hold,
-                rel: amp_params.rel,
-                vol: amp_params.vol,
-                bal: amp_params.bal,
-                xvol: amp_params.f,
-                amp_setup_amp: amp_setup.amp,
-                amp_setup_sync: amp_setup.sync,
-                amp_setup_atck: amp_setup.atck,
-                amp_setup_fx1: amp_setup.fx1,
-                amp_setup_fx2: amp_setup.fx2,
-            });
-
-            // Get LFO parameters
-            let lfo_params = &part.audio_track_params_values[track_id as usize].lfo;
-            let lfo_setup_1 = &part.audio_track_params_setup[track_id as usize].lfo_setup_1;
-            let lfo_setup_2 = &part.audio_track_params_setup[track_id as usize].lfo_setup_2;
-
-            // Get custom LFO design (16-step waveform)
-            let custom_lfo_design = part.audio_tracks_custom_lfo_designs[track_id as usize]
-                .0
-                .to_vec();
-
-            lfos.push(PartTrackLfo {
-                track_id,
-                // MAIN LFO parameters
-                spd1: lfo_params.spd1,
-                spd2: lfo_params.spd2,
-                spd3: lfo_params.spd3,
-                dep1: lfo_params.dep1,
-                dep2: lfo_params.dep2,
-                dep3: lfo_params.dep3,
-                // SETUP LFO parameters (Setup 1)
-                lfo1_pmtr: lfo_setup_1.lfo1_pmtr,
-                lfo2_pmtr: lfo_setup_1.lfo2_pmtr,
-                lfo3_pmtr: lfo_setup_1.lfo3_pmtr,
-                lfo1_wave: lfo_setup_1.lfo1_wave,
-                lfo2_wave: lfo_setup_1.lfo2_wave,
-                lfo3_wave: lfo_setup_1.lfo3_wave,
-                // SETUP LFO parameters (Setup 2)
-                lfo1_mult: lfo_setup_2.lfo1_mult,
-                lfo2_mult: lfo_setup_2.lfo2_mult,
-                lfo3_mult: lfo_setup_2.lfo3_mult,
-                lfo1_trig: lfo_setup_2.lfo1_trig,
-                lfo2_trig: lfo_setup_2.lfo2_trig,
-                lfo3_trig: lfo_setup_2.lfo3_trig,
-                // CUSTOM LFO Design
-                custom_lfo_design,
-            });
-
-            // Get FX types and parameters
-            let fx1_type = part.audio_track_fx1[track_id as usize];
-            let fx2_type = part.audio_track_fx2[track_id as usize];
-
-            // Get FX1 main parameters
-            let fx1_params = &part.audio_track_params_values[track_id as usize].fx1;
-
-            // Get FX2 main parameters
-            let fx2_params = &part.audio_track_params_values[track_id as usize].fx2;
-
-            // Get FX1 setup parameters
-            let fx1_setup = &part.audio_track_params_setup[track_id as usize].fx1;
-
-            // The track recorder's two setup pages
-            let rec = &part.recorder_setup[track_id as usize];
-            recorders.push(PartTrackRecorder {
-                track_id,
-                in_ab: rec.src.in_ab,
-                in_cd: rec.src.in_cd,
-                rlen: rec.src.rlen,
-                trig: rec.src.trig,
-                src3: rec.src.src3,
-                xloop: rec.src.xloop,
-                fin: rec.proc.fin,
-                fout: rec.proc.fout,
-                ab: rec.proc.ab,
-                qrec: rec.proc.qrec,
-                qpl: rec.proc.qpl,
-                cd: rec.proc.cd,
-            });
-
-            // Get FX2 setup parameters
-            let fx2_setup = &part.audio_track_params_setup[track_id as usize].fx2;
-
-            fxs.push(PartTrackFx {
-                track_id,
-                fx1_type,
-                fx2_type,
-                // FX1 main parameters
-                fx1_param1: fx1_params.param_1,
-                fx1_param2: fx1_params.param_2,
-                fx1_param3: fx1_params.param_3,
-                fx1_param4: fx1_params.param_4,
-                fx1_param5: fx1_params.param_5,
-                fx1_param6: fx1_params.param_6,
-                // FX2 main parameters
-                fx2_param1: fx2_params.param_1,
-                fx2_param2: fx2_params.param_2,
-                fx2_param3: fx2_params.param_3,
-                fx2_param4: fx2_params.param_4,
-                fx2_param5: fx2_params.param_5,
-                fx2_param6: fx2_params.param_6,
-                // FX1 setup parameters
-                fx1_setup1: fx1_setup.setting1,
-                fx1_setup2: fx1_setup.setting2,
-                fx1_setup3: fx1_setup.setting3,
-                fx1_setup4: fx1_setup.setting4,
-                fx1_setup5: fx1_setup.setting5,
-                fx1_setup6: fx1_setup.setting6,
-                // FX2 setup parameters
-                fx2_setup1: fx2_setup.setting1,
-                fx2_setup2: fx2_setup.setting2,
-                fx2_setup3: fx2_setup.setting3,
-                fx2_setup4: fx2_setup.setting4,
-                fx2_setup5: fx2_setup.setting5,
-                fx2_setup6: fx2_setup.setting6,
-            });
-        }
-
-        // Process 8 MIDI tracks (tracks 0-7)
-        let mut midi_notes = Vec::new();
-        let mut midi_arps = Vec::new();
-        let mut midi_lfos = Vec::new();
-        let mut midi_ctrl1s = Vec::new();
-        let mut midi_ctrl2s = Vec::new();
-
-        for track_id in 0..8 {
-            // Get MIDI NOTE parameters
-            let midi_note_params = &part.midi_track_params_values[track_id as usize].midi;
-            let midi_note_setup = &part.midi_track_params_setup[track_id as usize].note;
-
-            midi_notes.push(PartTrackMidiNote {
-                track_id,
-                // NOTE MAIN parameters
-                note: midi_note_params.note,
-                vel: midi_note_params.vel,
-                len: midi_note_params.len,
-                not2: midi_note_params.not2,
-                not3: midi_note_params.not3,
-                not4: midi_note_params.not4,
-                // NOTE SETUP parameters
-                chan: midi_note_setup.chan,
-                bank: midi_note_setup.bank,
-                prog: midi_note_setup.prog,
-                sbnk: midi_note_setup.sbank,
-            });
-
-            // Get MIDI ARP parameters
-            let midi_arp_params = &part.midi_track_params_values[track_id as usize].arp;
-            let midi_arp_setup = &part.midi_track_params_setup[track_id as usize].arp;
-
-            midi_arps.push(PartTrackMidiArp {
-                track_id,
-                // ARP MAIN parameters
-                tran: midi_arp_params.tran,
-                leg: midi_arp_params.leg,
-                mode: midi_arp_params.mode,
-                spd: midi_arp_params.spd,
-                rnge: midi_arp_params.rnge,
-                nlen: midi_arp_params.nlen,
-                // ARP SETUP parameters
-                len: midi_arp_setup.len,
-                key: midi_arp_setup.key,
-            });
-
-            // Get MIDI LFO parameters (reuse audio LFO structure)
-            let midi_lfo_params = &part.midi_track_params_values[track_id as usize].lfo;
-            let midi_lfo_setup_1 = &part.midi_track_params_setup[track_id as usize].lfo1;
-            let midi_lfo_setup_2 = &part.midi_track_params_setup[track_id as usize].lfo2;
-
-            // Get custom LFO design for MIDI tracks
-            let midi_custom_lfo_design = part.midi_tracks_custom_lfos[track_id as usize].0.to_vec();
-
-            midi_lfos.push(PartTrackLfo {
-                track_id,
-                // MAIN LFO parameters
-                spd1: midi_lfo_params.spd1,
-                spd2: midi_lfo_params.spd2,
-                spd3: midi_lfo_params.spd3,
-                dep1: midi_lfo_params.dep1,
-                dep2: midi_lfo_params.dep2,
-                dep3: midi_lfo_params.dep3,
-                // SETUP LFO parameters (Setup 1)
-                lfo1_pmtr: midi_lfo_setup_1.lfo1_pmtr,
-                lfo2_pmtr: midi_lfo_setup_1.lfo2_pmtr,
-                lfo3_pmtr: midi_lfo_setup_1.lfo3_pmtr,
-                lfo1_wave: midi_lfo_setup_1.lfo1_wave,
-                lfo2_wave: midi_lfo_setup_1.lfo2_wave,
-                lfo3_wave: midi_lfo_setup_1.lfo3_wave,
-                // SETUP LFO parameters (Setup 2)
-                lfo1_mult: midi_lfo_setup_2.lfo1_mult,
-                lfo2_mult: midi_lfo_setup_2.lfo2_mult,
-                lfo3_mult: midi_lfo_setup_2.lfo3_mult,
-                lfo1_trig: midi_lfo_setup_2.lfo1_trig,
-                lfo2_trig: midi_lfo_setup_2.lfo2_trig,
-                lfo3_trig: midi_lfo_setup_2.lfo3_trig,
-                // CUSTOM LFO Design
-                custom_lfo_design: midi_custom_lfo_design,
-            });
-
-            // Get MIDI CTRL1 parameters
-            let midi_ctrl1_params = &part.midi_track_params_values[track_id as usize].ctrl1;
-            let midi_ctrl1_setup = &part.midi_track_params_setup[track_id as usize].ctrl1;
-
-            midi_ctrl1s.push(PartTrackMidiCtrl1 {
-                track_id,
-                // CTRL1 MAIN parameters
-                pb: midi_ctrl1_params.pb,
-                at: midi_ctrl1_params.at,
-                cc1: midi_ctrl1_params.cc1,
-                cc2: midi_ctrl1_params.cc2,
-                cc3: midi_ctrl1_params.cc3,
-                cc4: midi_ctrl1_params.cc4,
-                // CTRL1 SETUP parameters (CC numbers)
-                cc1_num: midi_ctrl1_setup.cc1,
-                cc2_num: midi_ctrl1_setup.cc2,
-                cc3_num: midi_ctrl1_setup.cc3,
-                cc4_num: midi_ctrl1_setup.cc4,
-            });
-
-            // Get MIDI CTRL2 parameters
-            let midi_ctrl2_params = &part.midi_track_params_values[track_id as usize].ctrl2;
-            let midi_ctrl2_setup = &part.midi_track_params_setup[track_id as usize].ctrl2;
-
-            midi_ctrl2s.push(PartTrackMidiCtrl2 {
-                track_id,
-                // CTRL2 MAIN parameters
-                cc5: midi_ctrl2_params.cc5,
-                cc6: midi_ctrl2_params.cc6,
-                cc7: midi_ctrl2_params.cc7,
-                cc8: midi_ctrl2_params.cc8,
-                cc9: midi_ctrl2_params.cc9,
-                cc10: midi_ctrl2_params.cc10,
-                // CTRL2 SETUP parameters (CC numbers)
-                cc5_num: midi_ctrl2_setup.cc5,
-                cc6_num: midi_ctrl2_setup.cc6,
-                cc7_num: midi_ctrl2_setup.cc7,
-                cc8_num: midi_ctrl2_setup.cc8,
-                cc9_num: midi_ctrl2_setup.cc9,
-                cc10_num: midi_ctrl2_setup.cc10,
-            });
-        }
-
-        parts_data.push(PartData {
-            part_id,
-            machines,
-            volumes,
-            amps,
-            lfos,
-            fxs,
-            recorders,
-            midi_notes,
-            midi_arps,
-            midi_lfos,
-            midi_ctrl1s,
-            midi_ctrl2s,
-        });
-    }
+    // parts.unsaved is the working state the device loads; parts.saved is only what
+    // its Reload Part goes back to (see read_part_copies)
+    let parts_data = (0..4)
+        .map(|part_id| part_data(&bank_data.parts.unsaved.0[part_id as usize], part_id))
+        .collect();
 
     Ok(PartsDataResponse {
         parts: parts_data,
         parts_edited_bitmask: bank_data.parts_edited_bitmask,
         parts_saved_state: bank_data.parts_saved_state,
     })
+}
+
+/// One Part, in the shape the editors read it.
+fn part_data(part: &ot_tools_io::parts::Part, part_id: u8) -> PartData {
+    let mut machines = Vec::new();
+    let mut volumes = Vec::new();
+    let mut amps = Vec::new();
+    let mut lfos = Vec::new();
+    let mut fxs = Vec::new();
+    let mut recorders = Vec::new();
+
+    // Process 8 audio tracks (tracks 0-7)
+    for track_id in 0..8 {
+        // Get machine type (0=Static, 1=Flex, 2=Thru, 3=Neighbor, 4=Pickup)
+        let machine_type_id = part.audio_track_machine_types[track_id as usize];
+        let machine_type = machine_type_name(machine_type_id).to_string();
+
+        // Get machine parameters (SRC page)
+        let machine_params_values = &part.audio_track_machine_params[track_id as usize];
+        let machine_params_setup = &part.audio_track_machine_setup[track_id as usize];
+
+        let machine_params = match machine_type_id {
+            0 | 1 => {
+                // Static or Flex machine
+                let params_std = &machine_params_values.static_machine;
+                MachineParamValues {
+                    ptch: Some(params_std.ptch),
+                    strt: Some(params_std.strt),
+                    len: Some(params_std.len),
+                    rate: Some(params_std.rate),
+                    rtrg: Some(params_std.rtrg),
+                    rtim: Some(params_std.rtim),
+                    in_ab: None,
+                    vol_ab: None,
+                    in_cd: None,
+                    vol_cd: None,
+                    dir: None,
+                    gain: None,
+                    op: None,
+                }
+            }
+            2 => {
+                // Thru machine
+                let params_thru = &machine_params_values.thru_machine;
+                MachineParamValues {
+                    ptch: None,
+                    strt: None,
+                    len: None,
+                    rate: None,
+                    rtrg: None,
+                    rtim: None,
+                    in_ab: Some(params_thru.in_ab),
+                    vol_ab: Some(params_thru.vol_ab),
+                    in_cd: Some(params_thru.in_cd),
+                    vol_cd: Some(params_thru.vol_cd),
+                    dir: None,
+                    gain: None,
+                    op: None,
+                }
+            }
+            4 => {
+                // Pickup machine
+                let params_pickup = &machine_params_values.pickup_machine;
+                MachineParamValues {
+                    ptch: Some(params_pickup.ptch),
+                    strt: None,
+                    len: Some(params_pickup.len),
+                    rate: None,
+                    rtrg: None,
+                    rtim: None,
+                    in_ab: None,
+                    vol_ab: None,
+                    in_cd: None,
+                    vol_cd: None,
+                    dir: Some(params_pickup.dir),
+                    gain: Some(params_pickup.gain),
+                    op: Some(params_pickup.op),
+                }
+            }
+            _ => {
+                // Neighbor (type 3) or unknown - no parameters
+                MachineParamValues {
+                    ptch: None,
+                    strt: None,
+                    len: None,
+                    rate: None,
+                    rtrg: None,
+                    rtim: None,
+                    in_ab: None,
+                    vol_ab: None,
+                    in_cd: None,
+                    vol_cd: None,
+                    dir: None,
+                    gain: None,
+                    op: None,
+                }
+            }
+        };
+
+        let machine_setup = match machine_type_id {
+            0 | 1 => {
+                // Static or Flex machine
+                let setup_std = &machine_params_setup.static_machine;
+                MachineSetupValues {
+                    xloop: Some(setup_std.xloop),
+                    slic: Some(setup_std.slic),
+                    len: Some(setup_std.len),
+                    rate: Some(setup_std.rate),
+                    tstr: Some(setup_std.tstr),
+                    tsns: Some(setup_std.tsns),
+                }
+            }
+            4 => {
+                // Pickup machine
+                let setup_pickup = &machine_params_setup.pickup_machine;
+                MachineSetupValues {
+                    xloop: None,
+                    slic: None,
+                    len: None,
+                    rate: None,
+                    tstr: Some(setup_pickup.tstr),
+                    tsns: Some(setup_pickup.tsns),
+                }
+            }
+            _ => {
+                // Thru (type 2), Neighbor (type 3), or unknown - no setup params
+                MachineSetupValues {
+                    xloop: None,
+                    slic: None,
+                    len: None,
+                    rate: None,
+                    tstr: None,
+                    tsns: None,
+                }
+            }
+        };
+
+        let machine_slots = &part.audio_track_machine_slots[track_id as usize];
+        machines.push(PartTrackMachine {
+            track_id,
+            machine_type,
+            machine_params,
+            machine_setup,
+            static_slot_id: machine_slots.static_slot_id,
+            flex_slot_id: machine_slots.flex_slot_id,
+        });
+
+        let track_volume = &part.audio_track_volumes[track_id as usize];
+        volumes.push(PartTrackVolume {
+            track_id,
+            main: track_volume.main,
+            cue: track_volume.cue,
+        });
+
+        // Get AMP parameters
+        let amp_params = &part.audio_track_params_values[track_id as usize].amp;
+        let amp_setup = &part.audio_track_params_setup[track_id as usize].amp;
+
+        amps.push(PartTrackAmp {
+            track_id,
+            atk: amp_params.atk,
+            hold: amp_params.hold,
+            rel: amp_params.rel,
+            vol: amp_params.vol,
+            bal: amp_params.bal,
+            xvol: amp_params.f,
+            amp_setup_amp: amp_setup.amp,
+            amp_setup_sync: amp_setup.sync,
+            amp_setup_atck: amp_setup.atck,
+            amp_setup_fx1: amp_setup.fx1,
+            amp_setup_fx2: amp_setup.fx2,
+        });
+
+        // Get LFO parameters
+        let lfo_params = &part.audio_track_params_values[track_id as usize].lfo;
+        let lfo_setup_1 = &part.audio_track_params_setup[track_id as usize].lfo_setup_1;
+        let lfo_setup_2 = &part.audio_track_params_setup[track_id as usize].lfo_setup_2;
+
+        // Get custom LFO design (16-step waveform)
+        let custom_lfo_design = part.audio_tracks_custom_lfo_designs[track_id as usize]
+            .0
+            .to_vec();
+
+        lfos.push(PartTrackLfo {
+            track_id,
+            // MAIN LFO parameters
+            spd1: lfo_params.spd1,
+            spd2: lfo_params.spd2,
+            spd3: lfo_params.spd3,
+            dep1: lfo_params.dep1,
+            dep2: lfo_params.dep2,
+            dep3: lfo_params.dep3,
+            // SETUP LFO parameters (Setup 1)
+            lfo1_pmtr: lfo_setup_1.lfo1_pmtr,
+            lfo2_pmtr: lfo_setup_1.lfo2_pmtr,
+            lfo3_pmtr: lfo_setup_1.lfo3_pmtr,
+            lfo1_wave: lfo_setup_1.lfo1_wave,
+            lfo2_wave: lfo_setup_1.lfo2_wave,
+            lfo3_wave: lfo_setup_1.lfo3_wave,
+            // SETUP LFO parameters (Setup 2)
+            lfo1_mult: lfo_setup_2.lfo1_mult,
+            lfo2_mult: lfo_setup_2.lfo2_mult,
+            lfo3_mult: lfo_setup_2.lfo3_mult,
+            lfo1_trig: lfo_setup_2.lfo1_trig,
+            lfo2_trig: lfo_setup_2.lfo2_trig,
+            lfo3_trig: lfo_setup_2.lfo3_trig,
+            // CUSTOM LFO Design
+            custom_lfo_design,
+        });
+
+        // Get FX types and parameters
+        let fx1_type = part.audio_track_fx1[track_id as usize];
+        let fx2_type = part.audio_track_fx2[track_id as usize];
+
+        // Get FX1 main parameters
+        let fx1_params = &part.audio_track_params_values[track_id as usize].fx1;
+
+        // Get FX2 main parameters
+        let fx2_params = &part.audio_track_params_values[track_id as usize].fx2;
+
+        // Get FX1 setup parameters
+        let fx1_setup = &part.audio_track_params_setup[track_id as usize].fx1;
+
+        // The track recorder's two setup pages
+        let rec = &part.recorder_setup[track_id as usize];
+        recorders.push(PartTrackRecorder {
+            track_id,
+            in_ab: rec.src.in_ab,
+            in_cd: rec.src.in_cd,
+            rlen: rec.src.rlen,
+            trig: rec.src.trig,
+            src3: rec.src.src3,
+            xloop: rec.src.xloop,
+            fin: rec.proc.fin,
+            fout: rec.proc.fout,
+            ab: rec.proc.ab,
+            qrec: rec.proc.qrec,
+            qpl: rec.proc.qpl,
+            cd: rec.proc.cd,
+        });
+
+        // Get FX2 setup parameters
+        let fx2_setup = &part.audio_track_params_setup[track_id as usize].fx2;
+
+        fxs.push(PartTrackFx {
+            track_id,
+            fx1_type,
+            fx2_type,
+            // FX1 main parameters
+            fx1_param1: fx1_params.param_1,
+            fx1_param2: fx1_params.param_2,
+            fx1_param3: fx1_params.param_3,
+            fx1_param4: fx1_params.param_4,
+            fx1_param5: fx1_params.param_5,
+            fx1_param6: fx1_params.param_6,
+            // FX2 main parameters
+            fx2_param1: fx2_params.param_1,
+            fx2_param2: fx2_params.param_2,
+            fx2_param3: fx2_params.param_3,
+            fx2_param4: fx2_params.param_4,
+            fx2_param5: fx2_params.param_5,
+            fx2_param6: fx2_params.param_6,
+            // FX1 setup parameters
+            fx1_setup1: fx1_setup.setting1,
+            fx1_setup2: fx1_setup.setting2,
+            fx1_setup3: fx1_setup.setting3,
+            fx1_setup4: fx1_setup.setting4,
+            fx1_setup5: fx1_setup.setting5,
+            fx1_setup6: fx1_setup.setting6,
+            // FX2 setup parameters
+            fx2_setup1: fx2_setup.setting1,
+            fx2_setup2: fx2_setup.setting2,
+            fx2_setup3: fx2_setup.setting3,
+            fx2_setup4: fx2_setup.setting4,
+            fx2_setup5: fx2_setup.setting5,
+            fx2_setup6: fx2_setup.setting6,
+        });
+    }
+
+    // Process 8 MIDI tracks (tracks 0-7)
+    let mut midi_notes = Vec::new();
+    let mut midi_arps = Vec::new();
+    let mut midi_lfos = Vec::new();
+    let mut midi_ctrl1s = Vec::new();
+    let mut midi_ctrl2s = Vec::new();
+
+    for track_id in 0..8 {
+        // Get MIDI NOTE parameters
+        let midi_note_params = &part.midi_track_params_values[track_id as usize].midi;
+        let midi_note_setup = &part.midi_track_params_setup[track_id as usize].note;
+
+        midi_notes.push(PartTrackMidiNote {
+            track_id,
+            // NOTE MAIN parameters
+            note: midi_note_params.note,
+            vel: midi_note_params.vel,
+            len: midi_note_params.len,
+            not2: midi_note_params.not2,
+            not3: midi_note_params.not3,
+            not4: midi_note_params.not4,
+            // NOTE SETUP parameters
+            chan: midi_note_setup.chan,
+            bank: midi_note_setup.bank,
+            prog: midi_note_setup.prog,
+            sbnk: midi_note_setup.sbank,
+        });
+
+        // Get MIDI ARP parameters
+        let midi_arp_params = &part.midi_track_params_values[track_id as usize].arp;
+        let midi_arp_setup = &part.midi_track_params_setup[track_id as usize].arp;
+
+        midi_arps.push(PartTrackMidiArp {
+            track_id,
+            // ARP MAIN parameters
+            tran: midi_arp_params.tran,
+            leg: midi_arp_params.leg,
+            mode: midi_arp_params.mode,
+            spd: midi_arp_params.spd,
+            rnge: midi_arp_params.rnge,
+            nlen: midi_arp_params.nlen,
+            // ARP SETUP parameters
+            len: midi_arp_setup.len,
+            key: midi_arp_setup.key,
+        });
+
+        // Get MIDI LFO parameters (reuse audio LFO structure)
+        let midi_lfo_params = &part.midi_track_params_values[track_id as usize].lfo;
+        let midi_lfo_setup_1 = &part.midi_track_params_setup[track_id as usize].lfo1;
+        let midi_lfo_setup_2 = &part.midi_track_params_setup[track_id as usize].lfo2;
+
+        // Get custom LFO design for MIDI tracks
+        let midi_custom_lfo_design = part.midi_tracks_custom_lfos[track_id as usize].0.to_vec();
+
+        midi_lfos.push(PartTrackLfo {
+            track_id,
+            // MAIN LFO parameters
+            spd1: midi_lfo_params.spd1,
+            spd2: midi_lfo_params.spd2,
+            spd3: midi_lfo_params.spd3,
+            dep1: midi_lfo_params.dep1,
+            dep2: midi_lfo_params.dep2,
+            dep3: midi_lfo_params.dep3,
+            // SETUP LFO parameters (Setup 1)
+            lfo1_pmtr: midi_lfo_setup_1.lfo1_pmtr,
+            lfo2_pmtr: midi_lfo_setup_1.lfo2_pmtr,
+            lfo3_pmtr: midi_lfo_setup_1.lfo3_pmtr,
+            lfo1_wave: midi_lfo_setup_1.lfo1_wave,
+            lfo2_wave: midi_lfo_setup_1.lfo2_wave,
+            lfo3_wave: midi_lfo_setup_1.lfo3_wave,
+            // SETUP LFO parameters (Setup 2)
+            lfo1_mult: midi_lfo_setup_2.lfo1_mult,
+            lfo2_mult: midi_lfo_setup_2.lfo2_mult,
+            lfo3_mult: midi_lfo_setup_2.lfo3_mult,
+            lfo1_trig: midi_lfo_setup_2.lfo1_trig,
+            lfo2_trig: midi_lfo_setup_2.lfo2_trig,
+            lfo3_trig: midi_lfo_setup_2.lfo3_trig,
+            // CUSTOM LFO Design
+            custom_lfo_design: midi_custom_lfo_design,
+        });
+
+        // Get MIDI CTRL1 parameters
+        let midi_ctrl1_params = &part.midi_track_params_values[track_id as usize].ctrl1;
+        let midi_ctrl1_setup = &part.midi_track_params_setup[track_id as usize].ctrl1;
+
+        midi_ctrl1s.push(PartTrackMidiCtrl1 {
+            track_id,
+            // CTRL1 MAIN parameters
+            pb: midi_ctrl1_params.pb,
+            at: midi_ctrl1_params.at,
+            cc1: midi_ctrl1_params.cc1,
+            cc2: midi_ctrl1_params.cc2,
+            cc3: midi_ctrl1_params.cc3,
+            cc4: midi_ctrl1_params.cc4,
+            // CTRL1 SETUP parameters (CC numbers)
+            cc1_num: midi_ctrl1_setup.cc1,
+            cc2_num: midi_ctrl1_setup.cc2,
+            cc3_num: midi_ctrl1_setup.cc3,
+            cc4_num: midi_ctrl1_setup.cc4,
+        });
+
+        // Get MIDI CTRL2 parameters
+        let midi_ctrl2_params = &part.midi_track_params_values[track_id as usize].ctrl2;
+        let midi_ctrl2_setup = &part.midi_track_params_setup[track_id as usize].ctrl2;
+
+        midi_ctrl2s.push(PartTrackMidiCtrl2 {
+            track_id,
+            // CTRL2 MAIN parameters
+            cc5: midi_ctrl2_params.cc5,
+            cc6: midi_ctrl2_params.cc6,
+            cc7: midi_ctrl2_params.cc7,
+            cc8: midi_ctrl2_params.cc8,
+            cc9: midi_ctrl2_params.cc9,
+            cc10: midi_ctrl2_params.cc10,
+            // CTRL2 SETUP parameters (CC numbers)
+            cc5_num: midi_ctrl2_setup.cc5,
+            cc6_num: midi_ctrl2_setup.cc6,
+            cc7_num: midi_ctrl2_setup.cc7,
+            cc8_num: midi_ctrl2_setup.cc8,
+            cc9_num: midi_ctrl2_setup.cc9,
+            cc10_num: midi_ctrl2_setup.cc10,
+        });
+    }
+
+    PartData {
+        part_id,
+        machines,
+        volumes,
+        amps,
+        lfos,
+        fxs,
+        recorders,
+        midi_notes,
+        midi_arps,
+        midi_lfos,
+        midi_ctrl1s,
+        midi_ctrl2s,
+    }
 }
 
 /// Save modified Parts data back to a bank file
@@ -4355,6 +4354,53 @@ pub fn reload_part_data(
         .into_iter()
         .find(|p| p.part_id == part_id)
         .ok_or_else(|| format!("Failed to find reloaded part {}", part_id))
+}
+
+/// One copy of a Part, as the Parts and Scenes editors read it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartCopy {
+    pub part: PartData,
+    pub scenes: ScenesResponse,
+}
+
+/// The two copies the device keeps of a Part, so what Save and Reload would
+/// overwrite can be shown before either is pressed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PartCopies {
+    /// What Reload Part goes back to. None until the Part is first saved.
+    pub saved: Option<PartCopy>,
+    /// What editing changes, and what the device plays.
+    pub edited: PartCopy,
+    /// Whether the two hold the same bytes, including the ones the editors do not
+    /// show. A Part can be flagged as edited and still be identical, once its edits
+    /// have been turned back by hand.
+    pub identical: bool,
+}
+
+/// Reads both copies of one Part. Writes nothing.
+pub fn read_part_copies(
+    project_path: &str,
+    bank_id: &str,
+    part_id: u8,
+) -> Result<PartCopies, String> {
+    if part_id >= 4 {
+        return Err(format!("Invalid part ID: {} (must be 0-3)", part_id));
+    }
+    let bank = BankFile::from_data_file(&bank_file_path(project_path, bank_id)?)
+        .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
+    let mutes = scene_end_mutes(project_path);
+    let idx = part_id as usize;
+    let copy = |part: &ot_tools_io::parts::Part| PartCopy {
+        part: part_data(part, part_id),
+        scenes: scenes_for_part(&bank, part, mutes),
+    };
+    let (saved, edited) = (&bank.parts.saved.0[idx], &bank.parts.unsaved.0[idx]);
+    let has_saved = bank.parts_saved_state[idx] == 1;
+    Ok(PartCopies {
+        saved: has_saved.then(|| copy(saved)),
+        edited: copy(edited),
+        identical: has_saved && saved == edited,
+    })
 }
 
 // ============================================================================
@@ -20825,6 +20871,76 @@ mod tests {
             // Should fail because part hasn't been committed/saved
             assert!(result.is_err());
             assert!(result.unwrap_err().contains("SAVE PART FIRST"));
+        }
+
+        /// Edits the working copy of Part 1, Bank A, the way the editors do.
+        fn edit_unsaved_part(
+            project: &TestProject,
+            edit: impl FnOnce(&mut ot_tools_io::parts::Part),
+        ) {
+            let bank_path = Path::new(&project.path).join("bank01.work");
+            let mut bank = BankFile::from_data_file(&bank_path).unwrap();
+            edit(&mut bank.parts.unsaved.0[0]);
+            bank.checksum = bank.calculate_checksum().unwrap();
+            bank.to_data_file(&bank_path).unwrap();
+        }
+
+        #[test]
+        fn part_copies_show_the_saved_and_the_edited_values() {
+            let project = TestProject::new();
+            commit_part_data(&project.path, "A", 0).unwrap();
+            let before = read_part_copies(&project.path, "A", 0).unwrap();
+            let saved_vol = before.edited.part.amps[0].vol;
+
+            edit_unsaved_part(&project, |part| {
+                part.audio_track_params_values[0].amp.vol = saved_vol.wrapping_add(8) % 128;
+                part.scenes[2].0[0].amp.vol = 80;
+            });
+            let copies = read_part_copies(&project.path, "A", 0).unwrap();
+
+            let saved = copies.saved.expect("a saved Part has a saved copy");
+            assert_eq!(saved.part.amps[0].vol, saved_vol);
+            assert_eq!(
+                copies.edited.part.amps[0].vol,
+                saved_vol.wrapping_add(8) % 128
+            );
+            // Scenes live in the Part, so Save and Reload carry them too
+            assert_eq!(saved.scenes.scenes[2].tracks[0].amp[3], None);
+            assert_eq!(copies.edited.scenes.scenes[2].tracks[0].amp[3], Some(80));
+            assert!(!copies.identical);
+        }
+
+        #[test]
+        fn part_copies_are_identical_right_after_a_save() {
+            let project = TestProject::new();
+            commit_part_data(&project.path, "A", 0).unwrap();
+
+            assert!(read_part_copies(&project.path, "A", 0).unwrap().identical);
+        }
+
+        #[test]
+        fn part_copies_see_a_difference_the_editor_does_not_show() {
+            // The comparison is over the whole Part, not over what the app reads of it
+            let project = TestProject::new();
+            commit_part_data(&project.path, "A", 0).unwrap();
+            edit_unsaved_part(&project, |part| part.audio_track_fx1[7] ^= 1);
+
+            assert!(!read_part_copies(&project.path, "A", 0).unwrap().identical);
+        }
+
+        #[test]
+        fn a_part_never_saved_has_no_saved_copy() {
+            let project = TestProject::new();
+            let copies = read_part_copies(&project.path, "A", 0).unwrap();
+
+            assert!(copies.saved.is_none());
+            assert_eq!(copies.edited.part.part_id, 0);
+        }
+
+        #[test]
+        fn part_copies_reject_an_invalid_part() {
+            let project = TestProject::new();
+            assert!(read_part_copies(&project.path, "A", 4).is_err());
         }
 
         #[test]

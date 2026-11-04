@@ -481,7 +481,7 @@
   cursor: default;
   -moz-appearance: textfield;
   outline: none;
-  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, color 0.4s ease;
 }
 
 .parts-track .param-value::-webkit-outer-spin-button,
@@ -867,7 +867,7 @@
 
 .save-button:disabled {
   opacity: 0.5;
-  cursor: not-allowed;
+  cursor: default;
 }
 
 .cancel-button {
@@ -881,7 +881,7 @@
 
 .cancel-button:disabled {
   opacity: 0.5;
-  cursor: not-allowed;
+  cursor: default;
 }
 
 /* All tab 2-row layout - use grid for perfect column alignment */
@@ -1415,4 +1415,144 @@
   cursor: default;
   color: #ffffff;
   opacity: 1;
+}
+
+/* A value that differs from the Part's saved copy reads in the edit borders' orange,
+   fading in as they do */
+.param-changed .param-value,
+.parts-track .param-changed .param-value {
+  color: #f59e0b;
+}
+
+/* A select cannot carry a mark of its own, so the machine picker sits in a wrapper that
+   puts the unsaved asterisk at its top right. The effect picker's wrapper already exists,
+   to size it, and takes the same mark. */
+.machine-type-field {
+  position: relative;
+  display: inline-flex;
+}
+
+.field-unsaved-mark {
+  position: absolute;
+  top: -7px;
+  right: -6px;
+  color: #f59e0b;
+  font-size: 14px;
+  font-weight: bold;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* The effect picker sits on the top edge of a section that clips what overflows it, so
+   its mark stays level with the picker rather than above it */
+.fx-type-field .field-unsaved-mark {
+  top: 0;
+  right: -8px;
+}
+
+/* See diffs: an icon after Save All, in a pale blue so it does not read as a write */
+.parts-edit-controls .parts-diffs-button {
+  padding-left: 10px;
+  padding-right: 10px;
+  background: #6f97c9;
+}
+
+.parts-edit-controls .parts-diffs-button:hover:not(:disabled) {
+  background: #5e86b8;
+}
+
+/* Edited against saved: what Save and Reload overwrite */
+.modal-content.part-changes-modal {
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The list scrolls, so the footer stays on screen however many values differ */
+.part-changes-modal .modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* The Part sits at the right of the title, in the header */
+.part-changes-heading {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.part-changes-count {
+  color: #999;
+  font-weight: normal;
+}
+
+.part-changes-table {
+  font-size: 0.95rem;
+}
+
+.part-changes-table th {
+  font-size: 0.9rem;
+}
+
+/* Everything but the track is centred - by class, since a track's later rows have
+   no track cell and start with the page */
+.part-changes-table th:not(:first-child),
+.part-changes-table td:not(.part-changes-track) {
+  text-align: center;
+}
+
+/* Where the next track starts */
+.part-changes-table tr.part-changes-group td {
+  border-top: 1px solid #555;
+}
+
+/* One cell for all of a track's rows, its badge centred on them. It belongs to none of
+   them, so it keeps the window's own background rather than lighting up with the first
+   row's hover, and pointing at it lights up no row. */
+.part-changes-table td.part-changes-track {
+  vertical-align: middle;
+  background-color: var(--elektron-dark-gray);
+}
+
+.part-changes-table tbody tr:has(> td.part-changes-track:hover) {
+  background-color: transparent;
+}
+
+/* The shared table bolds each row's first cell, which on a track's later rows is the
+   page: only the two values are bold here */
+.part-changes-table td:not(.part-changes-saved):not(.part-changes-current) {
+  font-weight: normal;
+}
+
+/* The two value columns are the point of the table: set apart from what names them */
+.part-changes-table .part-changes-saved {
+  border-left: 2px solid #555;
+}
+
+.part-changes-table td.part-changes-saved,
+.part-changes-table td.part-changes-current {
+  background: rgba(255, 255, 255, 0.04);
+  font-weight: 700;
+}
+
+.part-changes-note {
+  color: #aaa;
+  font-size: 0.85rem;
+}
+
+.part-changes-table td.part-changes-current {
+  color: #f59e0b;
+}
+
+/* Reload and Save in the diffs window: plain until pointed at, then outlined in the
+   colour of what they act on - the edits Reload throws away, the green of Save */
+.part-changes-modal .modal-button[aria-label^="Reload"]:hover:not(:disabled) {
+  border-color: #f59e0b;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.part-changes-modal .modal-button[aria-label^="Save"]:hover:not(:disabled) {
+  border-color: #10b981;
+  background-color: rgba(255, 255, 255, 0.05);
 }

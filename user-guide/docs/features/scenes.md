@@ -148,6 +148,7 @@ Scene data belongs to the Part, so scenes are saved exactly like [Part edits](./
 - Every change is written to the Part's working copy shortly after it is made, and the Part tab gains its unsaved asterisk.
 - Save commits the Part, Save All every modified Part of the bank.
 - Reload puts every scene of the Part back as it was last saved.
+- In Edit mode, a scene value or crossfader end that differs from the saved Part reads in orange, with the saved value on hover. See diffs, the icon after Save All, lists all of them along with the Part's other values - see [Seeing what Save and Reload overwrite](./parts-editor.md#4-seeing-what-save-and-reload-overwrite).
 - The [Undo and Redo](./undo-redo.md) buttons in the project header take scene edits back too, sharing one history with the rest of the project.
 
 :::warning

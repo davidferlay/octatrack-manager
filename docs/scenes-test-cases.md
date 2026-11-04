@@ -104,7 +104,7 @@ is shown and set on its own and never touches what a scene holds.
 | SC61 | Actions | Randomize stays legal | Randomize a scene holding a parameter with gaps in its range, several times | Every value is one the device's own encoder would produce |
 | SC62 | Actions | Randomize on an empty scene | Select a scene holding nothing | "Randomize" is refused |
 | SC63 | Actions | Randomize the device agrees | Randomize, save, then open the project on the device | The scene reads back the values the app showed |
-| SC64 | Saving | The header matches Parts | Open Scenes | The same bank header as Parts: name, Reload/Save/Save All, and the four Part tabs |
+| SC64 | Saving | The header matches Parts | Open Scenes | The same bank header as Parts: name, Reload/Save/Save All and the See diffs icon, and the four Part tabs |
 | SC65 | Saving | Nothing to save at first | Open Scenes in Edit mode without changing anything | Save and Save All are refused |
 | SC66 | Saving | A scene edit marks the Part | Change any scene value | The Part's tab gains its asterisk and Save becomes available |
 | SC67 | Saving | Save commits the Part | Press Save | The Part's saved copy is replaced and the asterisk clears |
@@ -233,3 +233,6 @@ is shown and set on its own and never touches what a scene holds.
 | SC165 | Scope | Audio tracks only | Open the Scenes page on a Part with MIDI tracks in use | Only T1-T8 are listed. The device stores scene data for the 8 audio tracks only, so there is nothing to show or edit for M1-M8 |
 | SC166 | Scope | Randomize does not reach MIDI | Open the Randomize modal with every scene and parameter selected | No MIDI track appears in the parameter list, and running it leaves every MIDI track's parameters as they were |
 | SC167 | Scope | Copy Scenes does not reach MIDI | Copy scenes between Parts | The destination Part's MIDI tracks are unchanged |
+| SC168 | Saving | See diffs lists scene edits | Change a scene lock, press See diffs in the Scenes header | The lock is listed with its scene, track and page, saved against current |
+| SC169 | Saving | Scene values marked | On a saved Part, change a scene lock and a crossfader end in Edit mode | Both read in orange, with the saved value on hover, in the Scene, Matrix and Compare views; a lock taken out shows its dash in orange |
+| SC170 | Saving | The fader keeps its width | Open Scenes in Edit mode in a 1280 px wide window | The four write controls, the fader and the Part tabs do not overlap, and the fader stays centred |

@@ -6,7 +6,7 @@
  */
 
 import {
-  FieldSpec, fieldSpec, machineParamLabels, machineParamFields,
+  FieldSpec, fieldSpec, formatSpecValue, machineParamLabels, machineParamFields,
   AMP_PARAM_FIELDS, LFO_PARAM_FIELDS, SCENE_XVOL_SPEC, SCENE_XLV_SPEC,
 } from '../utils/partFieldSpecs';
 import { getFxMainLabels, fxShortName } from '../utils/fxLabels';
@@ -104,6 +104,20 @@ export function slotsForTrack(
       index: 0, value: track.xlv, field: 'xlv',
     },
   ];
+}
+
+/** What a scene holds at one position of one track, null where it holds nothing. */
+export function lockAt(
+  data: ScenesResponse, sceneId: number, trackId: number, page: PageKey | 'xlv', index: number,
+): number | null {
+  const track = data.scenes[sceneId]?.tracks[trackId];
+  if (!track) return null;
+  return page === 'xlv' ? track.xlv : track[page][index] ?? null;
+}
+
+/** "Saved: ..." for a position whose saved copy holds something else. */
+export function savedNote(saved: number | null, spec: FieldSpec): string {
+  return `Saved: ${saved === null ? 'not held' : formatSpecValue(saved, spec)}`;
 }
 
 /** The same tracks with nothing held, for emptying a scene. */

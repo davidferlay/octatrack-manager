@@ -145,6 +145,36 @@ export default function PartsPanel({
   const activePartIndex = sharedActivePartIndex !== undefined ? sharedActivePartIndex : localActivePartIndex;
   const setActivePartIndex = onSharedActivePartChange !== undefined ? onSharedActivePartChange : setLocalActivePartIndex;
 
+  // The saved copy of the Part on screen, so a field that differs from it can say what
+  // Save and Reload would overwrite. Only read while that Part holds edits and has one.
+  const [savedPart, setSavedPart] = useState<PartData | null>(null);
+  const comparing = isEditMode && modifiedPartIds.has(activePartIndex)
+    && commits.partsSavedState[activePartIndex] === 1;
+  const { readCopies } = commits;
+  useEffect(() => {
+    if (!comparing) {
+      setSavedPart(null);
+      return;
+    }
+    let live = true;
+    readCopies(activePartIndex).then(
+      copies => live && setSavedPart(copies.saved?.part ?? null),
+      () => live && setSavedPart(null),
+    );
+    return () => { live = false; };
+  }, [comparing, activePartIndex, readCopies, reloadKey]);
+
+  /** What the saved copy holds for a field, or undefined when nothing is compared. */
+  const savedValueOf = (
+    partId: number, section: keyof PartData, trackId: number, field: string,
+  ): number | string | undefined => {
+    if (savedPart?.part_id !== partId) return undefined;
+    const entry = (savedPart[section] as unknown as Record<string, unknown>[])[trackId];
+    const value = field.split('.')
+      .reduce<unknown>((at, key) => (at as Record<string, unknown> | undefined)?.[key], entry);
+    return typeof value === 'number' || typeof value === 'string' ? value : undefined;
+  };
+
   // Determine if selected track is MIDI (tracks 8-15 or ALL_MIDI_TRACKS) or Audio (tracks 0-7 or ALL_AUDIO_TRACKS)
   const isMidiTrack = selectedTrack !== undefined && (selectedTrack >= 8 || selectedTrack === ALL_MIDI_TRACKS);
 
@@ -557,9 +587,11 @@ export default function PartsPanel({
     const help = fieldHelp(specKey, machineType, { label, fxType });
 
     const displayValue = value ?? spec.default;
-    const formattedValue = formatter
-      ? formatter(displayValue)
-      : formatSpecValue(displayValue, spec);
+    const format = (v: number) => (formatter ? formatter(v) : formatSpecValue(v, spec));
+    const formattedValue = format(displayValue);
+
+    const savedValue = savedValueOf(partId, section, trackId, field);
+    const changed = typeof savedValue === 'number' && savedValue !== value;
 
     // updatePartParam debounces its own save and reads the latest state when it fires,
     // so there is nothing to save here - doing it now would write the previous value.
@@ -626,10 +658,11 @@ export default function PartsPanel({
 
     return (
       <WheelStepper
-        className="param-item"
+        className={`param-item${changed ? ' param-changed' : ''}`}
         key={key}
         step={stepValue}
-        title={helpTitle(label, help)}
+        title={[helpTitle(label, help), changed && `Saved: ${format(savedValue as number)}`]
+          .filter(Boolean).join('\n') || undefined}
       >
         <span className="param-label">{label}</span>
         <div className="param-control">{indicator}</div>
@@ -916,20 +949,24 @@ export default function PartsPanel({
     const assigned = pool.find(slot => slot.slot_id === current + 1);
     const filename = assigned?.path ? assigned.path.split(/[\\/]/).pop() : '(empty)';
     const label = `${prefix}${String(current + 1).padStart(3, '0')}`;
+    const saved = savedValueOf(activePart.part_id, 'machines', machine.track_id,
+      isStatic ? 'static_slot_id' : 'flex_slot_id');
+    const changed = saved !== undefined && saved !== current;
 
     // Slot number only: a filename never fits a header without either truncating to
     // uselessness or shoving the rest of the row around. The name is in the tooltip,
     // and in full in the picker.
     return (
       <button
-        className="parts-level parts-sample-field"
+        className={`parts-level parts-sample-field${changed ? ' param-changed' : ''}`}
         disabled={!isEditMode}
         title={[
           `SLOT ${label} - ${filename}`,
+          changed ? `Saved: ${prefix}${String(Number(saved) + 1).padStart(3, '0')}` : null,
           `The ${isStatic ? 'Static' : 'Flex'} Sample Slot this machine plays. It belongs to`
             + ' this Part and this track, so another Part can point the same track elsewhere.',
           isEditMode ? 'Click to pick another slot.' : 'Turn on Edit mode to change it.',
-        ].join('\n')}
+        ].filter(Boolean).join('\n')}
         onClick={() => setSlotPicker({
           partId: activePart.part_id,
           trackId: machine.track_id,
@@ -960,19 +997,25 @@ export default function PartsPanel({
         <span className="machine-type" title={machineHelp(machineType)}>{machineType}</span>
       );
     }
+    const saved = savedValueOf(activePart.part_id, 'machines', trackId, 'machine_type');
+    const changed = saved !== undefined && saved !== machineType;
     return (
-      <select
-        className="machine-type machine-type-select editable"
-        value={machineType}
-        title={machineHelp(machineType)}
-        onChange={e => changeMachineType(
-          activePart.part_id, trackId, e.target.value as MachineType,
-        )}
-      >
-        {choices.map(name => (
-          <option key={name} value={name}>{name}</option>
-        ))}
-      </select>
+      <span className="machine-type-field">
+        <select
+          className="machine-type machine-type-select editable"
+          value={machineType}
+          title={[machineHelp(machineType), changed ? `Saved: ${saved}` : null]
+            .filter(Boolean).join('\n') || undefined}
+          onChange={e => changeMachineType(
+            activePart.part_id, trackId, e.target.value as MachineType,
+          )}
+        >
+          {choices.map(name => (
+            <option key={name} value={name}>{name}</option>
+          ))}
+        </select>
+        {changed && <span className="field-unsaved-mark" aria-hidden="true">*</span>}
+      </span>
     );
   };
 
@@ -998,11 +1041,14 @@ export default function PartsPanel({
     // The wrapper carries the current name so the picker can be sized to it. A select
     // is otherwise as wide as its widest option - SPRING REVERB - which in a centred
     // heading shoves everything before it sideways the moment Edit mode goes on.
+    const saved = savedValueOf(activePart.part_id, 'fxs', trackId, `${slot}_type`);
+    const changed = typeof saved === 'number' && saved !== fxType;
     return (
       <span className="fx-type-field" data-value={formatFxType(fxType)}>
         <select
           className="fx-type-select editable"
           value={fxType}
+          title={changed ? `Saved: ${formatFxType(saved)}` : undefined}
           onChange={e => changeFxType(
             activePart.part_id, trackId, slot, parseInt(e.target.value, 10),
           )}
@@ -1014,6 +1060,7 @@ export default function PartsPanel({
             <option value={fxType}>{formatFxType(fxType)}</option>
           )}
         </select>
+        {changed && <span className="field-unsaved-mark" aria-hidden="true">*</span>}
       </span>
     );
   };
@@ -1036,12 +1083,17 @@ export default function PartsPanel({
       const commit = (raw: number) => updatePartParam(
         activePart.part_id, 'volumes', trackId, key, clampToSpec(raw, TRACK_LEVEL_SPEC),
       );
+      const saved = savedValueOf(activePart.part_id, 'volumes', trackId, key);
+      const changed = typeof saved === 'number' && saved !== value;
       return (
         <WheelStepper
-          className="parts-level"
+          className={`parts-level${changed ? ' param-changed' : ''}`}
           key={key}
           step={isEditMode ? (by: 1 | -1) => commit(stepInSpec(value, by, TRACK_LEVEL_SPEC)) : null}
-          title={LEVEL_HELP[label as keyof typeof LEVEL_HELP]}
+          title={[
+            LEVEL_HELP[label as keyof typeof LEVEL_HELP],
+            changed ? `Saved: ${formatSpecValue(saved, TRACK_LEVEL_SPEC)}` : null,
+          ].filter(Boolean).join('\n')}
         >
           <span className="parts-level-label">{label}</span>
           <input
@@ -2658,6 +2710,7 @@ export default function PartsPanel({
               key={index}
               className={`parts-part-tab ${activePartIndex === index ? 'active' : ''} ${modifiedPartIds.has(index) ? 'modified' : ''}`}
               onClick={() => setActivePartIndex(index)}
+              onContextMenu={isEditMode ? e => commits.openTabMenu(e, index) : undefined}
               title={[
                 `${partName} (${index + 1}) - ${sectionHelp('Part')}`,
                 modifiedPartIds.has(index)

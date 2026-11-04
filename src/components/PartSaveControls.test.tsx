@@ -1,8 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, act, renderHook } from '@testing-library/react'
+import { render, screen, act, renderHook, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { usePartCommits, PartSaveControls, PartCommitState } from './PartSaveControls'
 import { WriteStatus } from '../types/writeStatus'
+import { copy } from '../utils/partDiff.fixtures'
+import type { PartCopies } from '../utils/partDiff'
 
 const invokeMock = vi.fn()
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }))
@@ -339,16 +341,23 @@ describe('the buttons', () => {
     reloadPart: vi.fn(),
     markModified: vi.fn(),
     adoptBankState: vi.fn(),
+    readCopies: vi.fn(),
+    diffsFor: null,
+    showDiffs: vi.fn(),
+    hideDiffs: vi.fn(),
+    tabMenu: null,
+    openTabMenu: vi.fn(),
+    closeTabMenu: vi.fn(),
     ...over,
   })
 
-  const button = (name: 'Reload' | 'Save' | 'Save All') =>
+  const button = (name: 'See diffs' | 'Reload' | 'Save' | 'Save All') =>
     screen.getByRole('button', { name })
 
-  it('offers all three, in the device order', () => {
+  it('offers the device\'s three in its order, then See diffs', () => {
     render(<Buttons state={idle()} />)
-    expect(screen.getAllByRole('button').map(b => b.textContent))
-      .toEqual(['Reload', 'Save', 'Save All'])
+    expect(screen.getAllByRole('button').map(b => b.getAttribute('aria-label') ?? b.textContent))
+      .toEqual(['Reload', 'Save', 'Save All', 'See diffs'])
   })
 
   it('refuses everything on a Part with no changes', () => {
@@ -437,11 +446,316 @@ describe('the buttons', () => {
   it('keeps its space outside Edit mode, so the header does not resize', () => {
     const { container } = render(<Buttons state={idle()} visible={false} />)
     expect(container.querySelector('.parts-edit-controls')).toHaveClass('hidden')
-    expect(screen.getAllByRole('button')).toHaveLength(3)
+    expect(screen.getAllByRole('button')).toHaveLength(4)
   })
 
   it('shows itself in Edit mode', () => {
     const { container } = render(<Buttons state={idle()} visible />)
     expect(container.querySelector('.parts-edit-controls')).toHaveClass('visible')
+  })
+})
+
+describe('the diffs window', () => {
+  const idle = (over: Partial<PartCommitState> = {}): PartCommitState => ({
+    modifiedPartIds: new Set<number>(),
+    partsSavedState: [1, 1, 1, 1],
+    isCommitting: false,
+    isReloading: false,
+    commitPart: vi.fn(),
+    commitAllParts: vi.fn(),
+    reloadPart: vi.fn(),
+    markModified: vi.fn(),
+    adoptBankState: vi.fn(),
+    readCopies: vi.fn(),
+    diffsFor: null,
+    showDiffs: vi.fn(),
+    hideDiffs: vi.fn(),
+    tabMenu: null,
+    openTabMenu: vi.fn(),
+    closeTabMenu: vi.fn(),
+    ...over,
+  })
+
+  /** Part copies where the edited one has T1's VOL moved from 100 to 108. */
+  const volMoved = (): PartCopies => {
+    const saved = copy()
+    const edited = copy()
+    saved.part.amps[0].vol = 100
+    edited.part.amps[0].vol = 108
+    return { saved, edited, identical: false }
+  }
+
+  const controls = (state: PartCommitState, activePartIndex = 0) =>
+    render(<PartSaveControls state={state} activePartIndex={activePartIndex} partNames={NAMES} visible />)
+
+  it('is opened by See diffs, for the Part on screen', async () => {
+    const state = idle({ modifiedPartIds: new Set([2]) })
+    controls(state, 2)
+    await userEvent.setup().click(screen.getByRole('button', { name: 'See diffs' }))
+    expect(state.showDiffs).toHaveBeenCalledWith(2)
+  })
+
+  it('is refused while the Part on screen holds no edits, whatever the others hold', () => {
+    controls(idle({ modifiedPartIds: new Set([1]) }), 0)
+    expect(screen.getByRole('button', { name: 'See diffs' })).toBeDisabled()
+  })
+
+  it('lists each value that differs, saved against current', async () => {
+    const state = idle({ modifiedPartIds: new Set([0]), diffsFor: 0, readCopies: vi.fn().mockResolvedValue(volMoved()) })
+    controls(state)
+    const dialog = await screen.findByRole('dialog', { name: 'Edited params against saved' })
+    const row = await within(dialog).findByRole('row', { name: /VOL/ })
+    expect(within(row).getAllByRole('cell').map(c => c.textContent))
+      .toEqual(['T1', 'AMP', 'VOL', '36', '44'])
+    expect(within(dialog).getByText(/- 1 diff$/)).toBeInTheDocument()
+  })
+
+  it('lists only the Part it was opened for', async () => {
+    const state = idle({ modifiedPartIds: new Set([0, 2]), diffsFor: 2, readCopies: vi.fn().mockResolvedValue(volMoved()) })
+    controls(state, 0)
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByRole('heading', { name: /PART 3/ })).toBeInTheDocument()
+    expect(within(dialog).queryByRole('heading', { name: /PART 1/ })).not.toBeInTheDocument()
+    expect(state.readCopies).toHaveBeenCalledTimes(1)
+    expect(state.readCopies).toHaveBeenCalledWith(2)
+  })
+
+  it('says a Part never saved has no saved copy to compare with', async () => {
+    const copies: PartCopies = { saved: null, edited: copy(), identical: false }
+    controls(idle({ modifiedPartIds: new Set([0]), diffsFor: 0, readCopies: vi.fn().mockResolvedValue(copies) }))
+    expect(await screen.findByText(/No saved copy yet/)).toBeInTheDocument()
+  })
+
+  it('says when edits were turned back by hand and nothing differs any more', async () => {
+    const copies: PartCopies = { saved: copy(), edited: copy(), identical: true }
+    controls(idle({ modifiedPartIds: new Set([0]), diffsFor: 0, readCopies: vi.fn().mockResolvedValue(copies) }))
+    expect(await screen.findByText(/Nothing differs/)).toBeInTheDocument()
+  })
+
+  it('says when the copies differ only where the editors do not look', async () => {
+    const copies: PartCopies = { saved: copy(), edited: copy(), identical: false }
+    controls(idle({ modifiedPartIds: new Set([0]), diffsFor: 0, readCopies: vi.fn().mockResolvedValue(copies) }))
+    expect(await screen.findByText(/not shown by the editor/)).toBeInTheDocument()
+  })
+
+  it('saves or reloads that Part, each button saying which column it keeps', async () => {
+    const state = idle({ modifiedPartIds: new Set([2]), diffsFor: 2, readCopies: vi.fn().mockResolvedValue(volMoved()) })
+    controls(state, 0)
+    const dialog = await screen.findByRole('dialog')
+    const save = within(dialog).getByRole('button', { name: 'Save PART 3' })
+    const reload = within(dialog).getByRole('button', { name: 'Reload PART 3' })
+    expect(save).toHaveAttribute('title', expect.stringMatching(/Current values the saved ones/))
+    expect(reload).toHaveAttribute('title', expect.stringMatching(/Saved values back/))
+    const user = userEvent.setup()
+    await user.click(save)
+    expect(state.commitPart).toHaveBeenCalledWith(2)
+    await user.click(reload)
+    expect(state.reloadPart).toHaveBeenCalledWith(2)
+  })
+
+  it('opens only once both copies are read, so it does not change size as it fills', () => {
+    controls(idle({ modifiedPartIds: new Set([0]), diffsFor: 0, readCopies: vi.fn().mockReturnValue(new Promise(() => {})) }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('names each track once, in one cell spanning its rows', async () => {
+    const saved = copy()
+    const edited = copy()
+    edited.part.amps[0].vol = 70
+    edited.part.amps[0].bal = 70
+    edited.part.amps[1].vol = 70
+    controls(idle({ modifiedPartIds: new Set([0]), diffsFor: 0, readCopies: vi.fn().mockResolvedValue({ saved, edited, identical: false }) }))
+    const dialog = await screen.findByRole('dialog')
+    const [first, second, third] = within(dialog).getAllByRole('row').slice(1)
+    const t1 = within(first).getAllByRole('cell')[0]
+    expect(t1).toHaveTextContent('T1')
+    expect(t1).toHaveAttribute('rowspan', '2')
+    // The second T1 row has no track cell of its own: it starts with the page
+    expect(within(second).getAllByRole('cell').map(c => c.textContent)).toEqual(['AMP', 'BAL', '0', '6'])
+    expect(within(third).getAllByRole('cell')[0]).toHaveTextContent('T2')
+  })
+
+  it('closes with Close', async () => {
+    const state = idle({ modifiedPartIds: new Set([0]), diffsFor: 0, readCopies: vi.fn().mockResolvedValue(volMoved()) })
+    controls(state)
+    await userEvent.setup().click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Close' }))
+    expect(state.hideDiffs).toHaveBeenCalled()
+  })
+
+  it('says when there is no diff to display', () => {
+    controls(idle({ modifiedPartIds: new Set() }))
+    expect(screen.getByRole('button', { name: 'See diffs' })).toHaveAttribute('title', 'No diff to display')
+  })
+
+  it('names its Part in the header, beside the title', async () => {
+    controls(idle({ modifiedPartIds: new Set([0]), diffsFor: 0, readCopies: vi.fn().mockResolvedValue(volMoved()) }))
+    const dialog = await screen.findByRole('dialog')
+    await within(dialog).findByRole('row', { name: /VOL/ })
+    expect(dialog.querySelector('.modal-header')).toHaveTextContent(/Edited params against saved.*Part 1: PART 1 - 1 diff/)
+  })
+
+  it('draws Save like Reload and Close, not as the primary action', async () => {
+    controls(idle({ modifiedPartIds: new Set([0]), diffsFor: 0, readCopies: vi.fn().mockResolvedValue(volMoved()) }))
+    expect(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Save PART 1' })).not.toHaveClass('primary')
+  })
+
+  it('shows the track as the app\'s track badge, and the parameter\'s help on hover', async () => {
+    controls(idle({ modifiedPartIds: new Set([0]), diffsFor: 0, readCopies: vi.fn().mockResolvedValue(volMoved()) }))
+    const row = await within(await screen.findByRole('dialog')).findByRole('row', { name: /VOL/ })
+    const [track, , param] = within(row).getAllByRole('cell')
+    expect(track.querySelector('.track-badge.audio')).toHaveTextContent('T1')
+    // On the parameter's name, not across the whole row
+    expect(param).toHaveAttribute('title', expect.stringMatching(/^VOL - Track volume before the effects/))
+    expect(row).not.toHaveAttribute('title')
+  })
+})
+
+describe('the d key', () => {
+  const idle = (over: Partial<PartCommitState> = {}): PartCommitState => ({
+    modifiedPartIds: new Set([0]),
+    partsSavedState: [1, 1, 1, 1],
+    isCommitting: false,
+    isReloading: false,
+    commitPart: vi.fn(),
+    commitAllParts: vi.fn(),
+    reloadPart: vi.fn(),
+    markModified: vi.fn(),
+    adoptBankState: vi.fn(),
+    readCopies: vi.fn().mockReturnValue(new Promise(() => {})),
+    diffsFor: null,
+    showDiffs: vi.fn(),
+    hideDiffs: vi.fn(),
+    tabMenu: null,
+    openTabMenu: vi.fn(),
+    closeTabMenu: vi.fn(),
+    ...over,
+  })
+  const controls = (state: PartCommitState, visible = true) =>
+    render(<PartSaveControls state={state} activePartIndex={0} partNames={NAMES} visible={visible} />)
+  const press = (key = 'd', target: Element = document.body) =>
+    act(() => { target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true })) })
+
+  it('opens the diffs of the Part on screen', () => {
+    const state = idle()
+    controls(state)
+    press()
+    expect(state.showDiffs).toHaveBeenCalledWith(0)
+  })
+
+  it('closes them again', () => {
+    const state = idle({ diffsFor: 0 })
+    controls(state)
+    press()
+    expect(state.hideDiffs).toHaveBeenCalled()
+  })
+
+  it('does nothing when there is no diff to display', () => {
+    const state = idle({ modifiedPartIds: new Set() })
+    controls(state)
+    press()
+    expect(state.showDiffs).not.toHaveBeenCalled()
+  })
+
+  it('does nothing outside Edit mode', () => {
+    const state = idle()
+    controls(state, false)
+    press()
+    expect(state.showDiffs).not.toHaveBeenCalled()
+  })
+
+  it('types a d into a text field rather than opening anything', () => {
+    const state = idle()
+    controls(state)
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    press('d', input)
+    expect(state.showDiffs).not.toHaveBeenCalled()
+    input.remove()
+  })
+})
+
+describe('the Part tab menu', () => {
+  const state = (over: Partial<PartCommitState> = {}): PartCommitState => ({
+    modifiedPartIds: new Set([1]),
+    partsSavedState: [1, 1, 1, 1],
+    isCommitting: false,
+    isReloading: false,
+    commitPart: vi.fn(),
+    commitAllParts: vi.fn(),
+    reloadPart: vi.fn(),
+    markModified: vi.fn(),
+    adoptBankState: vi.fn(),
+    readCopies: vi.fn(),
+    diffsFor: null,
+    showDiffs: vi.fn(),
+    hideDiffs: vi.fn(),
+    tabMenu: { partIndex: 1, x: 10, y: 20 },
+    openTabMenu: vi.fn(),
+    closeTabMenu: vi.fn(),
+    ...over,
+  })
+  const menu = (s: PartCommitState) => {
+    render(<PartSaveControls state={s} activePartIndex={0} partNames={NAMES} visible />)
+    return screen.getByRole('menu')
+  }
+
+  it('offers Reload, Save and See diffs for the Part right-clicked', () => {
+    expect(within(menu(state())).getAllByRole('menuitem').map(i => i.textContent?.trim()))
+      .toEqual(['Reload', 'Save', 'See diffs'])
+  })
+
+  it('acts on that Part, not the one on screen, and closes', async () => {
+    const s = state()
+    const user = userEvent.setup()
+    await user.click(within(menu(s)).getByRole('menuitem', { name: 'Save' }))
+    expect(s.commitPart).toHaveBeenCalledWith(1)
+    expect(s.closeTabMenu).toHaveBeenCalled()
+  })
+
+  it('opens the diffs of that Part', async () => {
+    const s = state()
+    await userEvent.setup().click(within(menu(s)).getByRole('menuitem', { name: 'See diffs' }))
+    expect(s.showDiffs).toHaveBeenCalledWith(1)
+  })
+
+  it('refuses everything on a Part holding no edits', () => {
+    const items = within(menu(state({ modifiedPartIds: new Set() }))).getAllByRole('menuitem')
+    items.forEach(item => expect(item).toBeDisabled())
+  })
+
+  it('refuses Reload on a Part never saved', () => {
+    const m = menu(state({ partsSavedState: [1, 0, 1, 1] }))
+    expect(within(m).getByRole('menuitem', { name: 'Reload' })).toBeDisabled()
+    expect(within(m).getByRole('menuitem', { name: 'Save' })).toBeEnabled()
+  })
+})
+
+describe('reading both copies', () => {
+  it('asks the backend for the saved and the edited copy of a Part', async () => {
+    const copies = { saved: null, edited: copy(), identical: false }
+    invokeMock.mockResolvedValue(copies)
+    const { result } = harness()
+    expect(await result.current.readCopies(3)).toBe(copies)
+    expect(invokeMock).toHaveBeenCalledWith('read_part_copies', { path: '/test/project', bankId: 'A', partId: 3 })
+  })
+})
+
+describe('which diffs and which menu are open', () => {
+  it('opens and closes the diffs of a Part', () => {
+    const { result } = harness()
+    act(() => result.current.showDiffs(2))
+    expect(result.current.diffsFor).toBe(2)
+    act(() => result.current.hideDiffs())
+    expect(result.current.diffsFor).toBeNull()
+  })
+
+  it('opens the tab menu where the pointer is, in place of the browser\'s own', () => {
+    const { result } = harness()
+    const preventDefault = vi.fn()
+    act(() => result.current.openTabMenu({ preventDefault, clientX: 40, clientY: 60 } as never, 3))
+    expect(preventDefault).toHaveBeenCalled()
+    expect(result.current.tabMenu).toEqual({ partIndex: 3, x: 40, y: 60 })
+    act(() => result.current.closeTabMenu())
+    expect(result.current.tabMenu).toBeNull()
   })
 })

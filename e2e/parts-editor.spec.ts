@@ -243,6 +243,27 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
           case 'reload_part':
             return makePart(args?.partId ?? 0, 99)
 
+          // The saved copy is the one reload_part returns, every ATK at 99. T1's TRK
+          // level, Flex slot, machine and FX1 effect, and scene 1's T1 VOL, differ too.
+          case 'read_part_copies': {
+            const partId = args?.partId ?? 0
+            const saved = makePart(partId, 99)
+            saved.volumes[0] = { ...saved.volumes[0], main: saved.volumes[0].main - 10 }
+            saved.machines[0] = {
+              ...saved.machines[0],
+              machine_type: 'Static',
+              flex_slot_id: saved.machines[0].flex_slot_id + 1,
+            }
+            saved.fxs[0] = { ...saved.fxs[0], fx1_type: 12 }
+            const savedScenes = makeScenes()
+            ;(savedScenes.scenes[0].tracks[0].amp as (number | null)[])[3] = 90
+            return {
+              saved: opts.partsSavedState[partId] === 1 ? { part: saved, scenes: savedScenes } : null,
+              edited: { part: makePart(partId), scenes: makeScenes() },
+              identical: false,
+            }
+          }
+
           case 'save_parts':
           case 'commit_part':
           case 'commit_all_parts':
@@ -1308,6 +1329,135 @@ test.describe('Parts Editor - Editing and saving', () => {
     // reload_part mock returns atk = 99
     await expect(atkInput(page)).toHaveValue('99')
     await expect(page.locator('.unsaved-indicator.visible')).toHaveCount(0)
+  })
+})
+
+test.describe('Parts Editor - Diffs against the saved copy', () => {
+  test.beforeEach(async ({ page }) => {
+    // Part 1 was edited on the device. Its saved copy differs in every ATK (99, now 20),
+    // in T1's TRK level, its Flex slot and its machine, and in scene 1's T1 VOL lock
+    await setupTauriMocks(page, { partsEditedBitmask: 1, partsSavedState: [1, 0, 0, 0] })
+    await openPartsTab(page)
+    await selectTrack(page, '0')
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'AMP' }).click()
+    await enterEditMode(page)
+  })
+
+  const atkCell = (page: Page) =>
+    page.locator('.param-item').filter({ has: page.getByText('ATK', { exact: true }) }).first()
+
+  test('See diffs lists each value Save and Reload would overwrite, saved against current', async ({ page }) => {
+    await page.getByRole('button', { name: 'See diffs' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Edited params against saved' })
+    // T2's only change, so its first row, which carries the track
+    const row = dialog.getByRole('row').filter({ hasText: 'T2' })
+    await expect(row.getByRole('cell')).toHaveText(['T2', 'AMP', 'ATK', '99', '20'])
+    const calls = await getInvokeCalls(page, 'read_part_copies')
+    expect(calls[0].args).toEqual({ path: '/test/project', bankId: 'A', partId: 0 })
+  })
+
+  test('pointing at a track lights up no row, and pointing at a row leaves the track alone', async ({ page }) => {
+    // Rows fade their hover in, which would let a check pass before the fade begins
+    await page.addStyleTag({ content: '* { transition: none !important; }' })
+    await page.getByRole('button', { name: 'See diffs' }).click()
+    const dialog = page.getByRole('dialog')
+    const track = dialog.locator('td.part-changes-track').first()
+    const [first, second] = [dialog.getByRole('row').nth(1), dialog.getByRole('row').nth(2)]
+    await track.hover()
+    await expect(first).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    await second.getByRole('cell').first().hover()
+    await expect(second).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+    await first.getByRole('cell').nth(1).hover()
+    await expect(track).toHaveCSS('background-color', 'rgb(26, 26, 26)')
+  })
+
+  test('Escape closes the diffs', async ({ page }) => {
+    await page.getByRole('button', { name: 'See diffs' }).click()
+    await expect(page.getByRole('dialog')).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+  })
+
+  test('a field that differs from the saved copy is marked, with the saved value on hover', async ({ page }) => {
+    await expect(atkCell(page)).toHaveClass(/param-changed/)
+    await expect(atkCell(page)).toHaveAttribute('title', /Saved: 99/)
+    // HOLD is the same in both copies
+    const hold = page.locator('.param-item').filter({ has: page.getByText('HOLD', { exact: true }) }).first()
+    await expect(hold).not.toHaveClass(/param-changed/)
+  })
+
+  test('TRK and SLOT are marked too, CUE is not, and a changed machine gets an asterisk', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'All' }).click()
+    const header = page.locator('.parts-track-header').first()
+    await expect(header.locator('.parts-level').filter({ hasText: 'TRK' })).toHaveClass(/param-changed/)
+    await expect(header.locator('.parts-level').filter({ hasText: 'CUE' })).not.toHaveClass(/param-changed/)
+    await expect(header.locator('.parts-sample-field')).toHaveClass(/param-changed/)
+    await expect(header.locator('.machine-type-field .field-unsaved-mark')).toBeVisible()
+  })
+
+  test('a changed effect gets an asterisk on its picker, an unchanged one does not', async ({ page }) => {
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'FX1' }).click()
+    await expect(page.locator('.fx-type-field .field-unsaved-mark')).toHaveCount(1)
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'FX2' }).click()
+    await expect(page.locator('.fx-type-field')).toHaveCount(1)
+    await expect(page.locator('.fx-type-field .field-unsaved-mark')).toHaveCount(0)
+  })
+
+  test('the marks go once the Part is saved', async ({ page }) => {
+    await expect(atkCell(page)).toHaveClass(/param-changed/)
+    await page.locator('button.save-button', { hasText: /^Save$/ }).click()
+    await expect(page.locator('.param-changed')).toHaveCount(0)
+  })
+
+  test('nothing is marked outside Edit mode', async ({ page }) => {
+    await page.locator('.mode-toggle').click()
+    await expect(page.locator('.param-changed')).toHaveCount(0)
+  })
+
+  test('D opens the diffs and closes them again', async ({ page }) => {
+    await page.keyboard.press('d')
+    await expect(page.getByRole('dialog', { name: 'Edited params against saved' })).toBeVisible()
+    await page.keyboard.press('d')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+  })
+
+  test('D does nothing with All Banks on screen', async ({ page }) => {
+    await page.locator('#parts-bank-select').selectOption('-1')
+    await expect(page.locator('.parts-edit-controls.visible')).not.toHaveCount(1)
+    await page.keyboard.press('d')
+    await expect(page.getByRole('dialog')).toHaveCount(0)
+  })
+
+  test('right-clicking a Part tab offers Reload, Save and See diffs for that Part', async ({ page }) => {
+    await page.locator('.parts-part-tab', { hasText: 'PART 1' }).click({ button: 'right' })
+    const menu = page.getByRole('menu')
+    await expect(menu.getByRole('menuitem')).toHaveText(['Reload', 'Save', 'See diffs'])
+    await menu.getByRole('menuitem', { name: 'See diffs' }).click()
+    await expect(page.getByRole('dialog').getByRole('heading', { name: /Part 1: PART 1/ })).toBeVisible()
+    await expect(menu).toHaveCount(0)
+  })
+})
+
+test.describe('Scenes - values that differ from the saved copy', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page, { partsEditedBitmask: 1, partsSavedState: [1, 0, 0, 0] })
+    await page.goto('/#/project?path=%2Fmock%2FTESTPROJECT&name=TESTPROJECT')
+    await page.getByRole('button', { name: 'Scenes', exact: true }).click()
+    await expect(page.locator('.scenes-grid')).toBeVisible()
+    await page.locator('.mode-toggle').click()
+  })
+
+  test('a scene lock that differs is marked, with the saved value on hover', async ({ page }) => {
+    // Scene 1 holds T1 VOL at 100; the saved copy has it at 90
+    const changed = page.locator('.scene-value-wrap.param-changed')
+    await expect(changed).toHaveCount(1)
+    await expect(changed).toHaveAttribute('title', /Saved: /)
+  })
+
+  test('See diffs from the Scenes header lists the scene lock', async ({ page }) => {
+    await page.getByRole('button', { name: 'See diffs' }).click()
+    const row = page.getByRole('dialog').getByRole('row').filter({ hasText: 'Scene 1' })
+    await expect(row.getByRole('cell', { name: 'VOL', exact: true })).toBeVisible()
   })
 })
 

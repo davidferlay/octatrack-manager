@@ -6,7 +6,7 @@ import { FieldSpec, clampToSpec } from '../utils/partFieldSpecs';
 import { fieldHelp, helpTitle } from '../utils/partFieldHelp';
 import {
   Slot, SceneTrackLocks, ScenesResponse, slotsForTrack, emptyTracks, countLocks,
-  sceneAssignments, AssignmentRow,
+  sceneAssignments, AssignmentRow, lockAt,
 } from './sceneModel';
 import { randomizedTracks, type RandomizeBounds } from './sceneRandomize';
 import { SceneRandomizeModal } from './SceneRandomizeModal';
@@ -108,7 +108,25 @@ export function ScenesPanel({
     onReloaded: () => { reload(); },
     onError: setError,
   });
-  const { markModified, adoptBankState } = commits;
+  const { markModified, adoptBankState, readCopies } = commits;
+
+  // The Part's saved copy, so values that differ from it can say what Save and Reload
+  // would overwrite. Only read while the Part holds edits and has one.
+  const [saved, setSaved] = useState<ScenesResponse | null>(null);
+  const comparing = isEditMode && commits.modifiedPartIds.has(partId)
+    && commits.partsSavedState[partId] === 1;
+  useEffect(() => {
+    if (!comparing) {
+      setSaved(null);
+      return;
+    }
+    let live = true;
+    readCopies(partId).then(
+      copies => live && setSaved(copies.saved?.scenes ?? null),
+      () => live && setSaved(null),
+    );
+    return () => { live = false; };
+  }, [comparing, partId, readCopies, reloadKey]);
 
   const reload = useCallback(() => {
     invoke<ScenesResponse>('load_scenes', { path: projectPath, bankId, partId })
@@ -576,7 +594,7 @@ export function ScenesPanel({
               onToggle={() => setSceneMute('A', !data.scene_a_muted)}
             />
             <select
-              className="crossfader-scene"
+              className={`crossfader-scene${saved && saved.scene_a !== data.scene_a ? ' param-changed' : ''}`}
               value={data.scene_a}
               disabled={!isEditMode}
               onChange={e => setCrossfader(Number(e.target.value), data.scene_b)}
@@ -596,7 +614,7 @@ export function ScenesPanel({
 
           <div className={`crossfader-end-picker ${data.scene_b_muted ? 'muted' : ''}`}>
             <select
-              className="crossfader-scene"
+              className={`crossfader-scene${saved && saved.scene_b !== data.scene_b ? ' param-changed' : ''}`}
               value={data.scene_b}
               disabled={!isEditMode}
               onChange={e => setCrossfader(data.scene_a, Number(e.target.value))}
@@ -643,6 +661,7 @@ export function ScenesPanel({
               key={index}
               className={`parts-part-tab ${partId === index ? 'active' : ''} ${commits.modifiedPartIds.has(index) ? 'modified' : ''}`}
               onClick={() => onPartChange(index)}
+              onContextMenu={isEditMode ? e => commits.openTabMenu(e, index) : undefined}
               title={commits.modifiedPartIds.has(index)
                 ? 'Modified. Save keeps the changes; Reload discards them.'
                 : undefined}
@@ -820,6 +839,7 @@ export function ScenesPanel({
           onSet={setAssignment}
           onSceneChange={selectOne}
           onPick={pickScene}
+          saved={saved}
         />
       )}
 
@@ -833,6 +853,7 @@ export function ScenesPanel({
           showAll={showAll}
           onSet={setAssignment}
           onCopyTrack={copyTrackBetween}
+          saved={saved}
         />
       )}
 
@@ -932,6 +953,9 @@ export function ScenesPanel({
                               slot={slot}
                               editable={isEditMode}
                               onChange={value => setSlot(track.track_id, slot, value)}
+                              saved={saved
+                                ? lockAt(saved, selected, track.track_id, slot.page, slot.index)
+                                : undefined}
                             />
                           )}
                         </td>

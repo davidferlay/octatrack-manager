@@ -40,6 +40,7 @@ These shortcuts work across the entire application:
 | Shortcut | Action |
 |----------|---------|
 | <kbd>E</kbd> | Toggle between View and Edit mode. |
+| <kbd>D</kbd> | Parts and Scenes tabs, in Edit mode: open or close the diffs of the Part on screen against its saved copy, when it holds edits. Not available with All Banks shown. See [Seeing what Save and Reload overwrite](../features/parts-editor.md#4-seeing-what-save-and-reload-overwrite). |
 | <kbd>←</kbd> / <kbd>→</kbd> | Move between bank buttons (A–P), parts (1–4), or patterns (1–16). |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Move between the bank, track, and pattern selector groups. |
 | <kbd>Enter</kbd> | Select the currently focused bank, part, or pattern. |
