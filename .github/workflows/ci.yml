@@ -122,7 +122,8 @@ jobs:
 
   e2e-tests:
     name: E2E Tests
-    runs-on: ubuntu-latest
+    # Playwright 1.57 has no ubuntu26.04 support; bump to >=1.64 to go back to ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
