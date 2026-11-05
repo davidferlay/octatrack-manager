@@ -28,7 +28,7 @@ Every write made by the editors goes on one list, in the order it happened, whic
 | [Scenes](./scenes.md) | Any scene change: values, Paste, Clear, Randomize, Swap A/B, track copies |
 | [Scenes](./scenes.md) | Moving a crossfader end, muting or unmuting an end |
 | [Overview](./project-detail.md) | Memory settings |
-| [Flex / Static slots](./sample-slots.md) | Assigning samples, clearing slots or samples, resetting slot attributes |
+| [Flex / Static slots](./sample-slots.md) | Assigning samples, clearing slots or samples, resetting slot attributes, moving, swapping and Tidying slots |
 
 A run of quick edits to the same thing, such as turning a value with the mouse wheel, is written once when it stops, so it is undone in one step.
 
@@ -41,7 +41,7 @@ Tools operations (Copy Banks, Parts, Scenes, Patterns, Tracks and Sample Slots, 
 ## How the history works
 
 - Each project has its own history. Opening another project does not lose it, and an undo never reaches into a project other than the one open.
-- Up to the last 50 changes per project can be undone.
+- Up to the last 50 changes per project can be undone. Each one keeps a copy of the files it changed, and a project's history holds at most 64 MB of them, dropping the oldest first, so fewer steps are kept after large changes. The last change can always be undone.
 - Undo steps back newest first; Redo walks forward again.
 - Making a new change after undoing drops whatever could still be redone, as in any editor.
 - The history only lasts while the app is running. Closing the app clears it.

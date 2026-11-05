@@ -1011,7 +1011,7 @@ pub fn read_project_metadata(project_path: &str) -> Result<ProjectMetadata, Stri
     }
 }
 
-const BANK_LETTERS: [&str; 16] = [
+pub(crate) const BANK_LETTERS: [&str; 16] = [
     "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
 ];
 
@@ -5111,21 +5111,69 @@ fn replace_sample_fields_surgical(
     let (decoded, _, _) = encoding_rs::WINDOWS_1258.decode(&raw_bytes);
     let content = decoded.into_owned();
 
-    // Phase 1: Extract all [SAMPLE] blocks and the non-sample parts of the file
-    let pre_samples; // Everything before first [SAMPLE]
-    let mut post_samples = String::new(); // Everything after last [/SAMPLE]
-    let mut existing_blocks: Vec<(String, u16, String)> = Vec::new(); // (type, slot, block_text)
+    // Phase 1: Extract all [SAMPLE] blocks and the non-sample parts of the file, patching the
+    // blocks that have updates
+    let (pre_samples, blocks, post_samples) = split_sample_blocks(&content)?;
     let mut applied: std::collections::HashSet<(String, u16)> = std::collections::HashSet::new();
+    let mut existing_blocks: Vec<(String, u16, String)> = blocks
+        .into_iter()
+        .map(|(slot_type, slot_id, block)| {
+            let key = (slot_type, slot_id);
+            let final_block = match field_updates.get(&key) {
+                Some(updates) => {
+                    applied.insert(key.clone());
+                    if updates.contains_key(REPLACE_BLOCK) {
+                        build_new_sample_block(&key.0, slot_id, updates)
+                    } else {
+                        patch_sample_block_fields(&block, updates)
+                    }
+                }
+                None => block,
+            };
+            (key.0, slot_id, final_block)
+        })
+        .collect();
 
-    let mut pos = 0;
+    // Phase 2: Add new blocks for unapplied updates
+    for (key, fields) in field_updates {
+        if !applied.contains(key) {
+            let new_block = build_new_sample_block(&key.0, key.1, fields);
+            existing_blocks.push((key.0.clone(), key.1, new_block));
+        }
+    }
+
+    // Phase 3: Rebuild the file with every block in OT canonical order
+    let result = join_sample_blocks(&pre_samples, existing_blocks, &post_samples);
+
+    // Encode back to Windows-1258 and write
+    let (encoded, _, _) = encoding_rs::WINDOWS_1258.encode(&result);
+    std::fs::write(project_file_path, &*encoded)
+        .map_err(|e| format!("Failed to write project file: {}", e))?;
+
+    Ok(())
+}
+
+/// One `[SAMPLE]` block of a project file: its TYPE as written, its SLOT (0 when the line is
+/// missing or not a number), and its whole text from `[SAMPLE]` to `[/SAMPLE]`.
+pub(crate) type SampleBlock = (String, u16, String);
+
+/// Cut a project file's text into what comes before the first `[SAMPLE]` block, every block,
+/// and what follows the last `[/SAMPLE]`.
+///
+/// Each block's text is kept byte for byte, so an edit can change one line and leave the
+/// fields ot-tools-io does not model (TRIM_BARSx100, TRIGQUANTIZATION=-1) as the device wrote
+/// them. `join_sample_blocks` puts the pieces back. A file with no block is all `pre`.
+pub(crate) fn split_sample_blocks(
+    content: &str,
+) -> Result<(String, Vec<SampleBlock>, String), String> {
+    let mut blocks: Vec<SampleBlock> = Vec::new();
     let mut first_block_start: Option<usize> = None;
     let mut last_block_end: usize = 0;
+    let mut pos = 0;
 
     while let Some(block_start_offset) = content[pos..].find("[SAMPLE]") {
         let block_start = pos + block_start_offset;
-        if first_block_start.is_none() {
-            first_block_start = Some(block_start);
-        }
+        first_block_start.get_or_insert(block_start);
         let block_end_tag = "[/SAMPLE]";
         let block_end = content[block_start..]
             .find(block_end_tag)
@@ -5133,8 +5181,6 @@ fn replace_sample_fields_surgical(
             .ok_or_else(|| "Malformed project file: unclosed [SAMPLE] block".to_string())?;
 
         let block = &content[block_start..block_end];
-
-        // Extract TYPE= and SLOT= from this block
         let slot_type = block
             .lines()
             .find(|l| l.starts_with("TYPE="))
@@ -5146,45 +5192,27 @@ fn replace_sample_fields_surgical(
             .and_then(|l| l.trim_end_matches('\r')[5..].parse::<u16>().ok())
             .unwrap_or(0);
 
-        let key = (slot_type.clone(), slot_id);
-
-        // Apply patches if needed
-        let final_block = if let Some(updates) = field_updates.get(&key) {
-            applied.insert(key.clone());
-            if updates.contains_key(REPLACE_BLOCK) {
-                build_new_sample_block(&slot_type, slot_id, updates)
-            } else {
-                patch_sample_block_fields(block, updates)
-            }
-        } else {
-            block.to_string()
-        };
-
-        existing_blocks.push((slot_type, slot_id, final_block));
+        blocks.push((slot_type, slot_id, block.to_string()));
         last_block_end = block_end;
         pos = block_end;
     }
 
-    // Determine pre/post content
-    if let Some(fbs) = first_block_start {
-        pre_samples = content[..fbs].to_string();
-        post_samples = content[last_block_end..].to_string();
-    } else {
-        // No existing blocks at all — put pre as everything, post as empty
-        pre_samples = content.clone();
-    }
+    Ok(match first_block_start {
+        Some(start) => (
+            content[..start].to_string(),
+            blocks,
+            content[last_block_end..].to_string(),
+        ),
+        None => (content.to_string(), blocks, String::new()),
+    })
+}
 
-    // Phase 2: Add new blocks for unapplied updates
-    for (key, fields) in field_updates {
-        if !applied.contains(key) {
-            let new_block = build_new_sample_block(&key.0, key.1, fields);
-            existing_blocks.push((key.0.clone(), key.1, new_block));
-        }
-    }
-
-    // Phase 3: Sort ALL blocks in OT canonical order:
-    // FLEX 001-128, FLEX 129-136 (recording buffers), STATIC 001-128
-    existing_blocks.sort_by(|(type_a, slot_a, _), (type_b, slot_b, _)| {
+/// Rebuild a project file from the pieces `split_sample_blocks` gives, with the blocks in the
+/// order the device writes them: FLEX 1 to 128, the FLEX 129 to 136 recorder buffers, then
+/// STATIC 1 to 128, one blank line between blocks. The sort is stable, so blocks with the same
+/// TYPE and SLOT keep their order.
+pub(crate) fn join_sample_blocks(pre: &str, mut blocks: Vec<SampleBlock>, post: &str) -> String {
+    blocks.sort_by(|(type_a, slot_a, _), (type_b, slot_b, _)| {
         let type_order = |t: &str, s: u16| -> (u8, u16) {
             match t.to_uppercase().as_str() {
                 "FLEX" if s <= 128 => (0, s),
@@ -5196,25 +5224,17 @@ fn replace_sample_fields_surgical(
         type_order(type_a, *slot_a).cmp(&type_order(type_b, *slot_b))
     });
 
-    // Phase 4: Rebuild file
-    let mut result = String::with_capacity(content.len());
-    result.push_str(&pre_samples);
-
-    for (i, (_, _, block_text)) in existing_blocks.iter().enumerate() {
+    let blocks_len: usize = blocks.iter().map(|(_, _, text)| text.len() + 4).sum();
+    let mut result = String::with_capacity(pre.len() + blocks_len + post.len());
+    result.push_str(pre);
+    for (i, (_, _, block_text)) in blocks.iter().enumerate() {
         if i > 0 {
             result.push_str("\r\n\r\n");
         }
         result.push_str(block_text);
     }
-
-    result.push_str(&post_samples);
-
-    // Encode back to Windows-1258 and write
-    let (encoded, _, _) = encoding_rs::WINDOWS_1258.encode(&result);
-    std::fs::write(project_file_path, &*encoded)
-        .map_err(|e| format!("Failed to write project file: {}", e))?;
-
-    Ok(())
+    result.push_str(post);
+    result
 }
 
 /// Surgically replace `KEY=value` lines inside the [SETTINGS] block of a project file.
@@ -7312,9 +7332,11 @@ fn build_remap_table(
 /// Skips only 255 (no lock) on p-locks. Slot ID 0 is sample slot 1 and is remapped
 /// like any other: Parts used to be guarded on `!= 0`, which left a track playing
 /// slot 1 pointing at whatever the destination happened to hold there. An id absent
-/// from the remap table is a no-op, and the table only ever contains slots that were
-/// actually copied, so nothing outside the copy is disturbed.
-fn remap_bank_slot_references(
+/// from the remap table is a no-op. The copy tools pass only the slots they copied,
+/// so nothing outside the copy is disturbed; a slot move or sort
+/// (`slot_reorganise::apply_plan`) passes a complete permutation of the list it
+/// reorganises, so every reference into that list follows, empty slots included.
+pub(crate) fn remap_bank_slot_references(
     bank: &mut BankFile,
     static_remap: &std::collections::HashMap<u8, u8>,
     flex_remap: &std::collections::HashMap<u8, u8>,
@@ -9989,7 +10011,7 @@ fn apply_selected_attributes(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use ot_tools_io::{BankFile, MarkersFile, OctatrackFileIO, ProjectFile};
     use std::fs;
@@ -10629,9 +10651,9 @@ mod tests {
     }
 
     /// Helper struct to manage test project fixtures
-    struct TestProject {
+    pub(crate) struct TestProject {
         _temp_dir: TempDir,
-        path: String,
+        pub(crate) path: String,
     }
 
     const PATTERN_HEADER: [u8; 8] = [0x50, 0x54, 0x52, 0x4e, 0, 0, 0, 0];
@@ -10659,7 +10681,7 @@ mod tests {
 
     impl TestProject {
         /// Create a new test project with default bank and project files
-        fn new() -> Self {
+        pub(crate) fn new() -> Self {
             let temp_dir = TempDir::new().expect("Failed to create temp directory");
             let path = temp_dir.path().to_string_lossy().to_string();
 

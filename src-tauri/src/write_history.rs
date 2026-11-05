@@ -18,12 +18,19 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
-/// How many writes can be taken back, per project.
+/// How many writes can be taken back, per project, at most.
 ///
-/// Each one holds every byte of the files it touched, and a bank file is 636 KB, so
-/// this is a memory budget as much as a depth: fifty is about 32 MB in the worst case,
-/// and most entries are the much smaller project file rather than a whole bank.
+/// Most entries hold the small project file or one or two banks (636 KB each), so fifty
+/// of them stay well under `BUDGET_BYTES`. The ones that do not are bounded by it.
 const DEPTH: usize = 50;
+
+/// How many bytes of snapshots one project's history may hold: 64 MB.
+///
+/// Each entry holds every byte of the files it touched. A slot move touching slots 1 to 8
+/// rewrites every bank, about 10 MB, so fifty of those would be 500 MB of memory. Past
+/// this budget the oldest writes are dropped first, but the newest is always kept, even
+/// alone over budget, so the write just made can still be taken back.
+const BUDGET_BYTES: usize = 64 * 1024 * 1024;
 
 /// The files one write was about to change, as they were before it.
 #[derive(Clone, Debug)]
@@ -32,6 +39,15 @@ struct Snapshot {
     label: String,
     /// None where the file did not exist yet, so undo removes it again.
     files: Vec<FileContents>,
+}
+
+impl Snapshot {
+    fn bytes(&self) -> usize {
+        self.files
+            .iter()
+            .map(|(_, bytes)| bytes.as_ref().map_or(0, Vec::len))
+            .sum()
+    }
 }
 
 #[derive(Default)]
@@ -113,6 +129,16 @@ fn restore(snapshot: &Snapshot) -> Result<Snapshot, String> {
 /// Call this immediately before the write, not after. A new write makes whatever was
 /// redone unreachable, which is what every editor's history does.
 pub fn record(project: &str, label: &str, paths: &[PathBuf]) -> Result<(), String> {
+    record_within_budget(project, label, paths, BUDGET_BYTES)
+}
+
+/// `record`, with the byte budget given so tests can use a small one.
+fn record_within_budget(
+    project: &str,
+    label: &str,
+    paths: &[PathBuf],
+    budget: usize,
+) -> Result<(), String> {
     let snapshot = Snapshot {
         label: label.to_string(),
         files: capture(paths)?,
@@ -123,10 +149,19 @@ pub fn record(project: &str, label: &str, paths: &[PathBuf]) -> Result<(), Strin
         .map_err(|_| "History is poisoned".to_string())?;
     let history = all.entry(PathBuf::from(project)).or_default();
     history.undone.push(snapshot);
-    if history.undone.len() > DEPTH {
-        history.undone.remove(0);
-    }
     history.redone.clear();
+    // Oldest first, never the newest
+    let mut held: usize = history.undone.iter().map(Snapshot::bytes).sum();
+    let mut drop = history.undone.len().saturating_sub(DEPTH);
+    held -= history.undone[..drop]
+        .iter()
+        .map(Snapshot::bytes)
+        .sum::<usize>();
+    while held > budget && drop < history.undone.len() - 1 {
+        held -= history.undone[drop].bytes();
+        drop += 1;
+    }
+    history.undone.drain(..drop);
     Ok(())
 }
 
@@ -419,6 +454,52 @@ mod tests {
         assert_eq!(taken, DEPTH, "the oldest writes fall off the end");
         // Fifty-five writes with fifty kept means it only goes back to the fifth
         assert_eq!(project.read("bank01.work"), "5");
+    }
+
+    /// Writes `n` snapshots of a 10-byte file, each one undoable back to the previous text.
+    fn record_ten_byte_writes(project: &Project, n: usize, budget: usize) -> PathBuf {
+        let bank = project.write("bank01.work", "0123456789");
+        for i in 1..=n {
+            record_within_budget(
+                &project.path,
+                &format!("edit {i}"),
+                std::slice::from_ref(&bank),
+                budget,
+            )
+            .unwrap();
+            std::fs::write(&bank, format!("{i}123456789")).unwrap();
+        }
+        bank
+    }
+
+    fn undo_all(project: &Project) -> Vec<String> {
+        let mut labels = Vec::new();
+        while let Some(label) = undo(&project.path).unwrap() {
+            labels.push(label);
+        }
+        labels
+    }
+
+    #[test]
+    fn test_the_oldest_writes_fall_off_once_the_history_holds_too_many_bytes() {
+        let project = Project::new();
+        // Two 10-byte snapshots fit in 25 bytes, a third does not
+        record_ten_byte_writes(&project, 3, 25);
+
+        assert_eq!(undo_all(&project), ["edit 3", "edit 2"]);
+        assert_eq!(project.read("bank01.work"), "1123456789", "edit 1 is gone");
+    }
+
+    #[test]
+    fn test_the_newest_write_is_kept_even_when_it_alone_is_over_budget() {
+        let project = Project::new();
+        record_ten_byte_writes(&project, 2, 25);
+        let big = project.write("bank02.work", &"x".repeat(40));
+        record_within_budget(&project.path, "big", std::slice::from_ref(&big), 25).unwrap();
+        std::fs::write(&big, "after").unwrap();
+
+        assert_eq!(undo_all(&project), ["big"]);
+        assert_eq!(project.read("bank02.work"), "x".repeat(40));
     }
 
     #[test]

@@ -110,12 +110,12 @@ describe('taking a write back', () => {
     expect(h.restored()).toBe(1)
   })
 
-  it('says what it took back', async () => {
+  it('says it took the change back, in a word', async () => {
     const { result, statuses } = harness()
     await act(async () => {})
     await act(async () => { result.current.undo() })
     expect(statuses.map(s => s.message)).toEqual([
-      'Undoing the last change...', 'Undone: Change scene 3',
+      'Undoing...', 'Undone',
     ])
   })
 
@@ -191,12 +191,12 @@ describe('putting it back', () => {
     expect(commands('undo_write')).toEqual([])
   })
 
-  it('says what it put back', async () => {
+  it('says it put the change back, in a word', async () => {
     const { result, statuses } = harness()
     await act(async () => {})
     await act(async () => { result.current.redo() })
     expect(statuses.map(s => s.message)).toEqual([
-      'Redoing the last change...', 'Redone: Save part 1',
+      'Redoing...', 'Redone',
     ])
   })
 })

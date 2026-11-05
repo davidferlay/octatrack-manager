@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { invoke } from '@tauri-apps/api/core'
@@ -937,5 +937,487 @@ describe('SampleSlotsTable — sample preview gating & loop shortcut', () => {
     expect(localStorage.getItem('otm.preview.loop')).toBeNull()
     fireEvent.keyDown(document, { key: 'L', shiftKey: true })
     expect(localStorage.getItem('otm.preview.loop')).toBe('true')
+  })
+})
+
+describe('SampleSlotsTable — reorganising slots', () => {
+  const movedReport = { moves: [[1, 10]], swapped: null, pushed: [], files_written: [] }
+
+  beforeEach(() => {
+    mockInvoke.mockReset()
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'move_sample_slots' || cmd === 'sort_sample_slots') return movedReport
+      return []
+    })
+  })
+
+  function selectSlots1And3(prefix = 'F') {
+    fireEvent.click(screen.getByText(`${prefix}1`).closest('tr')!)
+    fireEvent.click(screen.getByText(`${prefix}3`).closest('tr')!, { ctrlKey: true })
+  }
+
+  /** Sets the Move to slot slider, then confirms with Enter on it or with the Move button. */
+  async function moveTo(user: ReturnType<typeof userEvent.setup>, slot: number, how: 'enter' | 'button' = 'enter') {
+    const slider = screen.getByRole('slider', { name: 'Target slot' })
+    fireEvent.change(slider, { target: { value: String(slot) } })
+    if (how === 'enter') fireEvent.keyDown(slider, { key: 'Enter' })
+    else await user.click(screen.getByRole('button', { name: 'Move' }))
+  }
+
+  it('Move to slot... calls move_sample_slots with the selection and the typed slot', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    selectSlots1And3()
+    fireEvent.contextMenu(screen.getByText('F1').closest('tr')!)
+    await user.click(screen.getByText('Move to slot...'))
+    await moveTo(user, 10)
+
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('move_sample_slots', {
+      path: '/proj', slotType: 'flex', sources: [1, 3], target: 10,
+    }))
+  })
+
+  it('Move to slot... on an unselected slot moves just that slot', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    fireEvent.click(screen.getByText('F1').closest('tr')!) // F1 selected, F3 is not
+    fireEvent.contextMenu(screen.getByText('F3').closest('tr')!)
+    await user.click(screen.getByText('Move to slot...'))
+    await moveTo(user, 64, 'button')
+
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('move_sample_slots', {
+      path: '/proj', slotType: 'flex', sources: [3], target: 64,
+    }))
+  })
+
+  it('Move to slot... picks the slot on a 1 to 128 slider that starts on the slot itself', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    fireEvent.contextMenu(screen.getByText('F3').closest('tr')!)
+    await user.click(screen.getByText('Move to slot...'))
+    const slider = screen.getByRole('slider', { name: 'Target slot' })
+    expect(slider).toHaveAttribute('min', '1')
+    expect(slider).toHaveAttribute('max', '128')
+    expect(slider).toHaveValue('3')
+    // Moving a slot onto itself does nothing, so there is nothing to confirm yet
+    expect(screen.getByRole('button', { name: 'Move' })).toBeDisabled()
+    expect(mockInvoke).not.toHaveBeenCalledWith('move_sample_slots', expect.anything())
+  })
+
+  it('Move to slot... names the chosen slot and what it holds', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    fireEvent.contextMenu(screen.getByText('F3').closest('tr')!)
+    await user.click(screen.getByText('Move to slot...'))
+    const slider = screen.getByRole('slider', { name: 'Target slot' })
+    fireEvent.change(slider, { target: { value: '1' } })
+    const target = screen.getByTestId('move-target')
+    expect(target).toHaveTextContent('F001')
+    expect(target).toHaveTextContent('kick.wav')
+    fireEvent.change(slider, { target: { value: '2' } })
+    expect(target).toHaveTextContent('F002')
+    expect(target).toHaveTextContent(/empty/i)
+  })
+
+  it('Tidy sorts a selected run of side-by-side slots on its own by default', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="S" tableType="static" isEditMode projectPath="/proj" />
+    )
+    fireEvent.click(screen.getByText('S1').closest('tr')!)
+    fireEvent.click(screen.getByText('S3').closest('tr')!, { shiftKey: true })
+    await user.click(screen.getByRole('button', { name: /Tidy/ }))
+    expect(document.querySelector('.modal-header')).toHaveTextContent(/closes the gaps/i)
+    const only = screen.getByRole('checkbox', { name: /only selected slots/i })
+    expect(only).toHaveTextContent('S001 to S003')
+    expect(only.getAttribute('title')).toMatch(/S001 to S003/)
+    expect(only).toBeChecked()
+    await user.click(screen.getByRole('button', { name: 'Sort' }))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('sort_sample_slots', {
+      path: '/proj', slotType: 'static', order: 'name-asc', selection: [1, 2, 3],
+    }))
+  })
+
+  it('Tidy sorts the whole list once Only selected slots is unticked', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="S" tableType="static" isEditMode projectPath="/proj" />
+    )
+    fireEvent.click(screen.getByText('S1').closest('tr')!)
+    fireEvent.click(screen.getByText('S3').closest('tr')!, { shiftKey: true })
+    await user.click(screen.getByRole('button', { name: /Tidy/ }))
+    const only = screen.getByRole('checkbox', { name: /only selected slots/i })
+    await user.click(only)
+    expect(only).not.toBeChecked()
+    await user.click(screen.getByRole('radio', { name: /longest first/i }))
+    await user.click(screen.getByRole('button', { name: 'Sort' }))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('sort_sample_slots', {
+      path: '/proj', slotType: 'static', order: 'duration-desc', selection: null,
+    }))
+  })
+
+  it('Tidy cannot sort picks that are not side by side on their own', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="S" tableType="static" isEditMode projectPath="/proj" />
+    )
+    selectSlots1And3('S')
+    await user.click(screen.getByRole('button', { name: /Tidy/ }))
+    expect(screen.queryByRole('checkbox', { name: /only selected slots/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/continuous run/i)).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Sort' }))
+    await waitFor(() => expect(mockInvoke).toHaveBeenCalledWith('sort_sample_slots', {
+      path: '/proj', slotType: 'static', order: 'name-asc', selection: null,
+    }))
+  })
+
+  it('Move to slot... shows where the moving slot sits on the slider, and which slots are taken', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    fireEvent.contextMenu(screen.getByText('F3').closest('tr')!)
+    await user.click(screen.getByText('Move to slot...'))
+    const markers = document.querySelectorAll('.move-slot-source-marker')
+    expect([...markers].map(m => m.getAttribute('title'))).toEqual(['F003 is here'])
+    // Slots 1 and 3 hold samples
+    const map = [...document.querySelectorAll('.move-slot-map > span')]
+    expect(map).toHaveLength(128)
+    expect(map.flatMap((cell, i) => cell.classList.contains('taken') ? [i + 1] : [])).toEqual([1, 3])
+    expect(screen.getByTestId('move-source')).toHaveTextContent('F003')
+    expect(screen.getByTestId('move-source')).toHaveTextContent('snare.wav')
+    expect(document.querySelector('.move-slot-scale')).toHaveTextContent(/Taken.*Selection/)
+    expect(document.querySelectorAll('.move-slot-scale .move-slot-legend.pin')).toHaveLength(1)
+  })
+
+  it('Move to slot... labels the slider thumb with the slot it points at', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    fireEvent.contextMenu(screen.getByText('F3').closest('tr')!)
+    await user.click(screen.getByText('Move to slot...'))
+    const tip = document.querySelector<HTMLElement>('.move-slot-thumb-tip')!
+    const pin = document.querySelector<HTMLElement>('.move-slot-source-marker')!
+    expect(tip).toHaveTextContent('F003')
+    expect(tip).toHaveTextContent('snare.wav')
+    // On the slot itself it sits right over its pin: both ride where the thumb is
+    expect(tip.style.left).toBe(pin.style.left)
+    fireEvent.change(screen.getByRole('slider', { name: 'Target slot' }), { target: { value: '1' } })
+    expect(tip).toHaveTextContent('F001')
+    expect(tip).toHaveTextContent('kick.wav')
+    expect(tip.style.left).not.toBe(pin.style.left)
+  })
+
+  it('Move to slot... legend draws at most five pins, however many slots move', async () => {
+    const user = userEvent.setup()
+    const many = Array.from({ length: 8 }, (_, i) => ({ ...mockSlots[0], slot_id: i + 1, path: `samples/s${i + 1}.wav` }))
+    renderWithProvider(
+      <SampleSlotsTable slots={many} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    fireEvent.click(screen.getByText('F1').closest('tr')!)
+    fireEvent.click(screen.getByText('F8').closest('tr')!, { shiftKey: true })
+    fireEvent.contextMenu(screen.getByText('F1').closest('tr')!)
+    await user.click(screen.getByText('Move to slot...'))
+    expect(document.querySelectorAll('.move-slot-source-marker')).toHaveLength(8)
+    expect(document.querySelectorAll('.move-slot-scale .move-slot-legend.pin')).toHaveLength(5)
+  })
+
+  // Slots 1 to 5 hold samples, 6 is empty but keeps its attributes, 7 and 8 are empty
+  const fiveTaken = [
+    ...Array.from({ length: 5 }, (_, i) => ({ ...mockSlots[0], slot_id: i + 1, path: `samples/s${i + 1}.wav` })),
+    { ...mockSlots[1], slot_id: 6, gain: 64 },
+    { ...mockSlots[1], slot_id: 7 },
+    { ...mockSlots[1], slot_id: 8 },
+  ]
+
+  async function openMoveFor(user: ReturnType<typeof userEvent.setup>, first: number, last: number) {
+    fireEvent.click(screen.getByText(`F${first}`).closest('tr')!)
+    if (last !== first) fireEvent.click(screen.getByText(`F${last}`).closest('tr')!, { shiftKey: true })
+    fireEvent.contextMenu(screen.getByText(`F${first}`).closest('tr')!)
+    await user.click(screen.getByText('Move to slot...'))
+    return screen.getByRole('slider', { name: 'Target slot' })
+  }
+
+  it('Move to slot... says how many taken slots a block would push down', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(<SampleSlotsTable slots={fiveTaken} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />)
+    const slider = await openMoveFor(user, 1, 2)
+    // F004-F005 both hold samples that are not moving
+    fireEvent.change(slider, { target: { value: '4' } })
+    expect(screen.getByTestId('move-target')).toHaveTextContent('F004-F005')
+    expect(screen.getByTestId('move-target')).toHaveTextContent('2 taken, pushed down')
+    // F002-F003: F002 is one of the moving slots, so only F003 is in the way
+    fireEvent.change(slider, { target: { value: '2' } })
+    expect(screen.getByTestId('move-target')).toHaveTextContent('1 taken, pushed down')
+  })
+
+  it('Move to slot... names a slot that kept only its attributes, not as empty', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(<SampleSlotsTable slots={fiveTaken} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />)
+    const slider = await openMoveFor(user, 1, 1)
+    fireEvent.change(slider, { target: { value: '6' } })
+    expect(screen.getByTestId('move-target')).toHaveTextContent('no sample, attributes kept')
+    fireEvent.change(slider, { target: { value: '7' } })
+    expect(screen.getByTestId('move-target')).toHaveTextContent('empty')
+  })
+
+  it('Move to slot... refuses a block that would run past F128', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(<SampleSlotsTable slots={fiveTaken} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />)
+    const slider = await openMoveFor(user, 1, 3)
+    fireEvent.change(slider, { target: { value: '127' } })
+    expect(screen.getByTestId('move-target')).toHaveTextContent('runs past F128')
+    expect(screen.getByRole('button', { name: 'Move' })).toBeDisabled()
+    fireEvent.keyDown(slider, { key: 'Enter' })
+    // F126-F128 still fits
+    fireEvent.change(slider, { target: { value: '126' } })
+    expect(screen.getByTestId('move-target')).toHaveTextContent('F126-F128')
+    expect(screen.getByRole('button', { name: 'Move' })).toBeEnabled()
+    expect(mockInvoke).not.toHaveBeenCalledWith('move_sample_slots', expect.anything())
+  })
+
+  it('Move to slot... ignores Enter while the slider points at the slot itself', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(<SampleSlotsTable slots={fiveTaken} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />)
+    const slider = await openMoveFor(user, 3, 3)
+    fireEvent.keyDown(slider, { key: 'Enter' })
+    expect(screen.getByRole('slider', { name: 'Target slot' })).toBeInTheDocument()
+    expect(mockInvoke).not.toHaveBeenCalledWith('move_sample_slots', expect.anything())
+  })
+
+  it('a Tidy in progress shows a spinner notice that stays up until it is done', async () => {
+    let finish: (report: unknown) => void = () => {}
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'sort_sample_slots') return new Promise(resolve => { finish = resolve })
+      return []
+    })
+    const user = userEvent.setup()
+    renderWithProvider(<SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />)
+    await user.click(screen.getByRole('button', { name: /Tidy/ }))
+    await user.click(screen.getByRole('button', { name: 'Sort' }))
+    const running = await screen.findByText('Sorting slots...')
+    const toast = running.closest('.toast-notification')!
+    expect(toast).toHaveClass('busy')
+    expect(toast.querySelector('.fa-spinner.fa-spin')).not.toBeNull()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      act(() => { vi.advanceTimersByTime(10000) })
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(screen.getByText('Sorting slots...')).toBeInTheDocument()
+    await act(async () => { finish({ moves: [[3, 1], [1, 3]], swapped: null, pushed: [], files_written: [] }) })
+    expect(await screen.findByText(/2 slots renumbered, sorted by file name \(A to Z\)/)).toBeInTheDocument()
+    expect(screen.queryByText('Sorting slots...')).not.toBeInTheDocument()
+  })
+
+  it('Move to slot... for a selection names the rows it lands on', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    selectSlots1And3()
+    fireEvent.contextMenu(screen.getByText('F1').closest('tr')!)
+    await user.click(screen.getByText('Move to slot...'))
+    expect(document.querySelectorAll('.move-slot-source-marker')).toHaveLength(2)
+    // The legend draws as many pins as there are on the track
+    expect(document.querySelectorAll('.move-slot-scale .move-slot-legend.pin')).toHaveLength(2)
+    expect(screen.getByTestId('move-source')).toHaveTextContent('2 slots')
+    fireEvent.change(screen.getByRole('slider', { name: 'Target slot' }), { target: { value: '40' } })
+    expect(screen.getByTestId('move-target')).toHaveTextContent('F040-F041')
+    expect(screen.getByTestId('move-target')).toHaveTextContent(/all empty/i)
+  })
+
+  it('a successful move shows its notice and asks the page to re-read', async () => {
+    const user = userEvent.setup()
+    const onSlotsReorganised = vi.fn()
+    const onWriteHistoryChanged = vi.fn()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" onSlotsReorganised={onSlotsReorganised} onWriteHistoryChanged={onWriteHistoryChanged} />
+    )
+    fireEvent.click(screen.getByText('F1').closest('tr')!)
+    fireEvent.contextMenu(screen.getByText('F1').closest('tr')!)
+    await user.click(screen.getByText('Move to slot...'))
+    await moveTo(user, 10)
+
+    const notice = await screen.findByText(/F001 moved to F010/)
+    expect(notice.closest('.toast-notification')).toHaveClass('info')
+    expect(onSlotsReorganised).toHaveBeenCalledTimes(1)
+    expect(onWriteHistoryChanged).toHaveBeenCalledTimes(1)
+    // The old numbers are gone, so is a selection made of them
+    expect(document.querySelectorAll('.slots-table tr.selected')).toHaveLength(0)
+    expect(screen.queryByRole('slider', { name: 'Target slot' })).not.toBeInTheDocument()
+  })
+
+  it("a refused move shows the backend's reason as a warning", async () => {
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'move_sample_slots') throw 'Not enough free slots below F120'
+      return []
+    })
+    const user = userEvent.setup()
+    const onSlotsReorganised = vi.fn()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" onSlotsReorganised={onSlotsReorganised} />
+    )
+    fireEvent.contextMenu(screen.getByText('F1').closest('tr')!)
+    await user.click(screen.getByText('Move to slot...'))
+    await moveTo(user, 121)
+
+    const notice = await screen.findByText('Not enough free slots below F120')
+    expect(notice.closest('.toast-notification')).toHaveClass('warning')
+    expect(onSlotsReorganised).not.toHaveBeenCalled()
+  })
+
+  it('a failed move still refreshes the undo history, since a half-done write leaves an entry', async () => {
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'move_sample_slots') throw 'Failed to write bank03.work: No space left on device'
+      return []
+    })
+    const user = userEvent.setup()
+    const onSlotsReorganised = vi.fn()
+    const onWriteHistoryChanged = vi.fn()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" onSlotsReorganised={onSlotsReorganised} onWriteHistoryChanged={onWriteHistoryChanged} />
+    )
+    fireEvent.contextMenu(screen.getByText('F1').closest('tr')!)
+    await user.click(screen.getByText('Move to slot...'))
+    await moveTo(user, 10)
+
+    await screen.findByText(/No space left on device/)
+    expect(onWriteHistoryChanged).toHaveBeenCalledTimes(1)
+    expect(onSlotsReorganised).not.toHaveBeenCalled()
+  })
+
+  it('while a move runs, no second move or Tidy can be sent until it settles', async () => {
+    let finish: (report: unknown) => void = () => {}
+    mockInvoke.mockImplementation(async (cmd: string) => {
+      if (cmd === 'move_sample_slots') return new Promise(resolve => { finish = resolve })
+      if (cmd === 'sort_sample_slots') return movedReport
+      return []
+    })
+    const user = userEvent.setup()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    const draggable = () => document.querySelectorAll('.slots-table tr.slot-draggable')
+    expect(draggable().length).toBeGreaterThan(0)
+
+    fireEvent.contextMenu(screen.getByText('F1').closest('tr')!)
+    await user.click(screen.getByText('Move to slot...'))
+    await moveTo(user, 10)
+
+    const running = await screen.findByText('Moving 1 slot...')
+    // It stays up, with a spinner, for as long as the move takes
+    const toast = running.closest('.toast-notification')!
+    expect(toast).toHaveClass('busy')
+    expect(toast.querySelector('.fa-spinner.fa-spin')).not.toBeNull()
+    // Other notices clear after 4 seconds; this one waits for the move
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      act(() => { vi.advanceTimersByTime(10000) })
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(screen.getByText('Moving 1 slot...')).toBeInTheDocument()
+    // Tidy, Move to slot... and dragging are all off
+    const tidy = screen.getByRole('button', { name: /Tidy/ })
+    expect(tidy).toBeDisabled()
+    await user.click(tidy)
+    expect(screen.queryByRole('button', { name: 'Sort' })).not.toBeInTheDocument()
+    fireEvent.contextMenu(screen.getByText('F3').closest('tr')!)
+    const moveEntry = screen.getByText('Move to slot...').closest('button')!
+    expect(moveEntry).toBeDisabled()
+    await user.click(moveEntry)
+    expect(screen.queryByRole('slider', { name: 'Target slot' })).not.toBeInTheDocument()
+    expect(draggable()).toHaveLength(0)
+    const sent = () => mockInvoke.mock.calls.filter(([c]) => c === 'move_sample_slots' || c === 'sort_sample_slots')
+    expect(sent()).toHaveLength(1)
+
+    finish(movedReport)
+    await screen.findByText(/F001 moved to F010/)
+    expect(screen.getByRole('button', { name: /Tidy/ })).toBeEnabled()
+    expect(draggable().length).toBeGreaterThan(0)
+    expect(sent()).toHaveLength(1)
+  })
+
+  it('Escape closes Move to slot... and Tidy without calling anything', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    fireEvent.contextMenu(screen.getByText('F1').closest('tr')!)
+    await user.click(screen.getByText('Move to slot...'))
+    fireEvent.change(screen.getByRole('slider', { name: 'Target slot' }), { target: { value: '10' } })
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('slider', { name: 'Target slot' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Tidy/ }))
+    await user.click(screen.getByRole('radio', { name: /shortest first/i }))
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('button', { name: 'Sort' })).not.toBeInTheDocument()
+
+    expect(mockInvoke).not.toHaveBeenCalledWith('move_sample_slots', expect.anything())
+    expect(mockInvoke).not.toHaveBeenCalledWith('sort_sample_slots', expect.anything())
+  })
+
+  it('no Move to slot... and no Tidy in View mode', () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode={false} projectPath="/proj" />
+    )
+    expect(screen.queryByRole('button', { name: /Tidy/ })).not.toBeInTheDocument()
+    fireEvent.contextMenu(screen.getByText('F1').closest('tr')!)
+    expect(screen.getByText('Play')).toBeInTheDocument() // the menu is open
+    expect(screen.queryByText('Move to slot...')).not.toBeInTheDocument()
+  })
+
+  it('no Move to slot... on a slot with nothing to move', () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    fireEvent.contextMenu(screen.getByText('F2').closest('tr')!) // empty, no attributes
+    expect(screen.queryByText('Move to slot...')).not.toBeInTheDocument()
+  })
+})
+
+describe('SampleSlotsTable — reorganising slots, layout and wording', () => {
+  beforeEach(() => {
+    mockInvoke.mockReset()
+    mockInvoke.mockImplementation(async () => [])
+  })
+
+  it('puts Tidy to the left of the compatibility glyph', () => {
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    const tidy = screen.getByRole('button', { name: /Tidy/ })
+    const glyph = document.querySelector('.pool-health-glyph')!
+    expect(glyph).not.toBeNull()
+    expect(tidy.compareDocumentPosition(glyph) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it('offers each Tidy order as a choice that explains itself on hover', async () => {
+    const user = userEvent.setup()
+    renderWithProvider(
+      <SampleSlotsTable slots={mockSlots} slotPrefix="F" tableType="flex" isEditMode projectPath="/proj" />
+    )
+    await user.click(screen.getByRole('button', { name: /Tidy/ }))
+    const choices = screen.getAllByRole('radio')
+    expect(choices.map(c => c.getAttribute('aria-label'))).toEqual([
+      'File name (A to Z)', 'File name (Z to A)', 'Duration (longest first)', 'Duration (shortest first)', 'Folder, then file name',
+    ])
+    choices.forEach(c => expect(c.getAttribute('title')).toBeTruthy())
+    expect(choices[0]).toHaveAttribute('aria-checked', 'true')
+    await user.click(choices[2])
+    expect(choices[2]).toHaveAttribute('aria-checked', 'true')
+    expect(choices[0]).toHaveAttribute('aria-checked', 'false')
   })
 })

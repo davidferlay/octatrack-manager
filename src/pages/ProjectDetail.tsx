@@ -604,6 +604,10 @@ export function ProjectDetail() {
   });
   refreshHistoryRef.current = writeHistory.refresh;
 
+  // A slot move or sort renumbered slots under every panel: read it all again, as after an
+  // Undo. The table refreshes the history itself, failed or not (onWriteHistoryChanged).
+  const handleSlotsReorganised = handleRestored;
+
   // Toggle edit mode (backup bank file and project.work on entering edit mode)
   const toggleEditMode = useCallback(async () => {
     if (!isEditMode && projectPath) {
@@ -2505,6 +2509,8 @@ export function ProjectDetail() {
                 transfersFailed={hasFailedTransfers}
                 onToggleTransfers={() => setIsTransferQueueOpen(!isTransferQueueOpen)}
                 onDragStateChange={(active) => { isDraggingRef.current = active; }}
+                onSlotsReorganised={handleSlotsReorganised}
+                onWriteHistoryChanged={writeHistory.refresh}
               />
             )}
 
@@ -2557,6 +2563,8 @@ export function ProjectDetail() {
                 transfersFailed={hasFailedTransfers}
                 onToggleTransfers={() => setIsTransferQueueOpen(!isTransferQueueOpen)}
                 onDragStateChange={(active) => { isDraggingRef.current = active; }}
+                onSlotsReorganised={handleSlotsReorganised}
+                onWriteHistoryChanged={writeHistory.refresh}
               />
             )}
 

@@ -11,6 +11,7 @@ import {
   useSensor,
   useSensors,
   useDroppable,
+  useDraggable,
   type DragEndEvent,
 } from "@dnd-kit/core";
 import { useTablePreferences } from "../context/TablePreferencesContext";
@@ -24,32 +25,63 @@ import { SamplePlayerBar } from './SamplePlayerBar';
 import { formatBankRef } from './BankSelector';
 import { otNotices, type OtCarry, type OtApplied } from '../utils/otNotices';
 import type { CopiedFile } from '../hooks/useAudioPoolTransfer';
+import { canDragSlots, sourcesForDrag, moveForDrop, moveNotice, sortNotice, continuousRun, SORT_ORDERS, type SlotMoveReport } from '../utils/slotMoves';
+import { MoveToSlotModal, TidySlotsModal } from './SlotReorganiseModals';
 
-// Droppable slot row for dnd-kit (pointer-based, cross-platform)
+// Pointer travel before a press on a row becomes a drag, so a plain click still selects.
+const DRAG_DISTANCE_PX = 5;
+
+// The label that follows the pointer during a dnd-kit drag (pool files or slots).
+const dragBadgeStyle: React.CSSProperties = {
+  background: 'rgba(255, 102, 0, 0.9)',
+  color: '#fff',
+  padding: '4px 10px',
+  borderRadius: '4px',
+  fontSize: '0.8rem',
+  fontFamily: "'Courier New', monospace",
+  pointerEvents: 'none',
+  whiteSpace: 'nowrap',
+  // The overlay is as wide as the dragged element, a whole row for slots
+  width: 'max-content',
+};
+
+// Droppable slot row for dnd-kit (pointer-based, cross-platform). Also a drag source when
+// `dragSlots` is set: the slots a drag from this row carries (null = the row does not drag).
 function DroppableSlotRow({
   slotId,
   className,
   disabled,
+  dragSlots,
   children,
   ...rest
 }: {
   slotId: number;
   className?: string;
   disabled?: boolean;
+  dragSlots?: number[] | null;
   children: React.ReactNode;
   [key: string]: unknown;
 }) {
-  const { setNodeRef, isOver } = useDroppable({
+  const { setNodeRef: setDropRef, isOver, active } = useDroppable({
     id: `slot:${slotId}`,
     data: { type: 'slot', slotId },
     disabled,
   });
+  // Its own id: the row is a drop target and a drag source at once
+  const { setNodeRef: setDragRef, listeners } = useDraggable({
+    id: `slot-row:${slotId}`,
+    data: { source: 'slot-table', slots: dragSlots ?? [], grabbed: slotId },
+    disabled: !dragSlots,
+  });
+  const setRefs = useCallback((el: HTMLElement | null) => { setDropRef(el); setDragRef(el); }, [setDropRef, setDragRef]);
   return (
     <tr
-      ref={setNodeRef}
+      ref={setRefs}
       data-slot-id={slotId}
-      className={`${className || ''} ${isOver ? 'drop-target-highlight' : ''}`.trim()}
+      // A slot drag frames all the rows it lands on instead (the table's drop-block)
+      className={`${className || ''} ${isOver && active?.data.current?.source !== 'slot-table' ? 'drop-target-highlight' : ''} ${dragSlots ? 'slot-draggable' : ''}`.trim()}
       {...rest}
+      {...listeners}
     >
       {children}
     </tr>
@@ -126,6 +158,10 @@ interface SampleSlotsTableProps {
   // Slot id to select and scroll to on mount, e.g. when an Audio Pool usage link
   // opened this tab to show where a sample sits.
   focusSlotId?: number | null;
+  // A move or sort renumbered slots: the page reads everything again (as after an Undo).
+  onSlotsReorganised?: () => void;
+  /** A move or sort was tried: the undo history may hold a new entry, even after a failure. */
+  onWriteHistoryChanged?: () => void;
 }
 
 type SortColumn = 'slot' | 'sample' | 'status' | 'used' | 'source' | 'gain' | 'timestretch' | 'loop' | 'compatibility' | 'format' | 'bitdepth' | 'samplerate' | 'size';
@@ -181,18 +217,29 @@ function getSetRelativePath(projectPath: string | null): string {
   return projectPath;
 }
 
-export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, projectName, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, onImportToProject, sidebarRefreshTrigger, onPoolFixed, onOpenFixProjectSamples, transfersOpen, transferCount, transfersActive, transfersSucceeded, transfersFailed, onToggleTransfers, onDragStateChange, slotUsage, focusSlotId }: SampleSlotsTableProps) {
+export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, projectName, memorySettings, isEditMode, audioPoolPath, onSlotsUpdated, onFlexRamUpdated, onImportToAudioPool, onImportToProject, sidebarRefreshTrigger, onPoolFixed, onOpenFixProjectSamples, transfersOpen, transferCount, transfersActive, transfersSucceeded, transfersFailed, onToggleTransfers, onDragStateChange, slotUsage, focusSlotId, onSlotsReorganised, onWriteHistoryChanged }: SampleSlotsTableProps) {
   const navigate = useNavigate();
-  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const dndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: DRAG_DISTANCE_PX } }));
   const [dndDragFiles, setDndDragFiles] = useState<string[]>([]);
+  // Slots carried by a slot-row drag in progress (dimmed rows, drag label)
+  const [dndDragSlots, setDndDragSlots] = useState<number[]>([]);
+  // The rows a slot drag would land on, framed as one box while it hovers
+  const [dropBlock, setDropBlock] = useState<{ start: number; count: number } | null>(null);
+  // "Move to slot..." (with the slots it moves) or the Tidy window, when open
+  const [reorganiseModal, setReorganiseModal] = useState<{ kind: 'move'; sources: number[] } | { kind: 'tidy' } | null>(null);
+  // A move or sort in flight. One at a time: a second one would plan against files the first
+  // is rewriting. The ref answers at once; the state drives the disabled controls.
+  const [reorganising, setReorganising] = useState(false);
+  const reorganisingRef = useRef(false);
   const [viewModeToast, setViewModeToast] = useState(false);
   // Transient notice for drop validation feedback (skipped files, RAM limits, etc.)
-  const [notice, setNotice] = useState<{ message: string; kind: 'warning' | 'info' } | null>(null);
+  // A `busy` notice stays up until the next notice replaces it.
+  const [notice, setNotice] = useState<{ message: string; kind: 'warning' | 'info' | 'busy' } | null>(null);
   const noticeTimerRef = useRef<number | null>(null);
-  const showNotice = useCallback((message: string, kind: 'warning' | 'info' = 'warning') => {
+  const showNotice = useCallback((message: string, kind: 'warning' | 'info' | 'busy' = 'warning') => {
     setNotice({ message, kind });
     if (noticeTimerRef.current) window.clearTimeout(noticeTimerRef.current);
-    noticeTimerRef.current = window.setTimeout(() => setNotice(null), 4000);
+    noticeTimerRef.current = kind === 'busy' ? null : window.setTimeout(() => setNotice(null), 4000);
   }, []);
   // Right-click context menu on slot rows
   const [slotMenu, setSlotMenu] = useState<{ x: number; y: number; slot: SampleSlot } | null>(null);
@@ -749,7 +796,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   // Ignored while typing in a field or with a context menu open.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (slotMenu) return;
+      // A menu or a Move/Tidy window has the keys (Delete must not clear slots behind it)
+      if (slotMenu || reorganiseModal) return;
       const t = e.target as HTMLElement | null;
       const tag = t?.tagName;
       const typing = !!t && (tag === 'INPUT' || tag === 'TEXTAREA' || t.isContentEditable);
@@ -790,7 +838,83 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [audioPoolPath, showAudioPool, isEditMode, selectedSlots, slotMenu, handleDeleteKey, player, activePane, moveSlotSelection, onToggleTransfers]);
+  }, [audioPoolPath, showAudioPool, isEditMode, selectedSlots, slotMenu, reorganiseModal, handleDeleteKey, player, activePane, moveSlotSelection, onToggleTransfers]);
+
+  const prefix = slotPrefix === 'S' ? 'S' : 'F';
+  const slotLabel = (n: number) => `${prefix}${String(n).padStart(3, '0')}`;
+
+  /**
+   * Every move and sort goes through here. The backend either refuses with a reason and
+   * writes nothing, or reports what it renumbered. Numbers then changed under the slot list,
+   * the Usage column and any Parts editor, so the page reads it all again, as after an Undo.
+   */
+  const applyReorganise = useCallback(async (
+    command: 'move_sample_slots' | 'sort_sample_slots',
+    args: Record<string, unknown>,
+    busy: string,
+    describe: (report: SlotMoveReport) => { message: string; kind: 'info' | 'warning' },
+  ) => {
+    if (!isEditMode || !projectPath || reorganisingRef.current) return;
+    reorganisingRef.current = true;
+    setReorganising(true);
+    showNotice(busy, 'busy');
+    try {
+      const report = await invoke<SlotMoveReport>(command, { path: projectPath, slotType: tableType, ...args });
+      const { message, kind } = describe(report);
+      showNotice(message, kind);
+      if (report.moves.length === 0) return; // nothing was written, nothing to read again
+      // The selection is made of the old numbers
+      setSelectedSlots(new Set());
+      setLastClickedSlotId(null);
+      if (audioPoolPath) invalidatePoolUsage(audioPoolPath);
+      onSlotsReorganised?.();
+    } catch (error) {
+      showNotice(String(error), 'warning');
+    } finally {
+      reorganisingRef.current = false;
+      setReorganising(false);
+      // Even a failure can leave an Undo entry: one that stopped partway through writing
+      onWriteHistoryChanged?.();
+    }
+  }, [isEditMode, projectPath, tableType, showNotice, audioPoolPath, onSlotsReorganised, onWriteHistoryChanged]);
+
+  // Only taken slots move: empty ones in a Shift run are left behind
+  const takenOf = useCallback((ids: number[]) =>
+    slots.filter(s => ids.includes(s.slot_id) && slotHasBlock(s)).map(s => s.slot_id),
+  [slots]);
+
+  const moveSlots = useCallback((sources: number[], target: number) => {
+    const count = takenOf(sources).length;
+    return applyReorganise('move_sample_slots', { sources, target },
+      `Moving ${count} slot${count === 1 ? '' : 's'}...`, r => moveNotice(r, prefix));
+  }, [applyReorganise, prefix, takenOf]);
+
+  // Tidy sorts the whole list, or only a continuous run of selected slots when asked to.
+  const tidySlots = useCallback((orderId: string, onlyRun: boolean) => {
+    const orderLabel = SORT_ORDERS.find(o => o.id === orderId)?.label ?? orderId;
+    const selection = onlyRun && continuousRun(selectedSlots) ? [...selectedSlots].sort((a, b) => a - b) : null;
+    return applyReorganise('sort_sample_slots', { order: orderId, selection }, 'Sorting slots...', r => sortNotice(r, orderLabel, prefix));
+  }, [applyReorganise, selectedSlots, prefix]);
+
+  // Pressing a row and moving past the drag distance while dragging is off (another sort,
+  // a search or a filter) says why nothing drags. A click never moves that far, so it selects.
+  const warnRefusedDrag = useCallback((e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    const start = { x: e.clientX, y: e.clientY };
+    const stop = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
+    };
+    const onMove = (me: PointerEvent) => {
+      if (Math.hypot(me.clientX - start.x, me.clientY - start.y) <= DRAG_DISTANCE_PX) return;
+      stop();
+      showNotice('Sort by slot and clear the filters to move slots by dragging', 'warning');
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
+  }, [showNotice]);
 
   // Handle drop on a slot row (HTML5 drag — works on Linux; macOS uses dnd-kit via handleDndDragEnd)
   const handleSlotDrop = useCallback(async (e: React.DragEvent, targetSlot: SampleSlot) => {
@@ -815,11 +939,22 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
   // dnd-kit drag end — used on macOS where HTML5 drag events don't work in WKWebView
   const handleDndDragEnd = useCallback(async (event: DragEndEvent) => {
     setDndDragFiles([]);
+    setDndDragSlots([]);
+    setDropBlock(null);
     onDragStateChange?.(false);
     const { active, over } = event;
     if (!over) return;
     const sourceData = active.data.current as { source?: string; files?: string[] } | undefined;
     const targetData = over.data.current as { type?: string; slotId?: number } | undefined;
+    // Slot rows dropped on a slot row: the slots move to that row's number
+    const slotDrag = active.data.current as { source?: string; slots?: number[]; grabbed?: number } | undefined;
+    if (slotDrag?.source === 'slot-table') {
+      if (targetData?.type !== 'slot' || slotDrag.grabbed == null) return;
+      // Let go on the row it was grabbed by: a wiggle, not a move, however many slots it carries
+      const move = moveForDrop({ slots: slotDrag.slots ?? [], grabbed: slotDrag.grabbed }, targetData.slotId);
+      if (move) await moveSlots(move.sources, move.target);
+      return;
+    }
     if (sourceData?.source !== 'audio-pool-sidebar' || targetData?.type !== 'slot') return;
     const targetSlotId = targetData.slotId!;
     const targetSlot = slots.find(s => s.slot_id === targetSlotId);
@@ -827,7 +962,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     const filePaths = await expandPaths(sourceData.files ?? []);
     if (filePaths.length === 0) return;
     await doAssignFiles(filePaths, targetSlot);
-  }, [slots, doAssignFiles, expandPaths, onDragStateChange]);
+  }, [slots, doAssignFiles, expandPaths, onDragStateChange, moveSlots]);
 
   const handleSlotDragOver = useCallback((e: React.DragEvent, slotId: number) => {
     // Always prevent default to avoid text selection during drag
@@ -1494,6 +1629,13 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     loopFilter !== 'all' || formatFilter !== 'all' || bitDepthFilter !== 'all' ||
     sampleRateFilter !== 'all';
 
+  // Rows drag only while they are the slots in their real order (see canDragSlots)
+  const dragAllowed = canDragSlots({
+    isEditMode: !!isEditMode, sortColumn, sortDirection, searchText,
+    filters: [compatibilityFilter, statusFilter, usageFilter, sourceFilter, gainFilter,
+      timestretchFilter, loopFilter, formatFilter, bitDepthFilter, sampleRateFilter],
+  });
+
   // Reset all filters
   const resetAllFilters = () => {
     setCompatibilityFilter('all');
@@ -1765,12 +1907,20 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     <DndContext
       sensors={dndSensors}
       onDragStart={(event) => {
-        const data = event.active.data.current as { files?: string[] } | undefined;
+        const data = event.active.data.current as { files?: string[]; source?: string; slots?: number[] } | undefined;
         setDndDragFiles(data?.files ?? []);
+        setDndDragSlots(data?.source === 'slot-table' ? (data.slots ?? []) : []);
         onDragStateChange?.(true);
       }}
+      onDragOver={({ active, over }) => {
+        const drag = active.data.current as { source?: string; slots?: number[]; grabbed?: number } | undefined;
+        const target = (over?.data.current as { type?: string; slotId?: number } | undefined)?.slotId;
+        const move = drag?.source === 'slot-table' ? moveForDrop({ slots: drag.slots ?? [], grabbed: drag.grabbed ?? -1 }, target) : null;
+        // One slot covers one row whether it moves or swaps; a block covers its taken slots
+        setDropBlock(move ? { start: move.target, count: Math.min(takenOf(move.sources).length, 129 - move.target) } : null);
+      }}
       onDragEnd={handleDndDragEnd}
-      onDragCancel={() => { setDndDragFiles([]); setDragOverSlotId(null); onDragStateChange?.(false); }}
+      onDragCancel={() => { setDndDragFiles([]); setDndDragSlots([]); setDropBlock(null); setDragOverSlotId(null); onDragStateChange?.(false); }}
     >
     <div className={`samples-tab ${showAudioPool ? 'with-sidebar' : ''}`}>
       {showAudioPool && audioPoolPath && (
@@ -1851,6 +2001,16 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            {isEditMode && (
+              <button
+                className="copy-table-btn tidy-slots-btn"
+                onClick={() => setReorganiseModal({ kind: 'tidy' })}
+                disabled={reorganising}
+                title={reorganising ? 'Wait for the slots to finish moving' : 'Sort the slot list'}
+              >
+                <i className="fas fa-sort-amount-down"></i> Tidy
+              </button>
+            )}
             {!showAudioPool && (() => {
               const incompatibleCount = slots.filter(
                 s => s.path && s.file_exists && s.compatibility && s.compatibility !== 'compatible'
@@ -2061,12 +2221,19 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
                 {visibleColIds.map(colId => renderColHeader(colId))}
               </tr>
             </thead>
-          <tbody>
-            {sortedSlots.map((slot) => (
+          <tbody onPointerDown={isEditMode && !dragAllowed ? warnRefusedDrag : undefined}>
+            {(() => {
+              // Hide empty may leave rows of the box out: its ends are the first and last shown
+              const inBlock = (id: number) => dropBlock != null && id >= dropBlock.start && id < dropBlock.start + dropBlock.count;
+              const shown = sortedSlots.filter(s => inBlock(s.slot_id));
+              const blockClass = (id: number) => !inBlock(id) ? '' : `drop-block${id === shown[0].slot_id ? ' drop-block-first' : ''}${id === shown[shown.length - 1].slot_id ? ' drop-block-last' : ''}`;
+              return sortedSlots.map((slot) => (
               <DroppableSlotRow
                 key={slot.slot_id}
                 slotId={slot.slot_id}
-                className={`${selectedSlots.has(slot.slot_id) ? 'selected' : ''} ${lastClickedSlotId === slot.slot_id ? 'cursor' : ''} ${isEditMode && (dragOverSlotId === slot.slot_id || osDragOverSlotId === slot.slot_id) ? 'drop-target-highlight' : ''}`.trim()}
+                // An empty slot outside the selection has nothing to carry
+                dragSlots={dragAllowed && !reorganising && (slotHasBlock(slot) || selectedSlots.has(slot.slot_id)) ? sourcesForDrag(selectedSlots, slot.slot_id) : null}
+                className={`${selectedSlots.has(slot.slot_id) ? 'selected' : ''} ${lastClickedSlotId === slot.slot_id ? 'cursor' : ''} ${isEditMode && (dragOverSlotId === slot.slot_id || osDragOverSlotId === slot.slot_id) ? 'drop-target-highlight' : ''} ${dndDragSlots.includes(slot.slot_id) ? 'slot-drag-source' : ''} ${blockClass(slot.slot_id)}`.trim()}
                 onClick={(e: React.MouseEvent) => handleSlotClick(e, slot.slot_id)}
                 onDoubleClick={() => playSlot(slot)}
                 onDragEnter={handleSlotDragEnter}
@@ -2077,7 +2244,8 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
               >
                 {visibleColIds.map(colId => renderColCell(colId, slot))}
               </DroppableSlotRow>
-            ))}
+              ));
+            })()}
           </tbody>
         </table>
         </div>
@@ -2086,19 +2254,14 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     </div>
       <DragOverlay dropAnimation={null}>
         {dndDragFiles.length > 0 ? (
-          <div style={{
-            background: 'rgba(255, 102, 0, 0.9)',
-            color: '#fff',
-            padding: '4px 10px',
-            borderRadius: '4px',
-            fontSize: '0.8rem',
-            fontFamily: "'Courier New', monospace",
-            pointerEvents: 'none',
-            whiteSpace: 'nowrap',
-          }}>
+          <div style={dragBadgeStyle}>
             {dndDragFiles.length === 1
               ? dndDragFiles[0].split(/[\\/]/).pop()
               : `${dndDragFiles.length} files`}
+          </div>
+        ) : dndDragSlots.length > 0 ? (
+          <div style={dragBadgeStyle}>
+            {dndDragSlots.length === 1 ? slotLabel(dndDragSlots[0]) : `${dndDragSlots.length} slots`}
           </div>
         ) : null}
       </DragOverlay>
@@ -2110,7 +2273,7 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
     )}
     {notice && (
       <div className={`toast-notification ${notice.kind}`}>
-        <i className={`fas ${notice.kind === 'warning' ? 'fa-exclamation-triangle' : 'fa-circle-info'}`}></i> {notice.message}
+        <i className={`fas ${notice.kind === 'warning' ? 'fa-exclamation-triangle' : notice.kind === 'busy' ? 'fa-spinner fa-spin' : 'fa-circle-info'}`}></i> {notice.message}
       </div>
     )}
     {usagePopover && (
@@ -2189,6 +2352,21 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
         >
           <i className="fas fa-wrench"></i> Convert to Octatrack format
         </button>
+        {isEditMode && (() => {
+          // The selection when the slot is in it, else this slot; offered when any of it is taken
+          const sources = sourcesForDrag(selectedSlots, slotMenu.slot.slot_id);
+          if (!slots.some(s => sources.includes(s.slot_id) && slotHasBlock(s))) return null;
+          return (
+            <button
+              className="context-menu-item"
+              disabled={reorganising}
+              title={reorganising ? 'Wait for the slots to finish moving' : undefined}
+              onClick={() => { setReorganiseModal({ kind: 'move', sources }); setSlotMenu(null); }}
+            >
+              <i className="fas fa-arrows-up-down"></i> Move to slot...
+            </button>
+          );
+        })()}
         <div className="context-menu-separator"></div>
         <button
           className="context-menu-item"
@@ -2233,6 +2411,27 @@ export function SampleSlotsTable({ slots, slotPrefix, tableType, projectPath, pr
           <i className="fas fa-copy"></i> Copy path to clipboard
         </button>
       </div>
+    )}
+    {reorganiseModal?.kind === 'move' && (
+      <MoveToSlotModal
+        sources={takenOf(reorganiseModal.sources)}
+        slotLabel={slotLabel}
+        taken={new Set(slots.filter(slotHasBlock).map(s => s.slot_id))}
+        slotHolds={(n) => {
+          const slot = slots.find(s => s.slot_id === n);
+          return getFilename(slot?.path ?? null) || (slot && slotHasBlock(slot) ? 'no sample, attributes kept' : 'empty');
+        }}
+        onCancel={() => setReorganiseModal(null)}
+        onConfirm={(target) => { const { sources } = reorganiseModal; setReorganiseModal(null); void moveSlots(sources, target); }}
+      />
+    )}
+    {reorganiseModal?.kind === 'tidy' && (
+      <TidySlotsModal
+        run={continuousRun(selectedSlots)}
+        slotLabel={slotLabel}
+        onCancel={() => setReorganiseModal(null)}
+        onConfirm={(orderId, onlyRun) => { setReorganiseModal(null); void tidySlots(orderId, onlyRun); }}
+      />
     )}
     </>
   );

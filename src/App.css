@@ -726,6 +726,12 @@ h1 {
   animation: toastIn 0.2s ease, toastOut 0.3s ease 2.5s forwards;
 }
 
+/* Work in progress (a slot move or sort): no fade, it stays until the result replaces it */
+.toast-notification.busy {
+  border-color: #388bfd;
+  animation: toastIn 0.2s ease;
+}
+
 /* Friendly hint (not an error) — blue border + lightbulb */
 .toast-notification.tip {
   border-color: #388bfd;
@@ -2693,6 +2699,338 @@ h1 {
   outline: 2px dashed #f59e0b;
   outline-offset: -2px;
   background: rgba(245, 158, 11, 0.1) !important;
+}
+
+/* The rows a slot drag lands on, framed as one box. Drawn on cell overlays, not cell
+   borders: a wider collapsed border would grow the rows under the pointer mid-drag. */
+.samples-table tbody tr.drop-block {
+  background: rgba(245, 158, 11, 0.1) !important;
+}
+
+.samples-table tbody tr.drop-block td {
+  position: relative;
+}
+
+.samples-table tbody tr.drop-block td::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: 0 dashed #f59e0b;
+}
+
+.samples-table tbody tr.drop-block td:first-child::after { border-left-width: 2px; }
+.samples-table tbody tr.drop-block td:last-child::after { border-right-width: 2px; }
+.samples-table tbody tr.drop-block-first td::after { border-top-width: 2px; }
+.samples-table tbody tr.drop-block-last td::after { border-bottom-width: 2px; }
+
+/* Slot rows that drag to a new number (Edit mode, slot order, no search or filter) */
+.samples-table tbody tr.slot-draggable {
+  cursor: grab;
+}
+
+/* The slots a drag carries, dimmed while they are in the air */
+.samples-table tbody tr.slot-drag-source {
+  opacity: 0.4;
+}
+
+/* Tidy carries a word, unlike the square icon buttons beside it */
+.copy-table-btn.tidy-slots-btn {
+  width: auto;
+  gap: 0.35rem;
+  padding: 0.3rem 0.6rem;
+}
+
+/* Sort choices in the Tidy window: cards two per row, icon left, name over a hint */
+.modal-content.tidy-slots-modal {
+  max-width: 600px;
+}
+
+/* Muted line right after a modal title (the auto margin keeps it off the far edge) */
+.modal-header-subtitle {
+  margin-left: 0.75rem;
+  margin-right: auto;
+  font-size: 0.8rem;
+  color: var(--elektron-text-secondary);
+}
+
+/* "Only selected slots": a card in the same style as the sort orders, as wide as its text, centred */
+.tidy-only-run {
+  display: grid;
+  grid-template-columns: 1.5rem auto;
+  column-gap: 0.75rem;
+  align-items: center;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0.5rem 0.75rem;
+  background-color: transparent;
+  border: 1px dashed var(--elektron-border-gray);
+  border-radius: 4px;
+  color: var(--elektron-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tidy-only-run i {
+  grid-row: span 2;
+  font-size: 1.1rem;
+  text-align: center;
+  color: var(--elektron-text-secondary);
+}
+
+.tidy-only-run:hover {
+  background-color: rgba(255, 138, 0, 0.1);
+}
+
+.tidy-only-run.selected {
+  background-color: rgba(255, 138, 0, 0.1);
+  border-color: var(--elektron-orange);
+  border-style: solid;
+}
+
+.tidy-only-run.selected i,
+.tidy-only-run.selected .tidy-sort-order-label {
+  color: var(--elektron-orange);
+}
+
+.tidy-sort-orders {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+
+/* The scope card above the orders */
+.tidy-only-run {
+  margin-bottom: 0.75rem;
+}
+
+.tidy-sort-order {
+  display: grid;
+  grid-template-columns: 1.5rem 1fr;
+  column-gap: 0.75rem;
+  align-items: center;
+  padding: 0.5rem 0.75rem;
+  background-color: transparent;
+  border: 1px dashed var(--elektron-border-gray);
+  border-radius: 4px;
+  color: var(--elektron-text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.tidy-sort-order i {
+  grid-row: span 2;
+  font-size: 1.1rem;
+  text-align: center;
+  color: var(--elektron-text-secondary);
+}
+
+.tidy-sort-order-label {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.tidy-sort-order-hint {
+  font-size: 0.8rem;
+  color: var(--elektron-text-secondary);
+}
+
+.tidy-sort-order:hover {
+  background-color: rgba(255, 138, 0, 0.1);
+}
+
+.tidy-sort-order.selected {
+  background-color: rgba(255, 138, 0, 0.1);
+  border-color: var(--elektron-orange);
+  border-style: solid;
+}
+
+.tidy-sort-order.selected i,
+.tidy-sort-order.selected .tidy-sort-order-label {
+  color: var(--elektron-orange);
+}
+
+/* Move to slot: From and To cards over a slider whose track maps the 128 slots */
+.modal-content.move-slot-modal {
+  max-width: 560px;
+}
+
+.move-slot-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.move-slot-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--elektron-border-gray);
+  border-radius: 4px;
+  min-width: 0;
+}
+
+.move-slot-card.to {
+  border-color: var(--elektron-orange);
+  background-color: rgba(255, 138, 0, 0.08);
+}
+
+.move-slot-card-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--elektron-text-secondary);
+}
+
+.move-slot-card-slot {
+  font-family: 'Courier New', monospace;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--elektron-text-primary);
+}
+
+.move-slot-card.to .move-slot-card-slot {
+  color: var(--elektron-orange);
+}
+
+.move-slot-card-holds {
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+  color: var(--elektron-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.move-slot-arrow {
+  color: var(--elektron-text-secondary);
+}
+
+/* Room above for the thumb tip */
+.move-slot-picker {
+  position: relative;
+  margin-top: 2rem;
+}
+
+/* The plain bar gives way to the slot strip */
+.move-slot-picker .tools-dual-range-slider {
+  margin-top: 0;
+}
+
+.move-slot-picker .tools-dual-range-slider::before {
+  display: none;
+}
+
+/* One cell per slot, each centred under the thumb position of its number: the strip
+   overhangs the thumb's travel (22px in, see alongSlider) by half a step each side. */
+.move-slot-map {
+  position: absolute;
+  top: 50%;
+  left: calc(11px - (100% - 22px) / 254);
+  right: calc(11px - (100% - 22px) / 254);
+  height: 8px;
+  transform: translateY(-50%);
+  display: flex;
+  border-radius: 2px;
+  overflow: hidden;
+  background-color: var(--elektron-medium-gray);
+}
+
+.move-slot-map > span {
+  flex: 1;
+}
+
+.move-slot-map > span.taken {
+  background-color: #5a5a5a;
+}
+
+/* A pin on each slot being moved */
+.move-slot-source-marker {
+  position: absolute;
+  top: 50%;
+  width: 3px;
+  height: 18px;
+  border-radius: 2px;
+  background-color: #58a6ff;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+}
+
+/* The slot the thumb points at, in a bubble above it while the slider is hovered or dragged */
+.move-slot-thumb-tip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  max-width: 260px;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--elektron-border-gray);
+  border-radius: 4px;
+  background-color: var(--elektron-black);
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  color: var(--elektron-text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  z-index: 2;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.12s, visibility 0.12s;
+}
+
+.move-slot-thumb-tip strong {
+  color: var(--elektron-text-primary);
+}
+
+.move-slot-picker:hover .move-slot-thumb-tip,
+.move-slot-picker:active .move-slot-thumb-tip {
+  visibility: visible;
+  opacity: 1;
+}
+
+.move-slot-scale {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.35rem;
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  color: var(--elektron-text-secondary);
+}
+
+.move-slot-legend {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0 0.3rem 0 0.75rem;
+}
+
+.move-slot-legend.taken {
+  width: 10px;
+  height: 8px;
+  border-radius: 2px;
+  background-color: #5a5a5a;
+}
+
+.move-slot-legend-pins {
+  display: inline-flex;
+  gap: 2px;
+  vertical-align: middle;
+  margin: 0 0.3rem 0 0.75rem;
+}
+
+.move-slot-legend.pin {
+  width: 3px;
+  height: 12px;
+  margin: 0;
+  border-radius: 2px;
+  background-color: #58a6ff;
 }
 
 /* OS drag-drop sidebar drop zone wrapper */

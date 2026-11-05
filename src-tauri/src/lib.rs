@@ -7,6 +7,7 @@ mod ot_sidecar;
 pub mod project_manager;
 mod project_reader;
 mod purge;
+mod slot_reorganise;
 mod write_history;
 
 use audio_pool::{
@@ -226,16 +227,22 @@ fn make_slots_undoable(path: &str, label: &str) -> Result<(), String> {
 
 #[tauri::command]
 async fn undo_write(path: String) -> Result<Option<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || write_history::undo(&path))
-        .await
-        .unwrap()
+    tauri::async_runtime::spawn_blocking(move || {
+        let _files = slot_files_lock();
+        write_history::undo(&path)
+    })
+    .await
+    .unwrap()
 }
 
 #[tauri::command]
 async fn redo_write(path: String) -> Result<Option<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || write_history::redo(&path))
-        .await
-        .unwrap()
+    tauri::async_runtime::spawn_blocking(move || {
+        let _files = slot_files_lock();
+        write_history::redo(&path)
+    })
+    .await
+    .unwrap()
 }
 
 #[tauri::command]
@@ -1221,6 +1228,193 @@ async fn backup_project_files(
     .unwrap()
 }
 
+/// Backs up exactly `files` before an operation rewrites them, and fails if any copy fails.
+///
+/// `backup_project_files_impl` shrugs off a failed copy, which is fine for a courtesy backup
+/// but not for a slot move: that one rewrites the project, markers and banks together and the
+/// backup is the only way back if the app dies halfway. The folder is
+/// `backups/YYYY-MM-DD_HH-MM-SS_<label>/` with each file at its path relative to the project;
+/// when that name is taken (two moves in one second) `_2`, `_3`... is appended rather than
+/// mixing two backups in one folder.
+fn backup_files_strict(
+    project_path: &str,
+    files: &[std::path::PathBuf],
+    label: &str,
+) -> Result<std::path::PathBuf, String> {
+    use std::path::Path;
+
+    let project_dir = Path::new(project_path);
+    let backups = project_dir.join("backups");
+    std::fs::create_dir_all(&backups)
+        .map_err(|e| format!("Failed to create backup directory: {}", e))?;
+
+    let stem = format!(
+        "{}_{}",
+        chrono::Local::now().format("%Y-%m-%d_%H-%M-%S"),
+        label
+    );
+    // create_dir (not create_dir_all) fails when the folder exists, so a taken name is never reused.
+    let mut attempt = 1u32;
+    let backup_dir = loop {
+        let name = if attempt == 1 {
+            stem.clone()
+        } else {
+            format!("{}_{}", stem, attempt)
+        };
+        let candidate = backups.join(name);
+        match std::fs::create_dir(&candidate) {
+            Ok(()) => break candidate,
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => attempt += 1,
+            Err(e) => return Err(format!("Failed to create backup directory: {}", e)),
+        }
+    };
+
+    for file in files {
+        let relative = file.strip_prefix(project_dir).map_err(|_| {
+            format!(
+                "Cannot back up {}: it is outside the project",
+                file.display()
+            )
+        })?;
+        let dest = backup_dir.join(relative);
+        if let Some(parent) = dest.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create backup directory: {}", e))?;
+        }
+        std::fs::copy(file, &dest)
+            .map_err(|e| format!("Failed to back up {}: {}", file.display(), e))?;
+    }
+    Ok(backup_dir)
+}
+
+/// Backs up and snapshots the files a slot reorganisation is about to write, so the move can
+/// be undone from the app and, failing that, restored from the backup folder.
+fn slot_move_before_write(
+    path: &str,
+    backup_label: &str,
+    undo_label: &str,
+    paths: &[std::path::PathBuf],
+) -> Result<(), String> {
+    backup_files_strict(path, paths, backup_label)?;
+    write_history::record(path, undo_label, paths)
+}
+
+/// Lets one slot move, sort, undo or redo run at a time, across the whole app.
+///
+/// Tauri runs commands side by side, each of these on its own blocking thread. A move reads
+/// the project and every bank, then writes them: a second move reading in between would remap
+/// banks the first had already remapped, and its undo snapshot would hold a half-written
+/// project. Undo and redo rewrite the same files, so they wait their turn too. Taken on the
+/// blocking thread and dropped there, never held across an await.
+fn slot_files_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    // It guards no data, so a holder that panicked leaves nothing behind to distrust
+    LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+fn parse_pool(slot_type: &str) -> Result<slot_reorganise::Pool, String> {
+    slot_reorganise::Pool::parse(slot_type)
+        .ok_or_else(|| format!("Unknown slot type: {} (expected Flex or Static)", slot_type))
+}
+
+fn pool_word(pool: slot_reorganise::Pool) -> &'static str {
+    match pool {
+        slot_reorganise::Pool::Flex => "Flex",
+        slot_reorganise::Pool::Static => "Static",
+    }
+}
+
+/// The Undo label for a move: a swap names both slots, anything else counts the slots that
+/// changed number on their own (empty or repeated sources move nothing; pushed slots are not
+/// what the user moved).
+fn move_words(pool: slot_reorganise::Pool, plan: &slot_reorganise::SlotPlan) -> String {
+    let prefix = &pool_word(pool)[..1];
+    if let Some((a, b)) = plan.swapped {
+        return format!("Swap {prefix}{a:03} and {prefix}{b:03}");
+    }
+    let moved = plan
+        .moves
+        .iter()
+        .filter(|m| !plan.pushed.contains(m))
+        .count();
+    let plural = if moved == 1 { "" } else { "s" };
+    format!("Move {moved} {} slot{plural}", pool_word(pool))
+}
+
+/// Plans and applies a move in one call, so the project cannot change in between.
+fn move_slots_impl(
+    path: &str,
+    slot_type: &str,
+    sources: Vec<u8>,
+    target: u8,
+) -> Result<slot_reorganise::SlotMoveReport, String> {
+    let _files = slot_files_lock();
+    let pool = parse_pool(slot_type)?;
+    let taken = slot_reorganise::taken_slots(path, pool)?;
+    let plan = slot_reorganise::plan_move(&taken, &sources, target)?;
+    let label = format!("move_{}_slots", pool.tag().to_lowercase());
+    let words = move_words(pool, &plan);
+    slot_reorganise::apply_plan(path, pool, &plan, |paths| {
+        slot_move_before_write(path, &label, &words, paths)
+    })
+}
+
+/// Plans and applies a sort in one call, so the project cannot change in between.
+fn sort_slots_impl(
+    path: &str,
+    slot_type: &str,
+    order: &str,
+    selection: Option<Vec<u8>>,
+) -> Result<slot_reorganise::SlotMoveReport, String> {
+    let _files = slot_files_lock();
+    let pool = parse_pool(slot_type)?;
+    let sort_order = slot_reorganise::SortOrder::parse(order)
+        .ok_or_else(|| format!("Unknown sort order: {}", order))?;
+    let taken = slot_reorganise::taken_slots(path, pool)?;
+    let entries = slot_reorganise::sort_entries(path, pool)?;
+    let plan = slot_reorganise::plan_sort(&taken, &entries, sort_order, selection.as_deref())?;
+    let label = format!("sort_{}_slots", pool.tag().to_lowercase());
+    let by = match sort_order {
+        slot_reorganise::SortOrder::NameAsc => "name A to Z",
+        slot_reorganise::SortOrder::NameDesc => "name Z to A",
+        slot_reorganise::SortOrder::DurationDesc => "duration, longest first",
+        slot_reorganise::SortOrder::DurationAsc => "duration, shortest first",
+        slot_reorganise::SortOrder::FolderThenName => "folder, then name",
+    };
+    let words = format!("Sort {} slots by {}", pool_word(pool), by);
+    slot_reorganise::apply_plan(path, pool, &plan, |paths| {
+        slot_move_before_write(path, &label, &words, paths)
+    })
+}
+
+#[tauri::command]
+async fn move_sample_slots(
+    path: String,
+    slot_type: String,
+    sources: Vec<u8>,
+    target: u8,
+) -> Result<slot_reorganise::SlotMoveReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        move_slots_impl(&path, &slot_type, sources, target)
+    })
+    .await
+    .unwrap()
+}
+
+#[tauri::command]
+async fn sort_sample_slots(
+    path: String,
+    slot_type: String,
+    order: String,
+    selection: Option<Vec<u8>>,
+) -> Result<slot_reorganise::SlotMoveReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        sort_slots_impl(&path, &slot_type, &order, selection)
+    })
+    .await
+    .unwrap()
+}
+
 #[tauri::command]
 async fn list_missing_samples(
     project_path: String,
@@ -1816,6 +2010,8 @@ pub fn run() {
             // Sample slot assignment
             assign_samples_to_slots,
             clear_sample_slots,
+            move_sample_slots,
+            sort_sample_slots,
             clear_sample_keep_attributes,
             reset_slot_attributes,
             // Project Management
@@ -1842,6 +2038,576 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod slot_reorganise_commands {
+        use super::*;
+        use crate::project_reader::tests::TestProject;
+        use crate::project_reader::{assign_samples_to_slots, SlotAssignment};
+        use ot_tools_io::{BankFile, HasChecksumField, MarkersFile, OctatrackFileIO};
+        use std::path::PathBuf;
+
+        fn dir(project: &TestProject) -> &std::path::Path {
+            std::path::Path::new(&project.path)
+        }
+
+        /// A project with an empty markers file and the given slots of `slot_type` assigned.
+        fn project_with(slot_type: &str, slots: &[(u16, &str)]) -> TestProject {
+            let project = TestProject::new();
+            MarkersFile::default()
+                .to_data_file(&dir(&project).join("markers.work"))
+                .unwrap();
+            let assignments = slots
+                .iter()
+                .map(|(slot, path)| SlotAssignment {
+                    slot_index: *slot,
+                    audio_path: path.to_string(),
+                    set_defaults: true,
+                })
+                .collect();
+            assign_samples_to_slots(&project.path, slot_type, assignments).unwrap();
+            project
+        }
+
+        fn backup_dirs(project: &TestProject) -> Vec<PathBuf> {
+            backup_dirs_of(&project.path)
+        }
+
+        #[test]
+        fn strict_backup_fails_when_a_copy_fails() {
+            let project = TestProject::new();
+            let ok = dir(&project).join("project.work");
+            let directory = dir(&project).join("subdir");
+            std::fs::create_dir(&directory).unwrap();
+            let err =
+                backup_files_strict(&project.path, &[ok.clone(), directory], "t").unwrap_err();
+            assert!(err.contains("subdir"), "{err}");
+
+            let missing = dir(&project).join("nope.work");
+            assert!(backup_files_strict(&project.path, &[ok, missing], "t").is_err());
+        }
+
+        #[test]
+        fn strict_backup_never_reuses_a_folder() {
+            let project = TestProject::new();
+            let files = [dir(&project).join("project.work")];
+            let mut made = std::collections::BTreeSet::new();
+            for _ in 0..3 {
+                made.insert(backup_files_strict(&project.path, &files, "t").unwrap());
+            }
+            assert_eq!(made.len(), 3, "{made:?}");
+            for folder in &made {
+                assert!(folder.join("project.work").is_file());
+            }
+        }
+
+        #[test]
+        fn a_move_is_backed_up_and_undone_in_one_step() {
+            let project = project_with("STATIC", &[(1, "one.wav"), (5, "five.wav")]);
+            let bank_path = dir(&project).join("bank01.work");
+            let mut bank = BankFile::from_data_file(&bank_path).unwrap();
+            bank.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id = 0;
+            bank.parts.unsaved.0[0].audio_track_machine_types[0] = 0; // Static
+            bank.patterns.0[0].audio_track_trigs.0[0].plocks.0[3].flex_slot_id = 0;
+            bank.checksum = bank.calculate_checksum().unwrap();
+            bank.to_data_file(&bank_path).unwrap();
+
+            let read_all = || -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+                std::fs::read_dir(dir(&project))
+                    .unwrap()
+                    .map(|e| e.unwrap().path())
+                    .filter(|p| p.is_file())
+                    .map(|p| {
+                        let bytes = std::fs::read(&p).unwrap();
+                        (p, bytes)
+                    })
+                    .collect()
+            };
+            let before = read_all();
+
+            let report = move_slots_impl(&project.path, "static", vec![1], 5).unwrap();
+            assert_eq!(report.swapped, Some((1, 5)));
+
+            let moved = BankFile::from_data_file(&bank_path).unwrap();
+            assert_eq!(
+                moved.parts.unsaved.0[0].audio_track_machine_slots[0].static_slot_id, 4,
+                "the Part follows"
+            );
+            assert_eq!(
+                moved.patterns.0[0].audio_track_trigs.0[0].plocks.0[3].flex_slot_id, 4,
+                "the Static track's lock follows"
+            );
+
+            // One backup folder holding every written file as it was before.
+            let backups = backup_dirs(&project);
+            assert_eq!(backups.len(), 1);
+            assert!(backups[0].to_string_lossy().ends_with("_move_static_slots"));
+            assert!(report.files_written.len() >= 3);
+            for written in &report.files_written {
+                let written = PathBuf::from(written);
+                let name = written.file_name().unwrap();
+                assert_eq!(
+                    std::fs::read(backups[0].join(name)).unwrap(),
+                    before[&written],
+                    "{name:?}"
+                );
+            }
+
+            let label = write_history::undo(&project.path).unwrap();
+            assert_eq!(label.as_deref(), Some("Swap S001 and S005"));
+            for written in &report.files_written {
+                let written = PathBuf::from(written);
+                assert_eq!(
+                    std::fs::read(&written).unwrap(),
+                    before[&written],
+                    "{written:?}"
+                );
+            }
+            assert!(
+                write_history::undo(&project.path).unwrap().is_none(),
+                "one step only"
+            );
+        }
+
+        /// The project's files, by path, leaving out the backups folder.
+        fn project_files(project: &TestProject) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+            std::fs::read_dir(dir(project))
+                .unwrap()
+                .map(|e| e.unwrap().path())
+                .filter(|p| p.is_file())
+                .map(|p| {
+                    let bytes = std::fs::read(&p).unwrap();
+                    (p.file_name().unwrap().into(), bytes)
+                })
+                .collect()
+        }
+
+        /// A Flex project with only banks A and B, so a move is quick to run.
+        fn two_bank_project(slots: &[(u16, &str)]) -> TestProject {
+            let project = project_with("FLEX", slots);
+            for n in 3..=16 {
+                std::fs::remove_file(dir(&project).join(format!("bank{n:02}.work"))).unwrap();
+            }
+            project
+        }
+
+        /// The Undo button names what a move did: the slots that really changed number, not
+        /// the ones handed in (an empty slot or a repeat moves nothing).
+        #[test]
+        fn a_move_is_labelled_by_the_slots_it_moved() {
+            let project = two_bank_project(&[(1, "one.wav"), (3, "three.wav")]);
+            let undo_label = || write_history::state(&project.path).undo_label;
+
+            move_slots_impl(&project.path, "flex", vec![1, 2, 3, 3], 10).unwrap();
+            assert_eq!(undo_label().as_deref(), Some("Move 2 Flex slots"));
+
+            move_slots_impl(&project.path, "flex", vec![10], 20).unwrap();
+            assert_eq!(undo_label().as_deref(), Some("Move 1 Flex slot"));
+
+            // A block whose first slot stays put: only the one that moved counts
+            move_slots_impl(&project.path, "flex", vec![11, 20], 11).unwrap();
+            assert_eq!(undo_label().as_deref(), Some("Move 1 Flex slot"));
+        }
+
+        /// Undo and redo rewrite the files a move writes, so they wait for one in flight.
+        #[test]
+        fn undo_and_redo_wait_for_a_move_in_flight() {
+            let project = two_bank_project(&[(1, "one.wav")]);
+            move_slots_impl(&project.path, "flex", vec![1], 10).unwrap();
+
+            let waits_for_a_move = |undoing: bool| {
+                let in_flight = slot_files_lock();
+                let (done, finished) = std::sync::mpsc::channel();
+                let path = project.path.clone();
+                let step = std::thread::spawn(move || {
+                    let answer = if undoing {
+                        tauri::async_runtime::block_on(undo_write(path))
+                    } else {
+                        tauri::async_runtime::block_on(redo_write(path))
+                    };
+                    done.send(()).unwrap();
+                    answer
+                });
+                assert!(
+                    finished
+                        .recv_timeout(std::time::Duration::from_millis(300))
+                        .is_err(),
+                    "undoing={undoing}: ran while a move held the files"
+                );
+                drop(in_flight);
+                step.join().unwrap().unwrap()
+            };
+            assert!(waits_for_a_move(true).is_some(), "the move was undone");
+            assert!(waits_for_a_move(false).is_some(), "and redone");
+        }
+
+        /// Tauri runs commands side by side, so two moves can be in flight at once. Both read
+        /// the project before either writes it, and a bank remapped by both ends up pointing
+        /// at the wrong slots. Whichever runs first, the files must come out as if the two had
+        /// run one after the other.
+        #[test]
+        fn two_moves_at_once_run_one_after_the_other() {
+            // Two banks keep it quick; reading them is still the window both moves overlap in
+            let fresh = || two_bank_project(&[(1, "one.wav"), (2, "two.wav")]);
+            // Slots 1 and 2: default Parts point at them, so both banks are rewritten by both
+            let first = |p: &TestProject| move_slots_impl(&p.path, "flex", vec![1], 10);
+            let second = |p: &TestProject| move_slots_impl(&p.path, "flex", vec![2], 11);
+
+            let one_then_two = fresh();
+            first(&one_then_two).unwrap();
+            second(&one_then_two).unwrap();
+            let two_then_one = fresh();
+            second(&two_then_one).unwrap();
+            first(&two_then_one).unwrap();
+            let serial = [project_files(&one_then_two), project_files(&two_then_one)];
+
+            for round in 0..3 {
+                let both = fresh();
+                let start = std::sync::Barrier::new(2);
+                let (a, b) = std::thread::scope(|s| {
+                    let a = s.spawn(|| {
+                        start.wait();
+                        first(&both)
+                    });
+                    let b = s.spawn(|| {
+                        start.wait();
+                        second(&both)
+                    });
+                    (a.join().unwrap(), b.join().unwrap())
+                });
+                assert!(a.is_ok() && b.is_ok(), "round {round}: {a:?} / {b:?}");
+                let files = project_files(&both);
+                assert!(
+                    serial.contains(&files),
+                    "round {round}: the two moves interleaved"
+                );
+            }
+        }
+
+        /// Moves on files written by a real Octatrack rather than ot-tools-io defaults: the
+        /// `real_device` project (project, markers, bank A in both copies, arrangement), with
+        /// the `multipart` bank, whose patterns run on Parts 1 to 4, as bank B.
+        mod on_a_real_project {
+            use super::*;
+            use std::collections::BTreeMap;
+            use tempfile::TempDir;
+
+            struct RealProject {
+                _dir: TempDir,
+                path: String,
+            }
+
+            impl RealProject {
+                fn file(&self, name: &str) -> PathBuf {
+                    std::path::Path::new(&self.path).join(name)
+                }
+
+                fn bank(&self, name: &str) -> BankFile {
+                    BankFile::from_data_file(&self.file(name)).unwrap()
+                }
+
+                fn files(&self) -> BTreeMap<String, Vec<u8>> {
+                    std::fs::read_dir(&self.path)
+                        .unwrap()
+                        .map(|e| e.unwrap().path())
+                        .filter(|p| p.is_file())
+                        .map(|p| {
+                            let bytes = std::fs::read(&p).unwrap();
+                            (p.file_name().unwrap().to_string_lossy().into_owned(), bytes)
+                        })
+                        .collect()
+                }
+            }
+
+            fn set_lock(bank: &mut BankFile, pattern: usize, track: usize, step: usize, id: u8) {
+                bank.patterns.0[pattern].audio_track_trigs.0[track].plocks.0[step].flex_slot_id =
+                    id;
+            }
+
+            fn lock(bank: &BankFile, pattern: usize, track: usize, step: usize) -> u8 {
+                bank.patterns.0[pattern].audio_track_trigs.0[track].plocks.0[step].flex_slot_id
+            }
+
+            /// The shipped banks hold no sample lock, so a few are added, each on a track whose
+            /// machine says which pool it plays (0-based ids: 43 is slot 44, 4 is slot 5...):
+            /// - bank A, every pattern on Part 1 (tracks: 1 Thru, 2 Flex, 8 Static), pattern 1:
+            ///   track 1 step 1 locks 43; track 2 steps 1 and 2 lock 43 and 4; track 8 steps 1
+            ///   and 2 lock 4 and 43.
+            /// - bank B: pattern 1 (Part 1, track 2 Flex) locks 43 and 40 on steps 1 and 2,
+            ///   pattern 3 (Part 3, track 2 Static) locks 43 and 40 on steps 1 and 2.
+            fn real_project() -> RealProject {
+                let fixtures =
+                    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+                let dir = TempDir::new().unwrap();
+                let path = dir.path().to_string_lossy().into_owned();
+                for name in [
+                    "project.work",
+                    "markers.work",
+                    "bank01.work",
+                    "bank01.strd",
+                    "arr01.work",
+                ] {
+                    std::fs::copy(
+                        fixtures.join("real_device").join(name),
+                        dir.path().join(name),
+                    )
+                    .unwrap();
+                }
+                std::fs::copy(
+                    fixtures.join("multipart/bank01.work"),
+                    dir.path().join("bank02.work"),
+                )
+                .unwrap();
+                let project = RealProject { _dir: dir, path };
+
+                let mut a = project.bank("bank01.work");
+                assert_eq!(
+                    a.parts.unsaved.0[0].audio_track_machine_types,
+                    [2, 1, 1, 1, 2, 1, 1, 0],
+                    "fixture: bank A Part 1 machines"
+                );
+                set_lock(&mut a, 0, 0, 0, 43);
+                set_lock(&mut a, 0, 1, 0, 43);
+                set_lock(&mut a, 0, 1, 1, 4);
+                set_lock(&mut a, 0, 7, 0, 4);
+                set_lock(&mut a, 0, 7, 1, 43);
+                a.to_data_file(&project.file("bank01.work")).unwrap();
+
+                let mut b = project.bank("bank02.work");
+                assert_eq!(b.patterns.0[0].part_assignment, 0, "fixture: B pattern 1");
+                assert_eq!(b.patterns.0[2].part_assignment, 2, "fixture: B pattern 3");
+                assert_eq!(b.parts.unsaved.0[0].audio_track_machine_types[1], 1);
+                assert_eq!(b.parts.unsaved.0[2].audio_track_machine_types[1], 0);
+                set_lock(&mut b, 0, 1, 0, 43);
+                set_lock(&mut b, 0, 1, 1, 40);
+                set_lock(&mut b, 2, 1, 0, 43);
+                set_lock(&mut b, 2, 1, 1, 40);
+                b.to_data_file(&project.file("bank02.work")).unwrap();
+                project
+            }
+
+            /// The `[SAMPLE]` block for a slot, exactly as the file holds it.
+            fn block_of<'a>(text: &'a str, slot_type: &str, slot: &str) -> &'a str {
+                let head = format!("[SAMPLE]\r\nTYPE={slot_type}\r\nSLOT={slot}\r\n");
+                let start = text.find(&head).unwrap_or_else(|| panic!("no {head:?}"));
+                let end = start + text[start..].find("[/SAMPLE]").unwrap() + "[/SAMPLE]".len();
+                &text[start..end]
+            }
+
+            fn renumbered(block: &str, from: &str, to: &str) -> String {
+                block.replacen(&format!("SLOT={from}\r\n"), &format!("SLOT={to}\r\n"), 1)
+            }
+
+            /// Every slot reference of the Parts, both copies, with `a` and `b` traded.
+            fn swap_part_refs(bank: &mut BankFile, flex: bool, a: u8, b: u8) {
+                for parts in [&mut bank.parts.unsaved, &mut bank.parts.saved] {
+                    for part in parts.0.iter_mut() {
+                        for slot in part.audio_track_machine_slots.iter_mut() {
+                            let id = if flex {
+                                &mut slot.flex_slot_id
+                            } else {
+                                &mut slot.static_slot_id
+                            };
+                            if *id == a {
+                                *id = b;
+                            } else if *id == b {
+                                *id = a;
+                            }
+                        }
+                    }
+                }
+            }
+
+            fn text(bytes: &[u8]) -> String {
+                String::from_utf8(bytes.to_vec()).expect("the fixture is ASCII")
+            }
+
+            fn written(project: &RealProject, names: &[&str]) -> Vec<String> {
+                names
+                    .iter()
+                    .map(|n| project.file(n).to_string_lossy().into_owned())
+                    .collect()
+            }
+
+            #[test]
+            fn moving_a_flex_slot_to_a_free_slot() {
+                let project = real_project();
+                let before = project.files();
+                let (a, b) = (project.bank("bank01.work"), project.bank("bank02.work"));
+                let markers = MarkersFile::from_data_file(&project.file("markers.work")).unwrap();
+                assert_ne!(markers.flex_slots[43], markers.flex_slots[49], "fixture");
+
+                // F044 is taken, F050 is free
+                let report = move_slots_impl(&project.path, "flex", vec![44], 50).unwrap();
+                assert_eq!(report.moves, vec![(44, 50)]);
+                assert_eq!(
+                    report.files_written,
+                    written(
+                        &project,
+                        &["project.work", "markers.work", "bank01.work", "bank02.work"]
+                    )
+                );
+                let after = project.files();
+
+                // project.work: the block is renumbered and moved after F045, nothing else
+                let old = text(&before["project.work"]);
+                let moved = block_of(&old, "FLEX", "044");
+                let next = block_of(&old, "FLEX", "045");
+                let expected = old.replacen(&format!("{moved}\r\n\r\n"), "", 1).replacen(
+                    &format!("{next}\r\n\r\n"),
+                    &format!("{next}\r\n\r\n{}\r\n\r\n", renumbered(moved, "044", "050")),
+                    1,
+                );
+                assert_eq!(text(&after["project.work"]), expected);
+
+                // markers.work: entries 44 and 50 trade places, every other byte stays
+                let mut expected_markers = markers.clone();
+                expected_markers.flex_slots.swap(43, 49);
+                assert_eq!(after["markers.work"], expected_markers.to_bytes().unwrap());
+
+                // Parts: every Flex reference to 44 now says 50, in both copies, any machine
+                // (bank A and B Part 1 tracks 1 and 5, a Thru and a Pickup slot)
+                let (new_a, new_b) = (project.bank("bank01.work"), project.bank("bank02.work"));
+                for bank in [&new_a, &new_b] {
+                    for parts in [&bank.parts.unsaved, &bank.parts.saved] {
+                        let slots = &parts.0[0].audio_track_machine_slots;
+                        assert_eq!((slots[0].flex_slot_id, slots[4].flex_slot_id), (49, 49));
+                    }
+                }
+                // Locks: only on tracks whose Part runs a Flex machine
+                assert_eq!(lock(&new_a, 0, 0, 0), 43, "A track 1 is Thru: lock stays");
+                assert_eq!(lock(&new_a, 0, 1, 0), 49, "A track 2 is Flex: lock follows");
+                assert_eq!(lock(&new_a, 0, 1, 1), 4, "a lock on another slot stays");
+                assert_eq!(lock(&new_a, 0, 7, 1), 43, "A track 8 is Static: lock stays");
+                assert_eq!(lock(&new_b, 0, 1, 0), 49, "B Part 1 track 2 is Flex");
+                assert_eq!(lock(&new_b, 2, 1, 0), 43, "B Part 3 track 2 is Static");
+
+                // And every other byte of both banks is what it was
+                let (mut expected_a, mut expected_b) = (a.clone(), b.clone());
+                for bank in [&mut expected_a, &mut expected_b] {
+                    swap_part_refs(bank, true, 43, 49);
+                }
+                set_lock(&mut expected_a, 0, 1, 0, 49);
+                set_lock(&mut expected_b, 0, 1, 0, 49);
+                assert_eq!(after["bank01.work"], expected_a.to_bytes().unwrap());
+                assert_eq!(after["bank02.work"], expected_b.to_bytes().unwrap());
+
+                // The device's saved copy and the arrangement are left alone
+                assert_eq!(after["bank01.strd"], before["bank01.strd"]);
+                assert_eq!(after["arr01.work"], before["arr01.work"]);
+
+                // One Undo puts every file back
+                write_history::undo(&project.path).unwrap();
+                assert_eq!(project.files(), before);
+            }
+
+            #[test]
+            fn swapping_two_static_slots() {
+                let project = real_project();
+                let before = project.files();
+                let (a, b) = (project.bank("bank01.work"), project.bank("bank02.work"));
+                let markers = MarkersFile::from_data_file(&project.file("markers.work")).unwrap();
+                assert_ne!(markers.static_slots[4], markers.static_slots[40], "fixture");
+
+                // S005 and S041 are both taken
+                let report = move_slots_impl(&project.path, "static", vec![5], 41).unwrap();
+                assert_eq!(report.swapped, Some((5, 41)));
+                assert_eq!(
+                    report.files_written,
+                    written(
+                        &project,
+                        &["project.work", "markers.work", "bank01.work", "bank02.work"]
+                    )
+                );
+                let after = project.files();
+
+                // project.work: the two blocks trade places and numbers, nothing else
+                let old = text(&before["project.work"]);
+                let five = block_of(&old, "STATIC", "005");
+                let forty_one = block_of(&old, "STATIC", "041");
+                let expected = old
+                    .replacen(five, "\u{0}", 1)
+                    .replacen(forty_one, &renumbered(five, "005", "041"), 1)
+                    .replacen('\u{0}', &renumbered(forty_one, "041", "005"), 1);
+                assert_eq!(text(&after["project.work"]), expected);
+
+                let mut expected_markers = markers.clone();
+                expected_markers.static_slots.swap(4, 40);
+                assert_eq!(after["markers.work"], expected_markers.to_bytes().unwrap());
+
+                // Parts: 5 and 41 trade everywhere, the factory-default 5 on track 5 included
+                let (new_a, new_b) = (project.bank("bank01.work"), project.bank("bank02.work"));
+                let statics = |bank: &BankFile, part: usize| -> Vec<u8> {
+                    bank.parts.unsaved.0[part]
+                        .audio_track_machine_slots
+                        .iter()
+                        .map(|s| s.static_slot_id)
+                        .collect()
+                };
+                assert_eq!(statics(&new_a, 0), [40, 1, 1, 1, 40, 40, 43, 7]);
+                assert_eq!(statics(&new_a, 3), [0, 1, 2, 3, 40, 5, 6, 7]);
+                assert_eq!(statics(&new_b, 0), [40, 1, 4, 1, 40, 40, 43, 7]);
+                // Locks: only on tracks whose Part runs a Static machine
+                assert_eq!(
+                    lock(&new_a, 0, 7, 0),
+                    40,
+                    "A track 8 is Static: lock follows"
+                );
+                assert_eq!(lock(&new_a, 0, 1, 1), 4, "A track 2 is Flex: lock stays");
+                assert_eq!(lock(&new_b, 2, 1, 1), 4, "B Part 3 track 2 is Static");
+                assert_eq!(lock(&new_b, 0, 1, 1), 40, "B Part 1 track 2 is Flex");
+
+                let (mut expected_a, mut expected_b) = (a.clone(), b.clone());
+                for bank in [&mut expected_a, &mut expected_b] {
+                    swap_part_refs(bank, false, 4, 40);
+                }
+                set_lock(&mut expected_a, 0, 7, 0, 40);
+                set_lock(&mut expected_b, 2, 1, 1, 4);
+                assert_eq!(after["bank01.work"], expected_a.to_bytes().unwrap());
+                assert_eq!(after["bank02.work"], expected_b.to_bytes().unwrap());
+
+                assert_eq!(after["bank01.strd"], before["bank01.strd"]);
+                assert_eq!(after["arr01.work"], before["arr01.work"]);
+
+                // Backed up as it was, and one Undo puts every file back
+                let backups = backup_dirs_of(&project.path);
+                assert_eq!(backups.len(), 1);
+                for name in ["project.work", "markers.work", "bank01.work", "bank02.work"] {
+                    assert_eq!(std::fs::read(backups[0].join(name)).unwrap(), before[name]);
+                }
+                write_history::undo(&project.path).unwrap();
+                assert_eq!(project.files(), before);
+            }
+        }
+
+        fn backup_dirs_of(path: &str) -> Vec<PathBuf> {
+            let mut dirs: Vec<PathBuf> =
+                std::fs::read_dir(std::path::Path::new(path).join("backups"))
+                    .map(|rd| rd.map(|e| e.unwrap().path()).collect())
+                    .unwrap_or_default();
+            dirs.sort();
+            dirs
+        }
+
+        #[test]
+        fn a_sort_is_labelled_and_backed_up_per_pool() {
+            let project = project_with("FLEX", &[(1, "b.wav"), (2, "a.wav")]);
+            sort_slots_impl(&project.path, "Flex", "name-asc", None).unwrap();
+            let backups = backup_dirs(&project);
+            assert_eq!(backups.len(), 1);
+            assert!(backups[0].to_string_lossy().ends_with("_sort_flex_slots"));
+            let label = write_history::undo(&project.path).unwrap();
+            assert_eq!(label.as_deref(), Some("Sort Flex slots by name A to Z"));
+        }
+
+        #[test]
+        fn an_unknown_slot_type_or_order_is_refused() {
+            let project = project_with("FLEX", &[(1, "a.wav"), (2, "b.wav")]);
+            assert!(move_slots_impl(&project.path, "both", vec![1], 2).is_err());
+            assert!(sort_slots_impl(&project.path, "recorder", "name-asc", None).is_err());
+            assert!(sort_slots_impl(&project.path, "flex", "random", None).is_err());
+            assert!(!dir(&project).join("backups").exists(), "nothing written");
+        }
+    }
 
     /// What the undo helpers snapshot before a write, and that the write comes back.
     ///

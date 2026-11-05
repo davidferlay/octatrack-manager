@@ -70,7 +70,7 @@ export function useWriteHistory({ projectPath, onWriteStatusChange, onRestored }
     const verb = back ? 'Undoing' : 'Redoing';
     try {
       setBusy(true);
-      onWriteStatusChange?.(writeStatus.writing(`${verb} the last change...`));
+      onWriteStatusChange?.(writeStatus.writing(`${verb}...`));
       const what = await invoke<string | null>(
         back ? 'undo_write' : 'redo_write', { path: projectPath },
       );
@@ -79,7 +79,8 @@ export function useWriteHistory({ projectPath, onWriteStatusChange, onRestored }
         return;
       }
       onRestored?.();
-      onWriteStatusChange?.(writeStatus.success(back ? `Undone: ${what}` : `Redone: ${what}`));
+      // One word: the step's name stays in the buttons' tooltips, and some names are long
+      onWriteStatusChange?.(writeStatus.success(back ? 'Undone' : 'Redone'));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
     } catch (error) {
       console.error(`${verb} failed:`, error);

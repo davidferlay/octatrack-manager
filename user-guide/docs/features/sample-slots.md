@@ -196,6 +196,34 @@ Three more operations can be found when right-clicking on Sample Slots, availabl
 - **Open in file explorer** - reveals the slot's sample (or a pool item) in your OS file manager.
 - **Copy path to clipboard** - copies the absolute path of the slot's sample or a pool item.
 
+### Reorganising slots
+
+In Edit mode you can rearrange the Flex and Static lists.
+
+There are four ways to do it:
+
+- **Drag a slot** onto another slot. Dropped on a free slot, it moves there. Dropped on a taken slot, the two swap.
+- **Drag a selection.** Select with <kbd>Shift</kbd>-click (a run) and/or <kbd>Ctrl</kbd>/<kbd>Cmd</kbd>-click (single slots), then drag:
+    - The selected slots land as one continuous block starting at the drop slot, in their current slot order.
+    - Empty slots in the selection are left behind.
+    - Taken slots in the way are pushed down, each pushing the next, until there is enough room.
+- **Move to slot...** In Edit mode, right-click a taken slot and choose it, then pick the target on the slider (or with the arrow keys) and press Move or <kbd>Enter</kbd>:
+    - The window shows where the slots come from and where they go, with what the target holds now (for a selection: whether the slots it lands on are empty, or how many will be pushed down).
+    - The slider's track maps the 128 slots: taken ones are shaded and a blue pin marks each slot being moved.
+    - Hovering or dragging the slider shows the slot it points at, and what it holds, above the thumb. It works with any sort or filter.
+- **Tidy** in the toolbar (Edit mode only) sorts the list:
+    - Choose between several sorting modes: File name (A to Z), File name (Z to A), Duration (longest first), Duration (shortest first), or Folder/file name.
+    - When the selection is one continuous run of slots (for example made with <kbd>Shift</kbd>-click), an option is available to apply sorting only to selection, instead of all slots.
+
+What follows a moved slot:
+
+- The slot's sample, attributes and markers.
+- Every Part's slot assignment, in the edited and the saved copy, in all banks and for any machine.
+- Trig sample locks on tracks whose Part runs a Flex or Static machine, through the list that machine plays from. Locks on Thru, Neighbor and Pickup tracks are left as they are.
+- A reference to an empty slot keeps pointing at an empty slot.
+
+Before writing, every file the move will write is copied to the project's `backups/` folder, and the whole move or Tidy is one step for Undo (see [Undo / Redo](undo-redo.md)). Only the working (`.work`) files are written: the device's last-saved copy (`.strd`) is left as it was, like every other edit the app makes.
+
 ### Fixing Incompatible Project Samples
 
 Each Flex/Static tab's toolbar shows a health glyph next to the slot count (hidden while the Audio Pool pane is open): an orange badge with a wrench icon and the number of slots referencing an audio file the Octatrack can't play, or a green check when every referenced file is compatible. Click it - or select **Fix Incompatible Samples** from the **Tools** tab operation dropdown - to fix every incompatible file this project touches in one pass. To fix a single slot without leaving the tab, right-click it (in Edit mode) and choose **Convert to Octatrack format** - see [Managing existing assignments](#managing-existing-assignments) above.

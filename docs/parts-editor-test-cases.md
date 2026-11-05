@@ -364,3 +364,4 @@ Up is more, down is less, throughout.
 | PE255 | Diffs | No tab menu in View mode | In View mode, right-click a Part tab | No Reload / Save / See diffs menu opens |
 | PE256 | Diffs | Every page is named | Change a MIDI track's NOTE, SRC SETUP TSNS, an LFO2 WAVE, a recorder RLEN and a CTRL1 CC number; open the diffs | Each is listed under its own page as the editor names it: NOTE, SRC SETUP, LFO SETUP (LFO2 WAVE), REC, CTRL1 SETUP (CC#), the MIDI track named as a MIDI track |
 | PE257 | Diffs | Sample slot numbering | Move a Flex track from slot 1 to slot 5, open the diffs | SLOT reads F001 against F005, counted from 1 as on the device |
+| PE258 | Undo | Short confirmation | Make a change, press Undo, then Redo | The header reads "Undoing..." then "Undone", and "Redoing..." then "Redone"; hovering Redo or Undo still names the change |
