@@ -180,4 +180,6 @@
 | PM143 | Rename | A project outside a Set | Rename a project that is not inside a Set, then open it | It opens; renaming does not depend on the parent being a Set |
 | PM144 | Rename | A name the device allows | Rename a project to end in "=", then open it | It opens, and the name reads as typed |
 | PM145 | Rename | The bookmark follows too | Bookmark a project, rename it, then open the bookmark | It opens at the new location |
-
+| PM146 | Window | Opens sized for the display | On Linux with a desktop text scaling above 100% (for example Xft.dpi 144 on a 4K monitor), start the app | The window opens large enough that the home page and a project page show no horizontal scrollbar (1950x1245 on a 4K monitor at Xft.dpi 144) |
+| PM147 | Window | Plain displays keep the usual size | Start the app on a 1080p monitor at 100% scaling | The window opens at 1300x830, as before |
+| PM148 | Window | Never larger than the screen | Start the app where the scaled size would not fit (for example 1080p at Xft.dpi 144) | The window opens at most 90% of the usable screen in each direction, fully on screen |

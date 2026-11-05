@@ -45,3 +45,6 @@ encoding_rs = "0.8"
 [dev-dependencies]
 tempfile = "3"
 
+# Already pulled in by Tauri on Linux; used directly to read the screen DPI WebKitGTK zooms by
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"

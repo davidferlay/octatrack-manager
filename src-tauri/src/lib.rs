@@ -8,6 +8,7 @@ pub mod project_manager;
 mod project_reader;
 mod purge;
 mod slot_reorganise;
+mod window_size;
 mod write_history;
 
 use audio_pool::{
@@ -1911,8 +1912,9 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
-            // Clear WebView session storage in the background on app startup
             let window = app.get_webview_window("main").unwrap();
+            window_size::fit_to_monitor(&window);
+            // Clear WebView session storage in the background on app startup
             std::thread::spawn(move || {
                 // Small delay to ensure WebView is ready
                 std::thread::sleep(std::time::Duration::from_millis(100));
