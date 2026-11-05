@@ -46,9 +46,10 @@ fn page_zoom() -> f64 {
     1.0
 }
 
-/// Sizes the window for the monitor it opens on, and centres it there. Anything missing
-/// (no monitor reported) leaves the size from tauri.conf.json.
-pub fn fit_to_monitor(window: &WebviewWindow) {
+/// Sizes the window for the monitor it opens on, and centres it there, with room for the
+/// layout at the platform's zoom times the user's own (`user_zoom`). Anything missing (no
+/// monitor reported) leaves the size from tauri.conf.json.
+pub fn fit_to_monitor(window: &WebviewWindow, user_zoom: f64) {
     let monitor = match window.current_monitor() {
         Ok(Some(monitor)) => monitor,
         _ => match window.primary_monitor() {
@@ -60,7 +61,7 @@ pub fn fit_to_monitor(window: &WebviewWindow) {
         .work_area()
         .size
         .to_logical::<f64>(monitor.scale_factor());
-    let _ = window.set_size(opening_size(page_zoom(), area));
+    let _ = window.set_size(opening_size(page_zoom() * user_zoom, area));
     let _ = window.center();
 }
 

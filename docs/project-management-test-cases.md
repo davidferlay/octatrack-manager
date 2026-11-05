@@ -183,3 +183,8 @@
 | PM146 | Window | Opens sized for the display | On Linux with a desktop text scaling above 100% (for example Xft.dpi 144 on a 4K monitor), start the app | The window opens large enough that the home page and a project page show no horizontal scrollbar (1950x1245 on a 4K monitor at Xft.dpi 144) |
 | PM147 | Window | Plain displays keep the usual size | Start the app on a 1080p monitor at 100% scaling | The window opens at 1300x830, as before |
 | PM148 | Window | Never larger than the screen | Start the app where the scaled size would not fit (for example 1080p at Xft.dpi 144) | The window opens at most 90% of the usable screen in each direction, fully on screen |
+| PM149 | Window | Zoom in and out | Press Ctrl and + several times, then Ctrl and - | The whole interface grows, then shrinks, a step at a time (110%, 125%, 150%...); a badge shows each level for a moment |
+| PM150 | Window | Zoom limits | Keep pressing Ctrl and + past 200%, then Ctrl and - past 50% | The zoom stops at 200% and at 50% |
+| PM151 | Window | Back to 100% | After zooming, press Ctrl and 0 (on AZERTY, the 0/à key) | The interface returns to 100% |
+| PM152 | Window | Zoom is kept | Zoom to 125%, close the app and start it again | It opens at 125%, in a window large enough for the layout at that zoom |
+| PM153 | Window | Typing is not zooming | Type -, = and 0 in a search box or name field | The characters are typed; nothing zooms |

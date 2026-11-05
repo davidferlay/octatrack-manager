@@ -8,6 +8,7 @@ pub mod project_manager;
 mod project_reader;
 mod purge;
 mod slot_reorganise;
+mod ui_zoom;
 mod window_size;
 mod write_history;
 
@@ -1913,7 +1914,13 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
-            window_size::fit_to_monitor(&window);
+            let zoom =
+                ui_zoom::zoom_file(app.handle()).map_or(1.0, |file| ui_zoom::saved_zoom(&file));
+            app.manage(ui_zoom::UiZoom(std::sync::Mutex::new(zoom)));
+            if zoom != 1.0 {
+                let _ = window.set_zoom(zoom);
+            }
+            window_size::fit_to_monitor(&window, zoom);
             // Clear WebView session storage in the background on app startup
             std::thread::spawn(move || {
                 // Small delay to ensure WebView is ready
@@ -1924,6 +1931,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             greet,
+            ui_zoom::step_ui_zoom,
             scan_devices,
             scan_custom_directory,
             load_project_metadata,

@@ -9,6 +9,7 @@ import { TablePreferencesProvider } from "./context/TablePreferencesContext";
 import {
   installSelectWheelStepping, installRangeWheelStepping, installToggleWheelStepping,
 } from "./utils/wheelStep";
+import { installUiZoom } from "./utils/uiZoom";
 import '@fortawesome/fontawesome-free/css/all.min.css';
 
 // The browser's own history-based scroll restoration fights HomePage's manual
@@ -45,6 +46,9 @@ document.addEventListener('keydown', (e) => {
 installSelectWheelStepping();
 installRangeWheelStepping();
 installToggleWheelStepping();
+
+// Ctrl + / Ctrl - / Ctrl 0 zoom the whole UI, kept for the next launch (see utils/uiZoom).
+installUiZoom();
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

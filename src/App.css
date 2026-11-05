@@ -732,6 +732,11 @@ h1 {
   animation: toastIn 0.2s ease;
 }
 
+/* The UI zoom level, shown for a moment after Ctrl + / Ctrl - / Ctrl 0: neutral, not a result */
+.toast-notification.zoom-toast {
+  border-color: var(--elektron-light-gray);
+}
+
 /* Friendly hint (not an error) — blue border + lightbulb */
 .toast-notification.tip {
   border-color: #388bfd;
