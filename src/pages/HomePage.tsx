@@ -19,6 +19,7 @@ import { filterProjects } from "../utils/filterProjects";
 import { useSearchShortcut } from "../hooks/useSearchShortcut";
 import { invalidatePoolUsage } from "../hooks/usePoolUsage";
 import { Version } from "../components/Version";
+import { ShortcutsButton } from "../components/ShortcutsButton";
 import { ScrollToTop } from "../components/ScrollToTop";
 import { ProjectGrid } from "../components/ProjectGrid";
 import { mergeBookmarks, useBookmarks } from "../utils/bookmarks";
@@ -646,6 +647,7 @@ export function HomePage() {
           >
             <i className="fas fa-sync-alt"></i>
           </button>
+          <ShortcutsButton page="home" />
           <Version />
         </div>
       </div>

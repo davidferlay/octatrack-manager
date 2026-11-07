@@ -48,3 +48,9 @@ tempfile = "3"
 # Already pulled in by Tauri on Linux; used directly to read the screen DPI WebKitGTK zooms by
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
+
+# Dependencies are built optimised in dev builds too: unoptimised, ot-tools-io takes about 25x
+# longer to parse and write banks, which was most of the wait on project loads and slot moves
+# under `tauri dev`. This crate itself stays unoptimised, so it still debugs and rebuilds fast.
+[profile.dev.package."*"]
+opt-level = 3

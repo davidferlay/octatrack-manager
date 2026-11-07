@@ -77,9 +77,19 @@ export function useWheelStep(
      * Up is more, as the wheel is. The anchor follows the pointer a step at a time
      * rather than being read from where the drag began, so a long drag does not drift
      * and a change of direction answers at once.
+     *
+     * Once pressed on the control, the drag follows the pointer over the whole window
+     * until release, not just over the control: a value a few pixels tall is left
+     * before the first step, and would otherwise never step at all.
      */
     let anchor: number | null = null;
     let stepped = false;
+    const follow = (on: boolean) => {
+      const listen = (on ? window.addEventListener : window.removeEventListener).bind(window);
+      listen('pointermove', onPointerMove);
+      listen('pointerup', onPointerUp);
+      listen('pointercancel', onPointerUp);
+    };
 
     const onPointerDown = (e: PointerEvent) => {
       // The main button only: a right-click opens a menu, a middle one pastes
@@ -90,6 +100,7 @@ export function useWheelStep(
       if (!latest.current) return;
       anchor = e.clientY;
       stepped = false;
+      follow(true);
     };
 
     const onPointerMove = (e: PointerEvent) => {
@@ -123,6 +134,7 @@ export function useWheelStep(
     const onPointerUp = (e: PointerEvent) => {
       if (anchor === null) return;
       anchor = null;
+      follow(false);
       try {
         if (node.hasPointerCapture(e.pointerId)) node.releasePointerCapture(e.pointerId);
       } catch {
@@ -142,15 +154,10 @@ export function useWheelStep(
 
     node.addEventListener('wheel', onWheel, { passive: false });
     node.addEventListener('pointerdown', onPointerDown);
-    node.addEventListener('pointermove', onPointerMove);
-    node.addEventListener('pointerup', onPointerUp);
-    node.addEventListener('pointercancel', onPointerUp);
     return () => {
       node.removeEventListener('wheel', onWheel);
       node.removeEventListener('pointerdown', onPointerDown);
-      node.removeEventListener('pointermove', onPointerMove);
-      node.removeEventListener('pointerup', onPointerUp);
-      node.removeEventListener('pointercancel', onPointerUp);
+      follow(false);
     };
   }, [within]);
 }

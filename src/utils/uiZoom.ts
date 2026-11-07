@@ -19,6 +19,19 @@ export function zoomStepFor(e: KeyboardEvent): 1 | -1 | 0 | null {
 
 const SHOWN_MS = 1500;
 
+/** The zoom in force, as the backend has it (1 = 100%). */
+export const getUiZoom = () => invoke<number>('get_ui_zoom');
+
+/**
+ * Steps the zoom (1 in, -1 out, 0 back to 100%) and returns the new one. Announced as a
+ * `ui-zoom` window event, so whatever shows the zoom follows, whoever changed it.
+ */
+export async function stepUiZoom(step: 1 | -1 | 0): Promise<number> {
+  const zoom = await invoke<number>('step_ui_zoom', { step });
+  window.dispatchEvent(new CustomEvent('ui-zoom', { detail: zoom }));
+  return zoom;
+}
+
 /** Installs the shortcut for the whole app; returns the uninstaller. */
 export function installUiZoom(target: Document = document): () => void {
   let badge: HTMLDivElement | null = null;
@@ -40,7 +53,7 @@ export function installUiZoom(target: Document = document): () => void {
     const step = zoomStepFor(e);
     if (step === null) return;
     e.preventDefault();
-    invoke<number>('step_ui_zoom', { step })
+    stepUiZoom(step)
       .then(show)
       .catch(error => console.error('Zoom failed:', error));
   };

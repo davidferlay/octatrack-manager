@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { partChanges } from './partDiff'
+import { partChanges, actionName } from './partDiff'
+import { scenePath } from './partLocks'
 import { machineHelp } from './partFieldHelp'
 import { copy } from './partDiff.fixtures'
 
@@ -32,7 +33,10 @@ describe('partChanges', () => {
     const current = copy()
     current.part.fxs[0].fx1_type = 18 // FILTER to CHORUS
     current.part.fxs[0].fx1_param1 = 30
-    expect(partChanges(saved, current)).toMatchObject([
+    // grouped: the TYPE head, then every position of both pages (13 rows in all)
+    const rows = partChanges(saved, current)
+    expect(rows).toHaveLength(13)
+    expect(rows.slice(0, 2)).toMatchObject([
       { track: 'T1', page: 'FX1', param: 'TYPE', saved: 'FILTER', current: 'CHORUS' },
       { track: 'T1', page: 'FX1', param: 'DEL', saved: 'BASE 64', current: '30' },
     ])
@@ -46,8 +50,10 @@ describe('partChanges', () => {
     thru.machine_params = { ...thru.machine_params, strt: null, in_ab: 0 }
     const rows = partChanges(saved, current)
     expect(rows[0]).toMatchObject({ track: 'T1', page: 'SRC', param: 'MACHINE', saved: 'Flex', current: 'Thru' })
-    expect(rows).toContainEqual(expect.objectContaining({ param: 'STRT', current: '-' }))
-    expect(rows).toContainEqual(expect.objectContaining({ param: 'INAB', saved: '-' }))
+    // grouped, so the positions pair up: PTCH and INAB share position 1, and Thru has
+    // nothing at position 3 (LEN)
+    expect(rows).toContainEqual(expect.objectContaining({ param: 'INAB', saved: 'PTCH 0.0' }))
+    expect(rows).toContainEqual(expect.objectContaining({ param: 'LEN', current: '-' }))
   })
 
   it('names MIDI tracks M1 to M8 and reads a note as a note', () => {
@@ -228,5 +234,92 @@ describe('partChanges', () => {
       c.part.midi_notes[0].note = 60
       c.part.amps[7].vol = 70
     }).map(r => r.track)).toEqual(['T8', 'M1', ''])
+  })
+})
+
+describe('partChanges rows carry their values', () => {
+  const fxTypeChange = () => {
+    const saved = copy()
+    const current = copy()
+    current.part.fxs[0].fx1_type = 18 // FILTER to CHORUS
+    current.part.fxs[0].fx1_param1 = 30
+    return partChanges(saved, current)
+  }
+
+  it('groups an FX type change: a head, then one row per position of both pages', () => {
+    const rows = fxTypeChange()
+    expect(rows).toHaveLength(13)
+    expect(rows[0]).toMatchObject({ page: 'FX1', param: 'TYPE', group: { head: true, name: 'T1 FX1' } })
+    rows.slice(1).forEach(r => expect(r.group).toEqual({ head: false, name: 'T1 FX1' }))
+    // matching raw values are listed, each side under its own label
+    expect(rows[2]).toMatchObject({ param: 'DEP', saved: 'WDTH 64', current: '64' })
+    expect(rows[1]).toMatchObject({ param: 'DEL', saved: 'BASE 64', current: '30' })
+    expect(rows[1].paths).toEqual(['/part/fxs/0/fx1_param1'])
+  })
+
+  it('revert is the type plus the saved type positions, lock the differing current ones', () => {
+    const [head, ...members] = fxTypeChange()
+    const params = [1, 2, 3, 4, 5, 6].map(n => `/part/fxs/0/fx1_param${n}`)
+    const setups = [1, 2, 3, 4, 5, 6].map(n => `/part/fxs/0/fx1_setup${n}`)
+    expect(head.paths).toEqual(['/part/fxs/0/fx1_type'])
+    expect(head.revert).toEqual(['/part/fxs/0/fx1_type', ...params, ...setups])
+    expect(head.lock).toEqual(['/part/fxs/0/fx1_type', '/part/fxs/0/fx1_param1'])
+    for (const m of members) {
+      expect(m.revert).toEqual(head.revert)
+      expect(m.lock).toEqual(head.lock)
+    }
+  })
+
+  it('groups Flex to Thru with "-" where a side lacks a position, but not Static to Flex', () => {
+    const saved = copy()
+    const current = copy()
+    const thru = current.part.machines[0]
+    thru.machine_type = 'Thru'
+    thru.machine_params = { ...thru.machine_params, strt: null, in_ab: 0 }
+    const rows = partChanges(saved, current)
+    expect(rows[0]).toMatchObject({ param: 'MACHINE', group: { head: true, name: 'T1 SRC' } })
+    expect(rows.filter(r => r.group)).toHaveLength(13)
+    expect(rows).toContainEqual(expect.objectContaining({ param: 'INAB', saved: 'PTCH 0.0' }))
+    expect(rows).toContainEqual(expect.objectContaining({ param: 'LEN', current: '-' }))
+    expect(rows[0].revert).toContain('/part/machines/0/machine_params/ptch')
+    expect(rows[0].revert).toContain('/part/machines/0/machine_setup/tsns')
+    expect(rows[0].lock).toEqual(['/part/machines/0/machine_type', '/part/machines/0/machine_params/in_ab'])
+
+    const a = copy()
+    const b = copy()
+    a.part.machines[0].machine_type = 'Static'
+    expect(partChanges(a, b)).toHaveLength(1)
+    expect(partChanges(a, b)[0].group).toBeUndefined()
+  })
+
+  it('leaves an AMP edit a plain row', () => {
+    const current = copy()
+    current.part.amps[0].atk = 9
+    const [row] = partChanges(copy(), current)
+    expect(row.group).toBeUndefined()
+    expect(row.paths).toEqual(['/part/amps/0/atk'])
+    expect(row.revert).toEqual(row.paths)
+    expect(row.lock).toEqual(row.paths)
+  })
+
+  it('carries scene and crossfader keys', () => {
+    const current = copy()
+    current.scenes.scenes[2].tracks[0].fx1[2] = 10
+    current.scenes.scene_a = 3
+    const rows = partChanges(copy(), current)
+    expect(rows.find(r => r.track === '')!.paths).toEqual(['/scenes/scene_a'])
+    expect(rows.find(r => r.track === 'T1')!.paths).toEqual([scenePath(2, 0, 'fx1', 2)])
+  })
+
+  it('names the action', () => {
+    const current = copy()
+    current.part.amps[0].atk = 9
+    current.scenes.scenes[2].tracks[0].fx1[2] = 10
+    current.scenes.scene_a = 3
+    const rows = partChanges(copy(), current)
+    expect(actionName(rows.find(r => r.page === 'AMP')!)).toBe('T1 AMP ATK')
+    expect(actionName(rows.find(r => r.page.startsWith('Scene'))!)).toMatch(/^T1 Scene 3 FLTR \S+$/)
+    expect(actionName(rows.find(r => r.track === '')!)).toBe('CROSSFADER A')
+    expect(actionName(fxTypeChange()[3])).toBe('T1 FX1')
   })
 })

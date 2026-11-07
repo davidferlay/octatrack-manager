@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, act, renderHook, within } from '@testing-library/react'
+import { render, screen, act, renderHook, within, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { usePartCommits, PartSaveControls, PartCommitState } from './PartSaveControls'
 import { WriteStatus } from '../types/writeStatus'
@@ -10,6 +10,32 @@ const invokeMock = vi.fn()
 vi.mock('@tauri-apps/api/core', () => ({ invoke: (...args: unknown[]) => invokeMock(...args) }))
 
 const NAMES = ['PART 1', 'GROOVE', 'PART 3', 'PART 4']
+
+type Base = Omit<PartCommitState, 'flushEdits' | 'locks' | 'refreshLocks' | 'lockValues' | 'revertValues' | 'reloadTitle'
+  | 'fieldMenu' | 'openFieldMenu' | 'closeFieldMenu'>
+  & Partial<Pick<PartCommitState, 'locks' | 'flushEdits'>>
+
+/** A hand-made state: the lock fields default to none, and the title follows the wording of the hook. */
+function finish(base: Base): PartCommitState {
+  const state: PartCommitState = {
+    locks: [[], [], [], []],
+    flushEdits: () => Promise.resolve(),
+    refreshLocks: vi.fn(),
+    lockValues: vi.fn(),
+    revertValues: vi.fn(),
+    fieldMenu: null,
+    openFieldMenu: vi.fn(),
+    closeFieldMenu: vi.fn(),
+    reloadTitle: (i: number) => {
+      const n = state.locks[i].length
+      if (n > 0) return `Reload puts the Saved values back, except ${n} pinned ${n === 1 ? 'value' : 'values'}`
+      if (state.partsSavedState[i] !== 1) return 'No saved state yet: Save part first!'
+      return state.modifiedPartIds.has(i) ? `Reload part ${NAMES[i]} from saved state` : 'No changes to reload'
+    },
+    ...base,
+  }
+  return state
+}
 
 const last = <T,>(xs: T[]): T | undefined => xs[xs.length - 1]
 
@@ -331,7 +357,7 @@ describe('the buttons', () => {
     )
   }
 
-  const idle = (over: Partial<PartCommitState> = {}): PartCommitState => ({
+  const idle = (over: Partial<PartCommitState> = {}): PartCommitState => finish({
     modifiedPartIds: new Set<number>(),
     partsSavedState: [0, 0, 0, 0],
     isCommitting: false,
@@ -456,7 +482,7 @@ describe('the buttons', () => {
 })
 
 describe('the diffs window', () => {
-  const idle = (over: Partial<PartCommitState> = {}): PartCommitState => ({
+  const idle = (over: Partial<PartCommitState> = {}): PartCommitState => finish({
     modifiedPartIds: new Set<number>(),
     partsSavedState: [1, 1, 1, 1],
     isCommitting: false,
@@ -506,7 +532,7 @@ describe('the diffs window', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Edited params against saved' })
     const row = await within(dialog).findByRole('row', { name: /VOL/ })
     expect(within(row).getAllByRole('cell').map(c => c.textContent))
-      .toEqual(['T1', 'AMP', 'VOL', '36', '44'])
+      .toEqual(['T1', 'AMP', 'VOL', '36', '44', ''])
     expect(within(dialog).getByText(/- 1 diff$/)).toBeInTheDocument()
   })
 
@@ -571,7 +597,7 @@ describe('the diffs window', () => {
     expect(t1).toHaveTextContent('T1')
     expect(t1).toHaveAttribute('rowspan', '2')
     // The second T1 row has no track cell of its own: it starts with the page
-    expect(within(second).getAllByRole('cell').map(c => c.textContent)).toEqual(['AMP', 'BAL', '0', '6'])
+    expect(within(second).getAllByRole('cell').map(c => c.textContent)).toEqual(['AMP', 'BAL', '0', '6', ''])
     expect(within(third).getAllByRole('cell')[0]).toHaveTextContent('T2')
   })
 
@@ -611,7 +637,7 @@ describe('the diffs window', () => {
 })
 
 describe('the d key', () => {
-  const idle = (over: Partial<PartCommitState> = {}): PartCommitState => ({
+  const idle = (over: Partial<PartCommitState> = {}): PartCommitState => finish({
     modifiedPartIds: new Set([0]),
     partsSavedState: [1, 1, 1, 1],
     isCommitting: false,
@@ -675,7 +701,7 @@ describe('the d key', () => {
 })
 
 describe('the Part tab menu', () => {
-  const state = (over: Partial<PartCommitState> = {}): PartCommitState => ({
+  const state = (over: Partial<PartCommitState> = {}): PartCommitState => finish({
     modifiedPartIds: new Set([1]),
     partsSavedState: [1, 1, 1, 1],
     isCommitting: false,
@@ -761,7 +787,7 @@ describe('which diffs and which menu are open', () => {
 })
 
 /** The hook's state as the buttons, the window and the menu see it, with every action a spy. */
-const commitState = (over: Partial<PartCommitState> = {}): PartCommitState => ({
+const commitState = (over: Partial<PartCommitState> = {}): PartCommitState => finish({
   modifiedPartIds: new Set([0]),
   partsSavedState: [1, 1, 1, 1],
   isCommitting: false,
@@ -813,6 +839,14 @@ describe('the diffs window, further', () => {
     await userEvent.setup().click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Reload PART 1' }))
     expect(state.reloadPart).toHaveBeenCalledWith(0)
     expect(state.hideDiffs).toHaveBeenCalled()
+  })
+
+  it('stays open after its Reload while values are pinned, and reads both copies again', async () => {
+    const state = opened(copiesWith(c => { c.part.amps[0].vol = 70 }), { locks: [['/part/amps/0/vol'], [], [], []] })
+    await userEvent.setup().click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Reload PART 1' }))
+    expect(state.reloadPart).toHaveBeenCalledWith(0)
+    expect(state.hideDiffs).not.toHaveBeenCalled()
+    await waitFor(() => expect(state.readCopies).toHaveBeenCalledTimes(2))
   })
 
   it('refuses Save and Reload while a write is in flight', async () => {
@@ -941,5 +975,330 @@ describe('the d key, further', () => {
     act(() => { area.dispatchEvent(new KeyboardEvent('keydown', { key: 'd', bubbles: true })) })
     expect(state.showDiffs).not.toHaveBeenCalled()
     area.remove()
+  })
+})
+
+/**
+ * A lock keeps one value through Reload. The device knows nothing of them: the app
+ * keeps them next to the project, and this state is how every editor sees them.
+ */
+describe('locks', () => {
+  const L = (...xs: string[][]) => [xs[0] ?? [], xs[1] ?? [], xs[2] ?? [], xs[3] ?? []]
+  const reads = () => invokeMock.mock.calls.filter(c => c[0] === 'read_part_locks')
+
+  function withLocks(locks: string[][], extra: (cmd: string, args: unknown) => unknown = () => undefined) {
+    invokeMock.mockImplementation(async (cmd: string, args: unknown) => {
+      if (cmd === 'read_part_locks') return locks
+      return extra(cmd, args)
+    })
+  }
+
+  it('reads the locks of the bank on mount and again when reloadKey changes', async () => {
+    withLocks(L(['/part/fxs/0/fx1_param3']))
+    let key = 0
+    const hook = renderHook(() => usePartCommits({
+      projectPath: '/test/project', bankId: 'A', partNames: NAMES, reloadKey: key,
+    }))
+    await act(async () => {})
+    expect(reads()).toEqual([['read_part_locks', { path: '/test/project', bankId: 'A' }]])
+    expect(hook.result.current.locks[0]).toEqual(['/part/fxs/0/fx1_param3'])
+    key = 1
+    hook.rerender()
+    await act(async () => {})
+    expect(reads()).toHaveLength(2)
+  })
+
+  it('drops a locks reply for the previous bank that lands after a bank change', async () => {
+    let lateA!: (v: string[][]) => void
+    invokeMock.mockImplementation((cmd: string, args: { bankId: string }) => {
+      if (cmd !== 'read_part_locks') return Promise.resolve(undefined)
+      return args.bankId === 'A'
+        ? new Promise<string[][]>(res => { lateA = res })
+        : Promise.resolve(L([], ['/part/fxs/0/b']))
+    })
+    let bank = 'A'
+    const hook = renderHook(() => usePartCommits({
+      projectPath: '/test/project', bankId: bank, partNames: NAMES,
+    }))
+    bank = 'B'
+    hook.rerender()
+    await act(async () => {})
+    expect(hook.result.current.locks[1]).toEqual(['/part/fxs/0/b'])
+    await act(async () => { lateA(L(['/part/fxs/0/a'])) })
+    expect(hook.result.current.locks).toEqual(L([], ['/part/fxs/0/b']))
+  })
+
+  it('refreshLocks reads again only when the bank holds a lock', async () => {
+    withLocks(L())
+    const { result } = harness()
+    await act(async () => {})
+    expect(reads()).toHaveLength(1)
+    act(() => result.current.refreshLocks())
+    await act(async () => {})
+    expect(reads()).toHaveLength(1)
+
+    withLocks(L([], ['/part/fxs/0/fx1_param3']))
+    const second = harness()
+    await act(async () => {})
+    const before = reads().length
+    act(() => second.result.current.refreshLocks())
+    await act(async () => {})
+    expect(reads()).toHaveLength(before + 1)
+  })
+
+  it('Reload keeps the Part marked when it holds locks, and clears it otherwise', async () => {
+    withLocks(L([], ['/part/fxs/0/fx1_param3']), cmd => (cmd === 'reload_part' ? { atk: 1 } : undefined))
+    const { result } = harness()
+    await act(async () => {})
+    act(() => result.current.adoptBankState(0b0011, [1, 1, 1, 1]))
+    await act(() => result.current.reloadPart(1))
+    await act(() => result.current.reloadPart(0))
+    expect([...result.current.modifiedPartIds]).toEqual([1])
+  })
+
+  it('the Reload title names the pinned count', async () => {
+    withLocks(L(['/part/a/0/x', '/part/a/0/y'], ['/part/a/0/x']))
+    const { result } = harness()
+    await act(async () => {})
+    act(() => result.current.adoptBankState(0b0011, [1, 1, 0, 0]))
+    expect(result.current.reloadTitle(0)).toBe('Reload puts the Saved values back, except 2 pinned values')
+    expect(result.current.reloadTitle(1)).toBe('Reload puts the Saved values back, except 1 pinned value')
+    expect(result.current.reloadTitle(2)).toBe('No saved state yet: Save part first!')
+    act(() => result.current.adoptBankState(0b0001, [1, 1, 0, 0]))
+    withLocks(L())
+    const none = harness()
+    await act(async () => {})
+    act(() => none.result.current.adoptBankState(0b0001, [1, 1, 0, 0]))
+    expect(none.result.current.reloadTitle(0)).toBe('Reload part PART 1 from saved state')
+    expect(none.result.current.reloadTitle(1)).toBe('No changes to reload')
+  })
+
+  it('lockValues sends the change and adopts the returned locks, silently', async () => {
+    const after = L(['/part/fxs/0/fx1_param3'])
+    withLocks(L(), cmd => (cmd === 'set_part_locks' ? after : undefined))
+    const { result, statuses } = harness()
+    await act(async () => {})
+    await act(() => result.current.lockValues(0, ['/part/fxs/0/fx1_param3'], []))
+    expect(invokeMock).toHaveBeenCalledWith('set_part_locks', {
+      path: '/test/project', bankId: 'A', partId: 0,
+      add: ['/part/fxs/0/fx1_param3'], remove: [],
+    })
+    expect(result.current.locks).toEqual(after)
+    // No status and no busy flag: pinning must not flash the header's write buttons
+    expect(statuses).toHaveLength(0)
+    expect(result.current.isCommitting).toBe(false)
+  })
+
+  it('revertValues hands the rewritten Part to onReloaded and reads the locks again', async () => {
+    withLocks(L(['/part/fxs/0/fx1_param3']), cmd => (cmd === 'revert_part_values' ? { atk: 5 } : undefined))
+    const { result, reloaded } = harness()
+    await act(async () => {})
+    const before = reads().length
+    await act(() => result.current.revertValues(2, ['/part/fxs/0/fx1_param3'], 'Reload saved T1 FX1 FREQ'))
+    expect(invokeMock).toHaveBeenCalledWith('revert_part_values', {
+      path: '/test/project', bankId: 'A', partId: 2,
+      paths: ['/part/fxs/0/fx1_param3'], label: 'Reload saved T1 FX1 FREQ',
+    })
+    expect(reloaded).toEqual([{ index: 2, part: { atk: 5 } }])
+    expect([...result.current.modifiedPartIds]).toEqual([2])
+    expect(reads().length).toBe(before + 1)
+  })
+})
+
+describe('edits the editor still holds back', () => {
+  /** A flush that stays pending until released, and the commands seen meanwhile. */
+  function held() {
+    let release!: () => void
+    const flush = vi.fn(() => new Promise<void>(r => { release = r }))
+    const commands = () => invokeMock.mock.calls.map(c => c[0]).filter(c => c !== 'read_part_locks')
+    return { flush, release: () => release(), commands }
+  }
+
+  const calls: [string, (r: { current: ReturnType<typeof usePartCommits<{ atk: number }>> }) => Promise<void>, string][] = [
+    ['Revert', r => r.current.revertValues(1, ['/part/amps/0/atk'], 'Reload saved T1 AMP ATK'), 'revert_part_values'],
+    ['Lock', r => r.current.lockValues(1, ['/part/amps/0/atk'], []), 'set_part_locks'],
+    ['Reload', r => r.current.reloadPart(1), 'reload_part'],
+    ['Save', r => r.current.commitPart(1), 'commit_part'],
+  ]
+
+  for (const [name, act_, command] of calls) {
+    it(`${name} writes the pending edits first, and only then goes to the file`, async () => {
+      const h = held()
+      const { result } = harness({ flush: h.flush })
+      await act(async () => {})
+      let done!: Promise<void>
+      await act(async () => { done = act_(result) })
+      expect(h.flush).toHaveBeenCalledTimes(1)
+      expect(h.commands()).not.toContain(command)
+      await act(async () => { h.release(); await done })
+      expect(h.commands()).toContain(command)
+    })
+  }
+
+  it('Save All writes the pending edits first', async () => {
+    const h = held()
+    const { result } = harness({ flush: h.flush })
+    act(() => result.current.adoptBankState(0b0001, [1, 0, 0, 0]))
+    let done!: Promise<void>
+    await act(async () => { done = result.current.commitAllParts() })
+    expect(h.commands()).not.toContain('commit_all_parts')
+    await act(async () => { h.release(); await done })
+    expect(h.commands()).toContain('commit_all_parts')
+  })
+
+  it('works for an editor that has nothing to flush', async () => {
+    const { result } = harness()
+    await act(() => result.current.revertValues(0, ['/part/amps/0/atk'], 'Reload saved T1 AMP ATK'))
+    expect(invokeMock).toHaveBeenCalledWith('revert_part_values', expect.anything())
+  })
+})
+
+describe('the diffs window actions', () => {
+  /** An FX1 type change on T1 plus an AMP ATK edit on T1. */
+  const typeAndAmp = () => copiesWith(c => { c.part.fxs[0].fx1_type = 18; c.part.amps[0].atk = 40 })
+
+  const open = (over: Partial<PartCommitState> = {}) => {
+    const state = commitState({
+      diffsFor: 0,
+      modifiedPartIds: new Set([0]),
+      readCopies: vi.fn().mockResolvedValue(typeAndAmp()),
+      ...over,
+    })
+    renderControls(state)
+    return state
+  }
+  const dialog = () => screen.findByRole('dialog')
+
+  it('a type change reads as one group, its parameters under it', async () => {
+    open()
+    const d = await dialog()
+    await within(d).findByRole('button', { name: 'Reload saved T1 FX1' })
+    expect(d.querySelectorAll('tr.part-changes-head')).toHaveLength(1)
+    const members = d.querySelectorAll('tr.part-changes-member')
+    expect(members.length).toBeGreaterThan(0)
+    // Only the head and the plain row carry actions
+    expect(within(d).getAllByRole('button', { name: /^Reload saved / })).toHaveLength(2)
+    expect(within(d).getAllByRole('button', { name: /^Pin / })).toHaveLength(2)
+    expect(d.querySelector('.part-changes-member .fa-rotate-left')).toBeNull()
+  })
+
+  it('Reload saved on the group sends the type and every saved position', async () => {
+    const state = open()
+    const d = await dialog()
+    const btn = within(d).getByRole('button', { name: 'Reload saved T1 FX1' })
+    await userEvent.setup().click(btn)
+    const [part, paths, label] = (state.revertValues as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(part).toBe(0)
+    expect(label).toBe('Reload saved T1 FX1')
+    expect(paths).toContain('/part/fxs/0/fx1_type')
+    expect(paths).toContain('/part/fxs/0/fx1_param1')
+  })
+
+  it('no value is pinned until asked: every pin starts off', async () => {
+    open()
+    const d = await dialog()
+    for (const pin of within(d).getAllByRole('button', { name: /^Pin / })) {
+      expect(pin).toHaveAttribute('aria-pressed', 'false')
+    }
+    expect(d.querySelectorAll('.fa-lock, .part-changes-action.pinned')).toHaveLength(0)
+  })
+
+  it('Pin on a plain row sends its value', async () => {
+    const state = open()
+    const d = await dialog()
+    await userEvent.setup().click(within(d).getByRole('button', { name: 'Pin T1 AMP ATK' }))
+    expect(state.lockValues).toHaveBeenCalledWith(0, ['/part/amps/0/atk'], [])
+  })
+
+  it('a pinned row lights its one pin, which unpins it, and cannot be reloaded', async () => {
+    const state = open({ locks: [['/part/amps/0/atk'], [], [], []] })
+    const d = await dialog()
+    const pin = await within(d).findByRole('button', { name: 'Unpin T1 AMP ATK' })
+    expect(pin).toHaveAttribute('aria-pressed', 'true')
+    expect(pin.closest('tr')!.querySelectorAll('.fa-thumbtack')).toHaveLength(1)
+    expect(within(d).queryByRole('button', { name: 'Pin T1 AMP ATK' })).toBeNull()
+    expect(within(d).getByRole('button', { name: 'Reload saved T1 AMP ATK' })).toBeDisabled()
+    await userEvent.setup().click(pin)
+    expect(state.lockValues).toHaveBeenCalledWith(0, [], ['/part/amps/0/atk'])
+  })
+
+  it('the cross above the pins unpins every value of the Part', async () => {
+    const locks = [['/part/amps/0/atk', '/part/fxs/0/fx1_param3'], [], [], []]
+    const state = open({ locks })
+    const d = await dialog()
+    await userEvent.setup().click(within(d).getByRole('button', { name: 'Unpin all values of PART 1' }))
+    expect(state.lockValues).toHaveBeenCalledWith(0, [], locks[0])
+  })
+
+  it('the cross is only there while something is pinned', async () => {
+    open()
+    expect(within(await dialog()).queryByRole('button', { name: 'Unpin all values of PART 1' })).toBeNull()
+  })
+
+  it('a row put back as saved stays listed, both sides alike, until the window closes', async () => {
+    const readCopies = vi.fn()
+      .mockResolvedValueOnce(typeAndAmp())
+      // Re-read after the revert: only the FX1 change is left
+      .mockResolvedValueOnce(copiesWith(c => { c.part.fxs[0].fx1_type = 18 }))
+    open({ readCopies })
+    const d = await dialog()
+    await userEvent.setup().click(within(d).getByRole('button', { name: 'Reload saved T1 AMP ATK' }))
+    await waitFor(() => expect(d.querySelector('tr.part-changes-settled')).not.toBeNull())
+    const row = d.querySelector('tr.part-changes-settled') as HTMLElement
+    expect(row.querySelector('.part-changes-current')!.textContent)
+      .toBe(row.querySelector('.part-changes-saved')!.textContent)
+    expect(within(row).queryByRole('button')).toBeNull()
+  })
+
+  it('the window\'s Reload names the pinned count', async () => {
+    open({ locks: [['/part/amps/0/atk', '/part/amps/0/hold'], [], [], []] })
+    expect(within(await dialog()).getByRole('button', { name: 'Reload PART 1' }))
+      .toHaveAttribute('title', 'Reload puts the Saved values back, except 2 pinned values')
+  })
+
+  it('reads both copies again after an action', async () => {
+    const state = open()
+    const d = await dialog()
+    await userEvent.setup().click(within(d).getByRole('button', { name: 'Pin T1 AMP ATK' }))
+    expect(state.readCopies).toHaveBeenCalledTimes(2)
+  })
+
+  it('writes pending edits before reading the copies it lists', async () => {
+    const order: string[] = []
+    open({
+      flushEdits: () => { order.push('flush'); return Promise.resolve() },
+      readCopies: vi.fn(async () => { order.push('read'); return typeAndAmp() }),
+    })
+    await dialog()
+    expect(order).toEqual(['flush', 'read'])
+  })
+
+  it('refuses Reload saved and Pin while a write is in flight', async () => {
+    open({ isCommitting: true })
+    const d = await dialog()
+    expect(within(d).getByRole('button', { name: 'Reload saved T1 AMP ATK' })).toBeDisabled()
+    expect(within(d).getByRole('button', { name: 'Pin T1 AMP ATK' })).toBeDisabled()
+  })
+
+  it('refuses Unpin and Unpin all while a write is in flight', async () => {
+    open({ isReloading: true, locks: [['/part/amps/0/atk'], [], [], []] })
+    const d = await dialog()
+    expect(within(d).getByRole('button', { name: 'Unpin T1 AMP ATK' })).toBeDisabled()
+    expect(within(d).getByRole('button', { name: 'Unpin all values of PART 1' })).toBeDisabled()
+  })
+
+  it('refuses every action between an action and the end of its re-read', async () => {
+    let finishRead!: (c: PartCopies) => void
+    const readCopies = vi.fn()
+      .mockResolvedValueOnce(typeAndAmp())
+      .mockReturnValueOnce(new Promise<PartCopies>(r => { finishRead = r }))
+    open({ readCopies, locks: [['/part/amps/0/atk'], [], [], []] })
+    const d = await dialog()
+    await userEvent.setup().click(within(d).getByRole('button', { name: 'Reload saved T1 FX1' }))
+    expect(within(d).getByRole('button', { name: 'Reload saved T1 FX1' })).toBeDisabled()
+    expect(within(d).getByRole('button', { name: 'Unpin T1 AMP ATK' })).toBeDisabled()
+    expect(within(d).getByRole('button', { name: 'Unpin all values of PART 1' })).toBeDisabled()
+    await act(async () => { finishRead(typeAndAmp()) })
+    expect(within(d).getByRole('button', { name: 'Reload saved T1 FX1' })).toBeEnabled()
   })
 })

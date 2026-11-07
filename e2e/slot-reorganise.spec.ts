@@ -478,6 +478,14 @@ test.describe('Reorganising sample slots', () => {
     }
   })
 
+  test('the Shortcuts & zoom window lists the sample slot shortcuts on the Flex tab', async ({ page }) => {
+    await openTab(page, 'Flex')
+    await page.getByRole('button', { name: 'Shortcuts & zoom' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Shortcuts & zoom' })
+    await expect(dialog.locator('h4')).toHaveText(['Sample slots', 'Sample preview', 'Project', 'Everywhere'])
+    await expect(dialog).toContainText('Edit mode: move the selected slots')
+  })
+
   test('Tidy without a selection sorts the whole list', async ({ page }) => {
     await openTab(page, 'Flex')
     await page.getByRole('button', { name: 'Tidy', exact: true }).click()

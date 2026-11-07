@@ -27,10 +27,11 @@ The Octatrack is a deep and powerful machine, but its small screen can make cert
 - **In-Depth Inspection:** View mixer settings, MIDI configuration, memory allocation, and metronome settings for any project.
 - **Pattern Visualization:** Explore every step of your sequences, including micro-timing, trig conditions, and chord information for MIDI tracks.
 - **Audio Pool Management:** Browse your samples with detailed metadata (channels, bit depth, sample rate) and transfer files with automatic WAV conversion.
-- **Sample Slot Assignment:** Assign samples to Flex/Static Sample Slots by dragging them from the Audio Pool or your computer.
+- **Sample Slot Assignment:** Assign samples to Flex/Static Sample Slots by dragging them from the Audio Pool or your computer, and reorganise the slot lists: move or swap slots by dragging, or sort them with Tidy, with every Part and sample lock following.
 - **Cross-Project Copying:** Copy banks, parts, scenes, patterns, tracks, and sample slots between projects, with configurable options for each operation.
-- **Parts Editing:** Modify sound design snapshots for both audio and MIDI tracks, with full support for machine parameters and effects.
+- **Parts Editing:** Modify sound design snapshots for both audio and MIDI tracks, with full support for machine parameters and effects, and see exactly what Save or Reload would overwrite before doing it.
 - **Scenes Editing:** See which parameters each of a Part's 16 scenes holds, as a list, a matrix or a side-by-side comparison, set the crossfader ends and mutes, and edit, copy, clear or randomize scenes.
+- Any screen: the window opens sized for your display, and <kbd>Ctrl</kbd> + <kbd>+</kbd> / <kbd>-</kbd> zooms the whole interface (also from the Shortcuts & zoom window, behind the gear icon).
 
 ## Essential Concepts
 

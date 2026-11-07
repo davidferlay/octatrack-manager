@@ -68,3 +68,7 @@ Octatrack Manager synchronizes your navigation across different tabs. For exampl
 - If you select **Bank B** in the Parts tab, the app will stay on **Bank B** when you switch to the Patterns tab.
 - This ensures that your workflow remains fluid as you move between different aspects of your project.
 :::
+
+## Window size and zoom
+
+The window opens sized for your screen: large enough for the whole layout at your desktop's text scaling, and never larger than most of the screen. <kbd>Ctrl</kbd> + <kbd>+</kbd> and <kbd>Ctrl</kbd> + <kbd>-</kbd> zoom the whole interface (<kbd>Ctrl</kbd> + <kbd>0</kbd> goes back to 100%), and the zoom you choose is kept for the next launch. The gear icon at the top right of every page (or <kbd>?</kbd>) opens the Shortcuts & zoom window, which shows the zoom with buttons to change it. See [Keyboard Shortcuts](../reference/keyboard-shortcuts.md).

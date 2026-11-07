@@ -1487,6 +1487,11 @@
   font-weight: normal;
 }
 
+/* A sentence in place of the table (no saved copy, nothing differs): centred in the window */
+.part-changes-note {
+  text-align: center;
+}
+
 .part-changes-table {
   font-size: 0.95rem;
 }
@@ -1555,4 +1560,88 @@
 .part-changes-modal .modal-button[aria-label^="Save"]:hover:not(:disabled) {
   border-color: #10b981;
   background-color: rgba(255, 255, 255, 0.05);
+}
+
+/* A type change reads as one group: the type row heads it, its parameters sit under
+   it, indented, and only the head acts for all of them */
+/* A member follows its head, so it has no track cell: page and param come first */
+.part-changes-table tr.part-changes-member td:nth-child(-n+2) {
+  padding-left: 1.5rem;
+}
+
+.part-changes-table tr.part-changes-head td {
+  font-weight: 600;
+}
+
+/* Reload and Pin: two small icons at the end of the row, on the same grey as the values
+   so they do not stand out, and dim until the row is pointed at so they read as options
+   rather than state. A pinned value's pin stays lit. */
+/* Above the generic centring of the table's cells: right-aligned, so the header's cross
+   lines up with the pins, the last button of each row */
+.part-changes-table th.part-changes-actions,
+.part-changes-table td.part-changes-actions {
+  width: 1%;
+  padding: 0 0.3rem;
+  white-space: nowrap;
+  text-align: right;
+}
+
+.part-changes-table td.part-changes-actions {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* A fixed width with the icon centred, so the cross in the header sits straight above the
+   pins whatever the two glyphs' widths */
+.part-changes-action {
+  width: 1.2rem;
+  background: none;
+  border: none;
+  padding: 0.1rem 0;
+  text-align: center;
+  color: #999;
+  font-size: 0.72rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.3;
+}
+
+.part-changes-table tr:hover .part-changes-action:not(:disabled),
+.part-changes-action:focus-visible {
+  opacity: 1;
+}
+
+.part-changes-action:hover:not(:disabled) {
+  color: #f59e0b;
+}
+
+/* A little air between the reload and pin icons of a row */
+.part-changes-action + .part-changes-action {
+  margin-left: 0.3rem;
+}
+
+.part-changes-action.pinned {
+  color: #f59e0b;
+  opacity: 1;
+}
+
+/* Unpin all: a small cross in the header, straight above the pins it clears */
+.part-changes-action.part-changes-unpin-all {
+  opacity: 0.6;
+}
+
+.part-changes-action.part-changes-unpin-all:hover:not(:disabled) {
+  opacity: 1;
+}
+
+.part-changes-action:disabled {
+  cursor: default;
+}
+
+/* Put back as saved while the window is open: listed until it closes, both sides alike */
+.part-changes-table tr.part-changes-settled td {
+  opacity: 0.45;
+}
+
+.part-changes-table tr.part-changes-settled td.part-changes-current {
+  color: inherit;
 }

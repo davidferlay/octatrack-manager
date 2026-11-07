@@ -15,6 +15,7 @@ import {
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { Version } from "../components/Version";
+import { ShortcutsButton } from "../components/ShortcutsButton";
 import { AudioFileTable, audioKind } from "../components/AudioFileTable";
 import { FixPoolFilesModal, PoolIncompatibleListModal, type IncompatibleFile, type PoolFixResult, type CopyProgressEvent } from "../components/FixPoolFilesModal";
 import { FixSetMissingSamplesModal, type ProjectMissing } from "../components/FixSetMissingSamplesModal";
@@ -1725,6 +1726,7 @@ export function AudioPoolPage() {
           >
             <i className="fas fa-sync-alt"></i>
           </button>
+          <ShortcutsButton page="audio-pool" />
           <Version />
         </div>
       </div>

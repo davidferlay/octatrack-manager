@@ -484,20 +484,18 @@ pub fn apply_plan(
             format!("Failed to {what} bank {letter}: {e:?}")
         };
         let mut bank = BankFile::from_data_file(&bank_file).map_err(|e| failed("read", e))?;
-        // Both sides encoded the same way, checksum recomputed, and compared with each other,
-        // not with the bytes on disk: a bank the plan does not touch is never rewritten just
-        // because its stored checksum or its bytes differ from what ot-tools-io writes.
-        let encode = |bank: &mut BankFile| -> Result<Vec<u8>, String> {
+        // Compared in memory, not with the bytes on disk: a bank the plan does not touch is
+        // never rewritten just because its stored checksum or its bytes differ from what
+        // ot-tools-io writes. Only a changed bank is checksummed and encoded, which is most
+        // of the cost (measured on 16 banks: 6.8 s in a debug build when encoding all of them
+        // twice to compare, against under 1 s for parsing alone).
+        let before = bank.clone();
+        remap_bank_slot_references(&mut bank, static_remap, flex_remap);
+        if bank != before {
             bank.checksum = bank
                 .calculate_checksum()
                 .map_err(|e| failed("checksum", e))?;
-            bank.to_bytes().map_err(|e| failed("encode", e))
-        };
-        let before = encode(&mut bank)?;
-        remap_bank_slot_references(&mut bank, static_remap, flex_remap);
-        let after = encode(&mut bank)?;
-        if after != before {
-            writes.push((bank_file, after));
+            writes.push((bank_file, bank.to_bytes().map_err(|e| failed("encode", e))?));
         }
     }
 

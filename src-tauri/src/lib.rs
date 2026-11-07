@@ -4,6 +4,7 @@
 mod audio_pool;
 mod device_detection;
 mod ot_sidecar;
+mod part_locks;
 pub mod project_manager;
 mod project_reader;
 mod purge;
@@ -188,11 +189,20 @@ async fn load_scenes(path: String, bank_id: String, part_id: u8) -> Result<Scene
         .unwrap()
 }
 
+/// Every Part-writing command below takes `slot_files_lock` for its whole run, because
+/// each one reads the bank, changes it and writes it back: two running side by side (a
+/// scene edit and a crossfader move, say) would each write back a bank missing the
+/// other's change. The editors queue several writes in the same moment, so this happens.
+/// The guard is not re-entrant: none of these calls another.
+///
 /// Snapshots a bank before a write, so the write can be taken back.
 ///
 /// Both copies travel together: the device keeps `.work` as what it is playing and
 /// `.strd` as what was last saved to the card, and a half-undone bank would be a bank
 /// whose two copies disagree about a write that no longer happened.
+///
+/// The locks file stays out: which values Reload keeps is not part of the history, and
+/// an Undo re-checks them against the bank it puts back (`prune_all_locks`).
 fn make_bank_undoable(path: &str, bank_id: &str, label: &str) -> Result<(), String> {
     let work = project_reader::bank_file_path(path, bank_id)?;
     let stored = work.with_extension("strd");
@@ -201,6 +211,118 @@ fn make_bank_undoable(path: &str, bank_id: &str, label: &str) -> Result<(), Stri
         files.push(stored);
     }
     write_history::record(path, label, &files)
+}
+
+/// After an Undo or Redo: the kept values are not part of the history, so the files it
+/// put back may have made some of them match their saved value again.
+fn prune_all_locks(path: &str) {
+    if let Err(e) = part_locks::prune_all(path) {
+        eprintln!("Could not prune part locks: {}", e);
+    }
+}
+
+/// Drops the locks a write has made pointless. The write itself succeeded, so a failure
+/// here is logged rather than returned: a stale lock is filtered out on read anyway.
+fn prune_locks(path: &str, bank_id: &str) {
+    if let Err(e) = part_locks::prune(path, bank_id) {
+        eprintln!("Could not prune part locks: {}", e);
+    }
+}
+
+fn save_scene_impl(
+    path: &str,
+    bank_id: &str,
+    part_id: u8,
+    scene_id: u8,
+    tracks: Vec<SceneTrackLocks>,
+) -> Result<(), String> {
+    let _files = slot_files_lock();
+    make_bank_undoable(path, bank_id, &format!("Change scene {}", scene_id + 1))?;
+    project_reader::save_scene(path, bank_id, part_id, scene_id, tracks)?;
+    prune_locks(path, bank_id);
+    Ok(())
+}
+
+fn save_crossfader_impl(
+    path: &str,
+    bank_id: &str,
+    part_id: u8,
+    scene_a: u8,
+    scene_b: u8,
+) -> Result<(), String> {
+    let _files = slot_files_lock();
+    make_bank_undoable(path, bank_id, "Move a crossfader end")?;
+    project_reader::save_crossfader(path, bank_id, part_id, scene_a, scene_b)?;
+    prune_locks(path, bank_id);
+    Ok(())
+}
+
+fn save_parts_impl(path: &str, bank_id: &str, parts_data: Vec<PartData>) -> Result<(), String> {
+    let _files = slot_files_lock();
+    make_bank_undoable(path, bank_id, "Change a part")?;
+    save_parts_data(path, bank_id, parts_data)?;
+    prune_locks(path, bank_id);
+    Ok(())
+}
+
+fn commit_part_impl(path: &str, bank_id: &str, part_id: u8) -> Result<(), String> {
+    let _files = slot_files_lock();
+    make_bank_undoable(path, bank_id, &format!("Save part {}", part_id + 1))?;
+    commit_part_data(path, bank_id, part_id)?;
+    prune_locks(path, bank_id);
+    Ok(())
+}
+
+fn commit_all_parts_impl(path: &str, bank_id: &str) -> Result<(), String> {
+    let _files = slot_files_lock();
+    make_bank_undoable(path, bank_id, "Save all parts")?;
+    commit_all_parts_data(path, bank_id)?;
+    prune_locks(path, bank_id);
+    Ok(())
+}
+
+/// Reload puts the Saved values back, except the locked ones (R5): one write, one entry.
+fn reload_part_impl(path: &str, bank_id: &str, part_id: u8) -> Result<PartData, String> {
+    let _files = slot_files_lock();
+    let keep = part_locks::effective(path, bank_id)?
+        .into_iter()
+        .nth(part_id as usize)
+        .unwrap_or_default();
+    make_bank_undoable(path, bank_id, &format!("Reload part {}", part_id + 1))?;
+    let part = reload_part_data(path, bank_id, part_id, &keep)?;
+    prune_locks(path, bank_id);
+    Ok(part)
+}
+
+fn read_part_locks_impl(path: &str, bank_id: &str) -> Result<Vec<Vec<String>>, String> {
+    part_locks::effective(path, bank_id)
+}
+
+fn set_part_locks_impl(
+    path: &str,
+    bank_id: &str,
+    part_id: u8,
+    add: &[String],
+    remove: &[String],
+) -> Result<Vec<Vec<String>>, String> {
+    // Not an Undo step: which values Reload keeps is a choice about the next Reload,
+    // not a change to the Part
+    let _files = slot_files_lock();
+    part_locks::set(path, bank_id, part_id, add, remove)
+}
+
+fn revert_part_values_impl(
+    path: &str,
+    bank_id: &str,
+    part_id: u8,
+    paths: &[String],
+    label: &str,
+) -> Result<PartData, String> {
+    let _files = slot_files_lock();
+    make_bank_undoable(path, bank_id, label)?;
+    let part = project_reader::revert_part_values(path, bank_id, part_id, paths)?;
+    prune_locks(path, bank_id);
+    Ok(part)
 }
 
 /// Snapshots the project file before a write, for the settings that live there.
@@ -231,7 +353,9 @@ fn make_slots_undoable(path: &str, label: &str) -> Result<(), String> {
 async fn undo_write(path: String) -> Result<Option<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let _files = slot_files_lock();
-        write_history::undo(&path)
+        let undone = write_history::undo(&path);
+        prune_all_locks(&path);
+        undone
     })
     .await
     .unwrap()
@@ -241,7 +365,9 @@ async fn undo_write(path: String) -> Result<Option<String>, String> {
 async fn redo_write(path: String) -> Result<Option<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let _files = slot_files_lock();
-        write_history::redo(&path)
+        let redone = write_history::redo(&path);
+        prune_all_locks(&path);
+        redone
     })
     .await
     .unwrap()
@@ -268,8 +394,7 @@ async fn save_scene(
     tracks: Vec<SceneTrackLocks>,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        make_bank_undoable(&path, &bank_id, &format!("Change scene {}", scene_id + 1))?;
-        project_reader::save_scene(&path, &bank_id, part_id, scene_id, tracks)
+        save_scene_impl(&path, &bank_id, part_id, scene_id, tracks)
     })
     .await
     .unwrap()
@@ -284,8 +409,7 @@ async fn save_crossfader(
     scene_b: u8,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        make_bank_undoable(&path, &bank_id, "Move a crossfader end")?;
-        project_reader::save_crossfader(&path, &bank_id, part_id, scene_a, scene_b)
+        save_crossfader_impl(&path, &bank_id, part_id, scene_a, scene_b)
     })
     .await
     .unwrap()
@@ -319,12 +443,9 @@ async fn save_parts(
     parts_data: Vec<PartData>,
 ) -> Result<(), String> {
     // Run on a blocking thread pool to avoid blocking the main event loop
-    tauri::async_runtime::spawn_blocking(move || {
-        make_bank_undoable(&path, &bank_id, "Change a part")?;
-        save_parts_data(&path, &bank_id, parts_data)
-    })
-    .await
-    .unwrap()
+    tauri::async_runtime::spawn_blocking(move || save_parts_impl(&path, &bank_id, parts_data))
+        .await
+        .unwrap()
 }
 
 #[tauri::command]
@@ -399,31 +520,59 @@ async fn reset_slot_attributes(
 #[tauri::command]
 async fn commit_part(path: String, bank_id: String, part_id: u8) -> Result<(), String> {
     // Commit a part: copy parts.unsaved to parts.saved (like Octatrack's "SAVE" command)
-    tauri::async_runtime::spawn_blocking(move || {
-        make_bank_undoable(&path, &bank_id, &format!("Save part {}", part_id + 1))?;
-        commit_part_data(&path, &bank_id, part_id)
-    })
-    .await
-    .unwrap()
+    tauri::async_runtime::spawn_blocking(move || commit_part_impl(&path, &bank_id, part_id))
+        .await
+        .unwrap()
 }
 
 #[tauri::command]
 async fn commit_all_parts(path: String, bank_id: String) -> Result<(), String> {
     // Commit all parts: copy all parts.unsaved to parts.saved (like Octatrack's "SAVE ALL" command)
+    tauri::async_runtime::spawn_blocking(move || commit_all_parts_impl(&path, &bank_id))
+        .await
+        .unwrap()
+}
+
+#[tauri::command]
+async fn reload_part(path: String, bank_id: String, part_id: u8) -> Result<PartData, String> {
+    // Reload a part: copy parts.saved back to parts.unsaved (like Octatrack's "RELOAD" command)
+    tauri::async_runtime::spawn_blocking(move || reload_part_impl(&path, &bank_id, part_id))
+        .await
+        .unwrap()
+}
+
+#[tauri::command]
+async fn read_part_locks(path: String, bank_id: String) -> Result<Vec<Vec<String>>, String> {
+    tauri::async_runtime::spawn_blocking(move || read_part_locks_impl(&path, &bank_id))
+        .await
+        .unwrap()
+}
+
+#[tauri::command]
+async fn set_part_locks(
+    path: String,
+    bank_id: String,
+    part_id: u8,
+    add: Vec<String>,
+    remove: Vec<String>,
+) -> Result<Vec<Vec<String>>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        make_bank_undoable(&path, &bank_id, "Save all parts")?;
-        commit_all_parts_data(&path, &bank_id)
+        set_part_locks_impl(&path, &bank_id, part_id, &add, &remove)
     })
     .await
     .unwrap()
 }
 
 #[tauri::command]
-async fn reload_part(path: String, bank_id: String, part_id: u8) -> Result<PartData, String> {
-    // Reload a part: copy parts.saved back to parts.unsaved (like Octatrack's "RELOAD" command)
+async fn revert_part_values(
+    path: String,
+    bank_id: String,
+    part_id: u8,
+    paths: Vec<String>,
+    label: String,
+) -> Result<PartData, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        make_bank_undoable(&path, &bank_id, &format!("Reload part {}", part_id + 1))?;
-        reload_part_data(&path, &bank_id, part_id)
+        revert_part_values_impl(&path, &bank_id, part_id, &paths, &label)
     })
     .await
     .unwrap()
@@ -1932,6 +2081,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             ui_zoom::step_ui_zoom,
+            ui_zoom::get_ui_zoom,
             scan_devices,
             scan_custom_directory,
             load_project_metadata,
@@ -1956,6 +2106,9 @@ pub fn run() {
             commit_part,
             commit_all_parts,
             reload_part,
+            read_part_locks,
+            set_part_locks,
+            revert_part_values,
             read_part_copies,
             list_audio_directory,
             list_audio_files_recursive,
@@ -2048,6 +2201,160 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod part_lock_commands {
+        use super::*;
+        use crate::project_reader::tests::TestProject;
+
+        const ATK: &str = "/part/amps/0/atk";
+
+        fn s(v: &[&str]) -> Vec<String> {
+            v.iter().map(|p| p.to_string()).collect()
+        }
+
+        fn bank_bytes(project: &TestProject) -> Vec<u8> {
+            std::fs::read(project_reader::bank_file_path(&project.path, "A").unwrap()).unwrap()
+        }
+
+        /// Part 1 saved, then its AMP ATK changed, so that value can be locked or reverted.
+        fn edited_project() -> TestProject {
+            let project = TestProject::new();
+            commit_part_impl(&project.path, "A", 0).unwrap();
+            let mut part = read_parts_data(&project.path, "A").unwrap().parts.remove(0);
+            part.amps[0].atk = if part.amps[0].atk < 60 {
+                part.amps[0].atk + 3
+            } else {
+                part.amps[0].atk - 3
+            };
+            save_parts_impl(&project.path, "A", vec![part]).unwrap();
+            project
+        }
+
+        fn undo_label(project: &TestProject) -> Option<String> {
+            write_history::state(&project.path).undo_label
+        }
+
+        #[test]
+        fn writes_to_one_bank_at_once_do_not_overwrite_each_other() {
+            for _ in 0..20 {
+                let project = TestProject::new();
+                let tracks = project_reader::read_part_copies(&project.path, "A", 0)
+                    .unwrap()
+                    .edited
+                    .scenes
+                    .scenes[1]
+                    .tracks
+                    .clone();
+                let mut tracks = tracks;
+                tracks[0].amp[0] = Some(77);
+                let barrier = std::sync::Barrier::new(2);
+                std::thread::scope(|s| {
+                    s.spawn(|| {
+                        barrier.wait();
+                        save_scene_impl(&project.path, "A", 0, 1, tracks.clone()).unwrap();
+                    });
+                    s.spawn(|| {
+                        barrier.wait();
+                        save_crossfader_impl(&project.path, "A", 0, 3, 9).unwrap();
+                    });
+                });
+                let after = project_reader::read_part_copies(&project.path, "A", 0)
+                    .unwrap()
+                    .edited
+                    .scenes;
+                assert_eq!(after.scenes[1].tracks[0].amp[0], Some(77));
+                assert_eq!((after.scene_a, after.scene_b), (3, 9));
+            }
+        }
+
+        #[test]
+        fn keeping_values_adds_no_undo_entry() {
+            let project = TestProject::new();
+            commit_part_impl(&project.path, "A", 0).unwrap();
+            let kept = set_part_locks_impl(&project.path, "A", 0, &s(&[ATK]), &[]).unwrap();
+            assert!(kept[0].is_empty(), "the value matches the saved one");
+            assert_eq!(undo_label(&project), Some("Save part 1".to_string()));
+
+            let project = edited_project();
+            let kept = set_part_locks_impl(&project.path, "A", 0, &s(&[ATK]), &[]).unwrap();
+            assert_eq!(kept[0], s(&[ATK]));
+            set_part_locks_impl(&project.path, "A", 0, &[], &s(&[ATK])).unwrap();
+            assert_eq!(undo_label(&project), Some("Change a part".to_string()));
+        }
+
+        #[test]
+        fn an_undo_leaves_the_kept_values_alone() {
+            let project = edited_project();
+            set_part_locks_impl(&project.path, "A", 0, &s(&[ATK]), &[]).unwrap();
+            // Another edit after the keep, then taken back: ATK still differs, so it is
+            // still kept
+            let mut part = read_parts_data(&project.path, "A").unwrap().parts.remove(0);
+            part.amps[0].rel = if part.amps[0].rel < 60 { 70 } else { 20 };
+            save_parts_impl(&project.path, "A", vec![part]).unwrap();
+            let undo = tauri::async_runtime::block_on(undo_write(project.path.clone()));
+            assert!(undo.unwrap().is_some());
+            assert_eq!(
+                read_part_locks_impl(&project.path, "A").unwrap()[0],
+                s(&[ATK])
+            );
+        }
+
+        #[test]
+        fn an_undo_that_puts_a_kept_value_back_drops_its_keep() {
+            let project = edited_project();
+            set_part_locks_impl(&project.path, "A", 0, &s(&[ATK]), &[]).unwrap();
+            // Takes back the ATK edit itself, so the value matches the saved one again
+            tauri::async_runtime::block_on(undo_write(project.path.clone())).unwrap();
+            assert!(read_part_locks_impl(&project.path, "A").unwrap()[0].is_empty());
+            assert!(!part_locks::locks_file(&project.path).exists());
+        }
+
+        #[test]
+        fn undo_does_not_bring_back_what_save_or_revert_cleared() {
+            for revert in [false, true] {
+                let project = edited_project();
+                set_part_locks_impl(&project.path, "A", 0, &s(&[ATK]), &[]).unwrap();
+                let before = bank_bytes(&project);
+                if revert {
+                    revert_part_values_impl(&project.path, "A", 0, &s(&[ATK]), "Revert T1 AMP ATK")
+                        .unwrap();
+                } else {
+                    commit_part_impl(&project.path, "A", 0).unwrap();
+                }
+                assert!(read_part_locks_impl(&project.path, "A").unwrap()[0].is_empty());
+
+                tauri::async_runtime::block_on(undo_write(project.path.clone())).unwrap();
+                assert_eq!(bank_bytes(&project), before);
+                assert!(read_part_locks_impl(&project.path, "A").unwrap()[0].is_empty());
+            }
+        }
+
+        #[test]
+        fn reload_keeps_locked_values_in_one_undo_entry() {
+            let project = edited_project();
+            // A second edit that is not locked, so Reload has something to put back
+            let mut part = read_parts_data(&project.path, "A").unwrap().parts.remove(0);
+            part.amps[0].rel = if part.amps[0].rel < 60 { 70 } else { 20 };
+            save_parts_impl(&project.path, "A", vec![part]).unwrap();
+            set_part_locks_impl(&project.path, "A", 0, &s(&[ATK]), &[]).unwrap();
+            let before = bank_bytes(&project);
+
+            let part = reload_part_impl(&project.path, "A", 0).unwrap();
+            assert_ne!(bank_bytes(&project), before);
+            let saved = read_parts_data(&project.path, "A").unwrap().parts.remove(0);
+            assert_eq!(
+                part.amps[0].atk, saved.amps[0].atk,
+                "the locked value is kept"
+            );
+            assert_eq!(
+                read_part_locks_impl(&project.path, "A").unwrap()[0],
+                s(&[ATK])
+            );
+
+            write_history::undo(&project.path).unwrap();
+            assert_eq!(bank_bytes(&project), before);
+        }
+    }
 
     mod slot_reorganise_commands {
         use super::*;

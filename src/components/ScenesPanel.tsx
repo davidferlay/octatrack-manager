@@ -15,7 +15,8 @@ import { SceneValue } from './SceneValue';
 export type { ScenesResponse } from './sceneModel';
 import { useWheelStep } from '../utils/wheelStep';
 import { usePartCommits, PartSaveControls } from './PartSaveControls';
-import { SceneMatrix, SceneCompare } from './SceneViews';
+import { SceneMatrix, SceneCompare, lockMarks } from './SceneViews';
+import { scenePath } from '../utils/partLocks';
 import './ScenesPanel.css';
 
 interface ScenesPanelProps {
@@ -98,7 +99,39 @@ export function ScenesPanel({
   const [trackClip, setTrackClip] = useState<
     { from: number; trackId: number; track: SceneTrackLocks } | null
   >(null);
-  const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // Writes still waiting out their delay, one per thing being written
+  const pendingWrites = useRef<Record<string, {
+    timer: ReturnType<typeof setTimeout>; what: string; run: () => Promise<unknown>;
+  }>>({});
+
+  /** Runs one queued write now, whether its timer fired or a flush asked. */
+  const fireWrite = useCallback((key: string): Promise<void> => {
+    const pending = pendingWrites.current[key];
+    if (!pending) return Promise.resolve();
+    clearTimeout(pending.timer);
+    delete pendingWrites.current[key];
+    const { what } = pending;
+    return pending.run()
+      .then(() => {
+        onWriteStatusChange?.(writeStatus.success(`${what} saved`));
+        setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
+      })
+      .catch(err => {
+        console.error(`Failed to save the ${what.toLowerCase()}:`, err);
+        onWriteStatusChange?.(writeStatus.error(`Could not save the ${what.toLowerCase()}`));
+        setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
+      });
+  }, [onWriteStatusChange]);
+
+  /**
+   * Writes everything still queued, and resolves once it is in the file. Reload, Revert
+   * and Lock work on the file: a scene write that landed after them would put back the
+   * values they had just changed.
+   */
+  const flushWrites = useCallback(
+    async () => { await Promise.all(Object.keys(pendingWrites.current).map(fireWrite)); },
+    [fireWrite],
+  );
 
   // Scene data lives in the Part, so this editor writes the same `parts.unsaved` the
   // Parts editor does and offers the device's same way back from it
@@ -107,8 +140,10 @@ export function ScenesPanel({
     // Reload puts the saved Part back, so every scene in it has to be read again
     onReloaded: () => { reload(); },
     onError: setError,
+    reloadKey,
+    flush: flushWrites,
   });
-  const { markModified, adoptBankState, readCopies } = commits;
+  const { markModified, adoptBankState, readCopies, refreshLocks } = commits;
 
   // The Part's saved copy, so values that differ from it can say what Save and Reload
   // would overwrite. Only read while the Part holds edits and has one.
@@ -166,7 +201,7 @@ export function ScenesPanel({
   }, [projectPath, bankId, partId, adoptBankState, preloaded, reloadKey]);
 
   useEffect(() => () => {
-    for (const timer of Object.values(saveTimers.current)) clearTimeout(timer);
+    for (const { timer } of Object.values(pendingWrites.current)) clearTimeout(timer);
   }, []);
 
   /**
@@ -179,21 +214,12 @@ export function ScenesPanel({
   const queueWrite = useCallback((
     key: string, what: string, run: () => Promise<unknown>,
   ) => {
-    clearTimeout(saveTimers.current[key]);
+    clearTimeout(pendingWrites.current[key]?.timer);
     onWriteStatusChange?.(writeStatus.writing());
-    saveTimers.current[key] = setTimeout(() => {
-      run()
-        .then(() => {
-          onWriteStatusChange?.(writeStatus.success(`${what} saved`));
-          setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
-        })
-        .catch(err => {
-          console.error(`Failed to save the ${what.toLowerCase()}:`, err);
-          onWriteStatusChange?.(writeStatus.error(`Could not save the ${what.toLowerCase()}`));
-          setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
-        });
-    }, SAVE_DELAY);
-  }, [onWriteStatusChange]);
+    pendingWrites.current[key] = {
+      what, run, timer: setTimeout(() => { void fireWrite(key); }, SAVE_DELAY),
+    };
+  }, [onWriteStatusChange, fireWrite]);
 
   /**
    * Writes a whole scene.
@@ -213,8 +239,8 @@ export function ScenesPanel({
     markModified(partId);
     queueWrite(`scene:${sceneId}`, `Scene ${sceneId + 1}`, () => invoke(
       'save_scene', { path: projectPath, bankId, partId, sceneId, tracks },
-    ));
-  }, [projectPath, bankId, partId, markModified, queueWrite]);
+    ).then(refreshLocks));
+  }, [projectPath, bankId, partId, markModified, queueWrite, refreshLocks]);
 
   const scene = data?.scenes[selected];
 
@@ -341,8 +367,8 @@ export function ScenesPanel({
     markModified(partId);
     queueWrite('crossfader', 'Crossfader', () => invoke(
       'save_crossfader', { path: projectPath, bankId, partId, sceneA, sceneB },
-    ));
-  }, [projectPath, bankId, partId, markModified, queueWrite, showTip]);
+    ).then(refreshLocks));
+  }, [projectPath, bankId, partId, markModified, queueWrite, showTip, refreshLocks]);
 
   /**
    * Mutes or unmutes one end.
@@ -637,7 +663,10 @@ export function ScenesPanel({
   );
 
   return (
-    <div className={`scenes-panel bank-card ${commits.modifiedPartIds.size > 0 ? 'edit-mode' : ''}`}>
+    <div
+      className={`scenes-panel bank-card ${commits.modifiedPartIds.size > 0 ? 'edit-mode' : ''}`}
+      onContextMenu={isEditMode ? e => commits.openFieldMenu(e, partId) : undefined}
+    >
       {randomizeOpen && (
         <SceneRandomizeModal
           rows={assignments}
@@ -844,6 +873,7 @@ export function ScenesPanel({
           onSceneChange={selectOne}
           onPick={pickScene}
           saved={saved}
+          locks={commits.locks[partId]}
         />
       )}
 
@@ -858,6 +888,7 @@ export function ScenesPanel({
           onSet={setAssignment}
           onCopyTrack={copyTrackBetween}
           saved={saved}
+          locks={commits.locks[partId]}
         />
       )}
 
@@ -940,7 +971,11 @@ export function ScenesPanel({
                       >
                         <td className="scene-lock-page">{slot.pageName}</td>
                         <td className="scene-lock-label">{slot.label}</td>
-                        <td className="scene-lock-value">
+                        <td
+                          className="scene-lock-value"
+                          {...lockMarks(scenePath(selected, track.track_id, slot.page, slot.index),
+                            commits.locks[partId], !!isEditMode)}
+                        >
                           {slot.value === null ? (
                             <button
                               className={`scene-add${savedAt(track.track_id, slot) != null ? ' param-changed' : ''}`}

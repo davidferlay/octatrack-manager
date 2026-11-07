@@ -841,6 +841,33 @@ h1 {
   margin: 0.25rem 0;
 }
 
+/*
+ * A pinned value, which Part reload leaves alone, carries a small pin at its top-right
+ * corner. The mark
+ * is a pseudo-element, which a select cannot draw, so the two type pickers show it on
+ * their wrapper.
+ */
+[data-locked]:not(select),
+.machine-type-field:has([data-locked]),
+.fx-type-field:has([data-locked]) {
+  position: relative;
+}
+
+[data-locked]:not(select)::before,
+.machine-type-field:has([data-locked])::before,
+.fx-type-field:has([data-locked])::before {
+  font-family: "Font Awesome 7 Free";
+  font-weight: 900;
+  content: "\f08d";
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  font-size: 0.55rem;
+  line-height: 1;
+  color: var(--elektron-orange, #ff8c00);
+  pointer-events: none;
+}
+
 /* Audio Pool Card */
 .audio-pool-card {
   background-color: var(--elektron-black);
@@ -1027,6 +1054,85 @@ h1 {
 
 .toolbar-button.refreshing {
   border-color: var(--elektron-orange);
+}
+
+/* Keyboard shortcuts window: the zoom control sits in the header, between title and close */
+.modal-content.shortcuts-modal {
+  max-width: 680px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-content.shortcuts-modal .modal-body {
+  overflow-y: auto;
+}
+
+.shortcuts-zoom {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+  margin-right: 1rem;
+}
+
+.shortcuts-zoom .toolbar-button {
+  padding: 0.3rem 0.5rem;
+}
+
+.shortcuts-zoom-label {
+  font-size: 0.9rem;
+  color: var(--elektron-text-secondary);
+}
+
+.shortcuts-zoom-value {
+  min-width: 2.75rem;
+  padding: 0.2rem 0.3rem;
+  border: 1px solid var(--elektron-border-gray);
+  border-radius: 4px;
+  color: var(--elektron-text-primary);
+  font-family: 'Courier New', monospace;
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+.shortcuts-group + .shortcuts-group {
+  margin-top: 1rem;
+}
+
+.shortcuts-group h4 {
+  margin: 0 0 0.4rem;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--elektron-orange);
+}
+
+.shortcuts-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  color: var(--elektron-text-primary);
+}
+
+.shortcuts-table td {
+  padding: 0.25rem 0;
+  vertical-align: top;
+}
+
+.shortcuts-keys {
+  width: 45%;
+  white-space: nowrap;
+  padding-right: 1rem;
+}
+
+.shortcuts-keys kbd {
+  font-family: 'Courier New', monospace;
+  font-size: 0.875rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--elektron-border-gray);
+  border-radius: 3px;
+  background-color: rgba(255, 255, 255, 0.05);
 }
 
 @keyframes spin-decelerate {

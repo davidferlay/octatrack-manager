@@ -90,6 +90,7 @@ Edting scenes and their parameters is available in Edit mode: with it, values ca
 - Drag a value up or down, as on the Parts pages.
 - Click the cross beside a value to clear that parameter out of the scene.
 - Turn on "Show all params" to list every parameter the scene could hold and assign new parameters to it.
+- Right-click a scene value in Edit mode to put its lock back as saved (Reload saved value), or to pin it out of Part reload (Pin value, or Unpin value). It is the same menu as on the Parts pages, see [Seeing what Save and Reload overwrite](./parts-editor.md#4-seeing-what-save-and-reload-overwrite). Reloading the saved value of a scene lock the edits removed brings it back; doing it on one the edits added removes it.
 
 ### Scene operations
 

@@ -5,6 +5,7 @@ import { formatSpecValue } from '../utils/partFieldSpecs';
 import { fieldHelp, helpTitle } from '../utils/partFieldHelp';
 import { AssignmentRow, ScenesResponse, sceneAssignments, lockAt, savedNote } from './sceneModel';
 import { SceneValue } from './SceneValue';
+import { scenePath } from '../utils/partLocks';
 
 /**
  * The two ways of reading a whole Part's scenes rather than one of them.
@@ -18,13 +19,24 @@ import { SceneValue } from './SceneValue';
 const NOT_HELD = '-';
 
 /**
+ * What lets the right-click menu find a scene value, and the lock mark show. Edit mode
+ * only, like the menu.
+ */
+export type LockMarks = { 'data-lock-path'?: string; 'data-locked'?: string };
+export function lockMarks(path: string, locks: string[] | undefined, editable: boolean): LockMarks {
+  if (!editable) return {};
+  return { 'data-lock-path': path, ...(locks?.includes(path) ? { 'data-locked': '' } : {}) };
+}
+
+/**
  * A cell nothing holds.
  *
  * Outside Edit mode it is still drawn at the size of the button it becomes, or every
  * row would change height on the way into Edit mode and the table would jump.
  */
-function NotHeld({ editable, onAdd, saved }: {
+function NotHeld({ editable, onAdd, saved, marks }: {
   editable: boolean;
+  marks?: LockMarks;
   onAdd: () => void;
   /** Set when the saved copy held a value here, which the edits took out. */
   saved?: string;
@@ -32,6 +44,7 @@ function NotHeld({ editable, onAdd, saved }: {
   return (
     <button
       className={`scene-add${saved ? ' param-changed' : ''}`}
+      {...marks}
       disabled={!editable}
       onClick={onAdd}
       title={[
@@ -53,7 +66,9 @@ function NotHeld({ editable, onAdd, saved }: {
  * The cross only appears under the pointer: these views show a great many cells at
  * once, and a cross on every one of them would be all anybody saw.
  */
-function Cell({ row, scene, editable, onSet, saved }: {
+function Cell({ row, scene, editable, onSet, saved, locks }: {
+  /** The values locked in this Part, for the lock mark. */
+  locks?: string[];
   row: AssignmentRow;
   scene: number;
   editable: boolean;
@@ -62,18 +77,20 @@ function Cell({ row, scene, editable, onSet, saved }: {
   saved?: ScenesResponse | null;
 }) {
   const value = row.values[scene];
+  const marks = lockMarks(scenePath(scene, row.trackId, row.page, row.index), locks, editable);
   const was = saved ? lockAt(saved, scene, row.trackId, row.page, row.index) : undefined;
   if (value === null) {
     return (
       <NotHeld
         editable={editable}
         onAdd={() => onSet(row, scene, row.spec.default)}
+        marks={marks}
         saved={was !== undefined && was !== null ? savedNote(was, row.spec) : undefined}
       />
     );
   }
   return (
-    <span className="scene-cell">
+    <span className="scene-cell" {...marks}>
       <SceneValue
         slot={{ spec: row.spec, value }}
         editable={editable}
@@ -130,11 +147,13 @@ export type SetAssignment = (
  * plain labels rather than a second set of buttons that do the same thing.
  */
 export function SceneMatrix({
-  data, selected, targets, editable, showAll, onSet, onSceneChange, onPick, saved,
+  data, selected, targets, editable, showAll, onSet, onSceneChange, onPick, saved, locks,
 }: {
   data: ScenesResponse;
   /** The Part's saved copy, so values that differ from it can be marked. */
   saved?: ScenesResponse | null;
+  /** The values locked in this Part, so they can be marked. */
+  locks?: string[];
   selected: number;
   /** Every scene the operations act on: the selected one plus any Shift/Ctrl picked. */
   targets: number[];
@@ -214,7 +233,7 @@ export function SceneMatrix({
                       targets.includes(scene) ? 'selected' : '',
                     ].filter(Boolean).join(' ')}
                   >
-                    <Cell row={row} scene={scene} editable={editable} onSet={onSet} saved={saved} />
+                    <Cell row={row} scene={scene} editable={editable} onSet={onSet} saved={saved} locks={locks} />
                   </td>
                 ))}
               </tr>
@@ -239,11 +258,13 @@ export function SceneMatrix({
  * it, and a row they agree on is one the fader passes over doing nothing.
  */
 export function SceneCompare({
-  data, left, right, onPick, editable, showAll, onSet, onCopyTrack, saved,
+  data, left, right, onPick, editable, showAll, onSet, onCopyTrack, saved, locks,
 }: {
   data: ScenesResponse;
   /** The Part's saved copy, so values that differ from it can be marked. */
   saved?: ScenesResponse | null;
+  /** The values locked in this Part, so they can be marked. */
+  locks?: string[];
   left: number;
   right: number;
   onPick: (side: 'left' | 'right', sceneId: number) => void;
@@ -378,10 +399,10 @@ export function SceneCompare({
                       <td className="scene-row-page">{row.pageName}</td>
                       <td className="scene-row-label">{row.label}</td>
                       <td className="scene-compare-value">
-                        <Cell row={row} scene={left} editable={editable} onSet={onSet} saved={saved} />
+                        <Cell row={row} scene={left} editable={editable} onSet={onSet} saved={saved} locks={locks} />
                       </td>
                       <td className="scene-compare-value">
-                        <Cell row={row} scene={right} editable={editable} onSet={onSet} saved={saved} />
+                        <Cell row={row} scene={right} editable={editable} onSet={onSet} saved={saved} locks={locks} />
                       </td>
                       <td className="scene-compare-travel">{travel(row)}</td>
                     </tr>

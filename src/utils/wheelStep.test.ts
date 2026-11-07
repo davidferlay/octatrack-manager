@@ -349,6 +349,27 @@ describe('stepping a parameter with the wheel', () => {
       expect(step).toHaveBeenCalledTimes(3)
     })
 
+    it('keeps stepping once the pointer has left a small control, and stops at release', () => {
+      const step = vi.fn()
+      const { node } = attach(step)
+      const control = node.querySelector('.param-control') as HTMLElement
+      press(control, 100)
+      // Off the control before the first step, as on a value only a few pixels tall
+      moveTo(document.body, 92)
+      expect(step).toHaveBeenCalledTimes(2)
+      release(document.body, 92)
+      moveTo(document.body, 80)
+      expect(step).toHaveBeenCalledTimes(2)
+    })
+
+    it('a move elsewhere with no press on the control steps nothing', () => {
+      const step = vi.fn()
+      attach(step)
+      moveTo(document.body, 100)
+      moveTo(document.body, 60)
+      expect(step).not.toHaveBeenCalled()
+    })
+
     it('carries on as the drag goes, without drifting', () => {
       const step = vi.fn()
       const { node } = attach(step)

@@ -2687,7 +2687,7 @@ pub fn read_bank_scenes(project_path: &str, bank_id: &str) -> Result<Vec<ScenesR
 }
 
 /// One Part's sixteen scenes, out of a bank already in hand.
-fn scenes_for_part(
+pub(crate) fn scenes_for_part(
     bank: &BankFile,
     part: &ot_tools_io::parts::Part,
     (scene_a_muted, scene_b_muted): (bool, bool),
@@ -2841,6 +2841,117 @@ pub fn save_scene_mute(project_path: &str, end: &str, muted: bool) -> Result<(),
     )
 }
 
+/// Writes one track's locks into one scene of a Part.
+///
+/// The one place a scene's per-track values reach the Part, shared by `save_scene` and
+/// `write_scenes` so a scene lands the same way whichever way it arrives.
+fn write_scene_track(
+    part: &mut ot_tools_io::parts::Part,
+    scene_id: usize,
+    incoming: &SceneTrackLocks,
+) -> Result<(), String> {
+    let track_id = incoming.track_id as usize;
+    if track_id >= 8 {
+        return Err(format!("Invalid track: {}", incoming.track_id));
+    }
+    // Six positions a page, every time. A short page would otherwise leave whatever
+    // was in the remaining ones, which is not what the caller asked for.
+    for (name, page) in [
+        ("machine", &incoming.machine),
+        ("lfo", &incoming.lfo),
+        ("amp", &incoming.amp),
+        ("fx1", &incoming.fx1),
+        ("fx2", &incoming.fx2),
+    ] {
+        if page.len() != 6 {
+            return Err(format!(
+                "Track {} {} has {} positions, expected 6",
+                incoming.track_id,
+                name,
+                page.len()
+            ));
+        }
+    }
+
+    let at = |page: &[Option<u8>], i: usize| page[i].unwrap_or(SCENE_UNASSIGNED);
+    let target = &mut part.scenes[scene_id].0[track_id];
+
+    target.machine.param1 = at(&incoming.machine, 0);
+    target.machine.param2 = at(&incoming.machine, 1);
+    target.machine.param3 = at(&incoming.machine, 2);
+    target.machine.param4 = at(&incoming.machine, 3);
+    target.machine.param5 = at(&incoming.machine, 4);
+    target.machine.param6 = at(&incoming.machine, 5);
+
+    target.lfo.spd1 = at(&incoming.lfo, 0);
+    target.lfo.spd2 = at(&incoming.lfo, 1);
+    target.lfo.spd3 = at(&incoming.lfo, 2);
+    target.lfo.dep1 = at(&incoming.lfo, 3);
+    target.lfo.dep2 = at(&incoming.lfo, 4);
+    target.lfo.dep3 = at(&incoming.lfo, 5);
+
+    target.amp.atk = at(&incoming.amp, 0);
+    target.amp.hold = at(&incoming.amp, 1);
+    target.amp.rel = at(&incoming.amp, 2);
+    target.amp.vol = at(&incoming.amp, 3);
+    target.amp.bal = at(&incoming.amp, 4);
+    target.amp.f = at(&incoming.amp, 5);
+
+    target.fx1.param_1 = at(&incoming.fx1, 0);
+    target.fx1.param_2 = at(&incoming.fx1, 1);
+    target.fx1.param_3 = at(&incoming.fx1, 2);
+    target.fx1.param_4 = at(&incoming.fx1, 3);
+    target.fx1.param_5 = at(&incoming.fx1, 4);
+    target.fx1.param_6 = at(&incoming.fx1, 5);
+
+    target.fx2.param_1 = at(&incoming.fx2, 0);
+    target.fx2.param_2 = at(&incoming.fx2, 1);
+    target.fx2.param_3 = at(&incoming.fx2, 2);
+    target.fx2.param_4 = at(&incoming.fx2, 3);
+    target.fx2.param_5 = at(&incoming.fx2, 4);
+    target.fx2.param_6 = at(&incoming.fx2, 5);
+
+    part.scene_xlvs[scene_id].track_xlvs[track_id] = incoming.xlv.unwrap_or(SCENE_UNASSIGNED);
+
+    Ok(())
+}
+
+/// Writes all sixteen scenes, and the two the crossfader morphs between, into a Part.
+///
+/// The counterpart of `scenes_for_part`: what it reads, this puts back.
+///
+/// Not atomic: an error midway leaves the earlier scenes written, so a caller that gets
+/// one discards the bank rather than writing it.
+pub(crate) fn write_scenes(
+    part: &mut ot_tools_io::parts::Part,
+    scenes: &ScenesResponse,
+) -> Result<(), String> {
+    for scene in &scenes.scenes {
+        if scene.scene_id >= 16 {
+            return Err(format!("Invalid scene: {}", scene.scene_id));
+        }
+        for track in &scene.tracks {
+            write_scene_track(part, scene.scene_id as usize, track)?;
+        }
+    }
+    part.active_scenes.scene_a = scenes.scene_a;
+    part.active_scenes.scene_b = scenes.scene_b;
+    Ok(())
+}
+
+/// One copy of a Part as JSON, in the shape the overlay compares and copies values from.
+pub(crate) fn copy_value(
+    bank: &BankFile,
+    part: &ot_tools_io::parts::Part,
+    part_id: u8,
+) -> serde_json::Value {
+    serde_json::to_value(PartCopy {
+        part: part_data(part, part_id),
+        scenes: scenes_for_part(bank, part, (false, false)),
+    })
+    .expect("PartCopy serializes")
+}
+
 /// Writes one scene's locks back to the bank.
 ///
 /// Only `parts.unsaved` is touched, as the Parts editor does - `parts.saved` is the
@@ -2869,72 +2980,8 @@ pub fn save_scene(
         .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
 
     let part = &mut bank.parts.unsaved.0[part_id as usize];
-    let scene = &mut part.scenes[scene_id as usize];
-    let xlvs = &mut part.scene_xlvs[scene_id as usize];
-
     for incoming in &tracks {
-        let track_id = incoming.track_id as usize;
-        if track_id >= 8 {
-            return Err(format!("Invalid track: {}", incoming.track_id));
-        }
-        // Six positions a page, every time. A short page would otherwise leave whatever
-        // was in the remaining ones, which is not what the caller asked for.
-        for (name, page) in [
-            ("machine", &incoming.machine),
-            ("lfo", &incoming.lfo),
-            ("amp", &incoming.amp),
-            ("fx1", &incoming.fx1),
-            ("fx2", &incoming.fx2),
-        ] {
-            if page.len() != 6 {
-                return Err(format!(
-                    "Track {} {} has {} positions, expected 6",
-                    incoming.track_id,
-                    name,
-                    page.len()
-                ));
-            }
-        }
-
-        let at = |page: &[Option<u8>], i: usize| page[i].unwrap_or(SCENE_UNASSIGNED);
-        let target = &mut scene.0[track_id];
-
-        target.machine.param1 = at(&incoming.machine, 0);
-        target.machine.param2 = at(&incoming.machine, 1);
-        target.machine.param3 = at(&incoming.machine, 2);
-        target.machine.param4 = at(&incoming.machine, 3);
-        target.machine.param5 = at(&incoming.machine, 4);
-        target.machine.param6 = at(&incoming.machine, 5);
-
-        target.lfo.spd1 = at(&incoming.lfo, 0);
-        target.lfo.spd2 = at(&incoming.lfo, 1);
-        target.lfo.spd3 = at(&incoming.lfo, 2);
-        target.lfo.dep1 = at(&incoming.lfo, 3);
-        target.lfo.dep2 = at(&incoming.lfo, 4);
-        target.lfo.dep3 = at(&incoming.lfo, 5);
-
-        target.amp.atk = at(&incoming.amp, 0);
-        target.amp.hold = at(&incoming.amp, 1);
-        target.amp.rel = at(&incoming.amp, 2);
-        target.amp.vol = at(&incoming.amp, 3);
-        target.amp.bal = at(&incoming.amp, 4);
-        target.amp.f = at(&incoming.amp, 5);
-
-        target.fx1.param_1 = at(&incoming.fx1, 0);
-        target.fx1.param_2 = at(&incoming.fx1, 1);
-        target.fx1.param_3 = at(&incoming.fx1, 2);
-        target.fx1.param_4 = at(&incoming.fx1, 3);
-        target.fx1.param_5 = at(&incoming.fx1, 4);
-        target.fx1.param_6 = at(&incoming.fx1, 5);
-
-        target.fx2.param_1 = at(&incoming.fx2, 0);
-        target.fx2.param_2 = at(&incoming.fx2, 1);
-        target.fx2.param_3 = at(&incoming.fx2, 2);
-        target.fx2.param_4 = at(&incoming.fx2, 3);
-        target.fx2.param_5 = at(&incoming.fx2, 4);
-        target.fx2.param_6 = at(&incoming.fx2, 5);
-
-        xlvs.track_xlvs[track_id] = incoming.xlv.unwrap_or(SCENE_UNASSIGNED);
+        write_scene_track(part, scene_id as usize, incoming)?;
     }
     mark_part_edited(&mut bank, part_id);
 
@@ -2986,7 +3033,7 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
 }
 
 /// One Part, in the shape the editors read it.
-fn part_data(part: &ot_tools_io::parts::Part, part_id: u8) -> PartData {
+pub(crate) fn part_data(part: &ot_tools_io::parts::Part, part_id: u8) -> PartData {
     let mut machines = Vec::new();
     let mut volumes = Vec::new();
     let mut amps = Vec::new();
@@ -3450,6 +3497,19 @@ pub(crate) fn bank_file_path(project_path: &str, bank_id: &str) -> Result<PathBu
     Err(format!("Bank file not found: {}", bank_id))
 }
 
+/// The letter a bank index (0-15) goes by in the locks file.
+fn bank_letter(bank_index: u8) -> String {
+    ((b'A' + bank_index) as char).to_string()
+}
+
+/// Drops the locks of Parts a copy tool has just replaced. The write succeeded, so a
+/// failure here is logged rather than returned.
+fn forget_part_locks(project: &str, bank_index: u8, parts: &[u8]) {
+    if let Err(e) = crate::part_locks::forget(project, &bank_letter(bank_index), parts) {
+        eprintln!("Could not forget part locks: {}", e);
+    }
+}
+
 /// The byte the device stores for a machine name, or None for a name it does not know.
 ///
 /// The inverse of what `read_parts_data` does. Unknown names return None rather than a
@@ -3587,6 +3647,393 @@ fn clamp_part_data(part: &mut PartData, machine_types: &[u8; 8]) {
     }
 }
 
+/// Writes one Part's editor values into a Part of the bank.
+///
+/// This is everything `save_parts_data` does per Part, so that anything else that holds
+/// a `PartData` (the overlay copying values from another copy of the Part) lands them
+/// exactly as an edit would: machine types first, then the clamp, then every field.
+pub(crate) fn write_part_data(part: &mut ot_tools_io::parts::Part, data: &PartData) {
+    // A track's machine can be changed from the editor, so the payload decides it.
+    // This has to land before anything else: both the clamping below and the
+    // per-track writes further down read this byte to know which machine's layout
+    // they are working with. A name the mapping does not recognise leaves the
+    // bank's own byte untouched.
+    for track_id in 0..8 {
+        if let Some(machine) = data.machines.get(track_id) {
+            if let Some(byte) = machine_type_byte(&machine.machine_type) {
+                part.audio_track_machine_types[track_id] = byte;
+            }
+        }
+    }
+
+    // Hold every value to what the hardware produces before any of it is written
+    let mut part_data = data.clone();
+    clamp_part_data(&mut part_data, &part.audio_track_machine_types);
+    let part_data = &part_data;
+
+    // Update audio track parameters for each track
+    for track_id in 0..8 {
+        // Update AMP parameters
+        if let Some(amp) = part_data.amps.get(track_id) {
+            part.audio_track_params_values[track_id].amp.atk = amp.atk;
+            part.audio_track_params_values[track_id].amp.hold = amp.hold;
+            part.audio_track_params_values[track_id].amp.rel = amp.rel;
+            part.audio_track_params_values[track_id].amp.vol = amp.vol;
+            part.audio_track_params_values[track_id].amp.bal = amp.bal;
+            part.audio_track_params_values[track_id].amp.f = amp.xvol;
+
+            // AMP Setup parameters
+            part.audio_track_params_setup[track_id].amp.amp = amp.amp_setup_amp;
+            part.audio_track_params_setup[track_id].amp.sync = amp.amp_setup_sync;
+            part.audio_track_params_setup[track_id].amp.atck = amp.amp_setup_atck;
+            part.audio_track_params_setup[track_id].amp.fx1 = amp.amp_setup_fx1;
+            part.audio_track_params_setup[track_id].amp.fx2 = amp.amp_setup_fx2;
+        }
+
+        // Update LFO parameters
+        if let Some(lfo) = part_data.lfos.get(track_id) {
+            // Main LFO values
+            part.audio_track_params_values[track_id].lfo.spd1 = lfo.spd1;
+            part.audio_track_params_values[track_id].lfo.spd2 = lfo.spd2;
+            part.audio_track_params_values[track_id].lfo.spd3 = lfo.spd3;
+            part.audio_track_params_values[track_id].lfo.dep1 = lfo.dep1;
+            part.audio_track_params_values[track_id].lfo.dep2 = lfo.dep2;
+            part.audio_track_params_values[track_id].lfo.dep3 = lfo.dep3;
+
+            // LFO Setup 1 (Parameter Target & Wave)
+            part.audio_track_params_setup[track_id]
+                .lfo_setup_1
+                .lfo1_pmtr = lfo.lfo1_pmtr;
+            part.audio_track_params_setup[track_id]
+                .lfo_setup_1
+                .lfo2_pmtr = lfo.lfo2_pmtr;
+            part.audio_track_params_setup[track_id]
+                .lfo_setup_1
+                .lfo3_pmtr = lfo.lfo3_pmtr;
+            part.audio_track_params_setup[track_id]
+                .lfo_setup_1
+                .lfo1_wave = lfo.lfo1_wave;
+            part.audio_track_params_setup[track_id]
+                .lfo_setup_1
+                .lfo2_wave = lfo.lfo2_wave;
+            part.audio_track_params_setup[track_id]
+                .lfo_setup_1
+                .lfo3_wave = lfo.lfo3_wave;
+
+            // LFO Setup 2 (Multiplier & Trigger)
+            part.audio_track_params_setup[track_id]
+                .lfo_setup_2
+                .lfo1_mult = lfo.lfo1_mult;
+            part.audio_track_params_setup[track_id]
+                .lfo_setup_2
+                .lfo2_mult = lfo.lfo2_mult;
+            part.audio_track_params_setup[track_id]
+                .lfo_setup_2
+                .lfo3_mult = lfo.lfo3_mult;
+            part.audio_track_params_setup[track_id]
+                .lfo_setup_2
+                .lfo1_trig = lfo.lfo1_trig;
+            part.audio_track_params_setup[track_id]
+                .lfo_setup_2
+                .lfo2_trig = lfo.lfo2_trig;
+            part.audio_track_params_setup[track_id]
+                .lfo_setup_2
+                .lfo3_trig = lfo.lfo3_trig;
+
+            // Custom LFO design
+            if lfo.custom_lfo_design.len() == 16 {
+                for (i, &val) in lfo.custom_lfo_design.iter().enumerate() {
+                    part.audio_tracks_custom_lfo_designs[track_id].0[i] = val;
+                }
+            }
+        }
+
+        // Update FX parameters
+        if let Some(fx) = part_data.fxs.get(track_id) {
+            // FX types
+            part.audio_track_fx1[track_id] = fx.fx1_type;
+            part.audio_track_fx2[track_id] = fx.fx2_type;
+
+            // FX1 main parameters
+            part.audio_track_params_values[track_id].fx1.param_1 = fx.fx1_param1;
+            part.audio_track_params_values[track_id].fx1.param_2 = fx.fx1_param2;
+            part.audio_track_params_values[track_id].fx1.param_3 = fx.fx1_param3;
+            part.audio_track_params_values[track_id].fx1.param_4 = fx.fx1_param4;
+            part.audio_track_params_values[track_id].fx1.param_5 = fx.fx1_param5;
+            part.audio_track_params_values[track_id].fx1.param_6 = fx.fx1_param6;
+
+            // FX2 main parameters
+            part.audio_track_params_values[track_id].fx2.param_1 = fx.fx2_param1;
+            part.audio_track_params_values[track_id].fx2.param_2 = fx.fx2_param2;
+            part.audio_track_params_values[track_id].fx2.param_3 = fx.fx2_param3;
+            part.audio_track_params_values[track_id].fx2.param_4 = fx.fx2_param4;
+            part.audio_track_params_values[track_id].fx2.param_5 = fx.fx2_param5;
+            part.audio_track_params_values[track_id].fx2.param_6 = fx.fx2_param6;
+
+            // FX1 setup parameters
+            part.audio_track_params_setup[track_id].fx1.setting1 = fx.fx1_setup1;
+            part.audio_track_params_setup[track_id].fx1.setting2 = fx.fx1_setup2;
+            part.audio_track_params_setup[track_id].fx1.setting3 = fx.fx1_setup3;
+            part.audio_track_params_setup[track_id].fx1.setting4 = fx.fx1_setup4;
+            part.audio_track_params_setup[track_id].fx1.setting5 = fx.fx1_setup5;
+            part.audio_track_params_setup[track_id].fx1.setting6 = fx.fx1_setup6;
+
+            // FX2 setup parameters
+            part.audio_track_params_setup[track_id].fx2.setting1 = fx.fx2_setup1;
+            part.audio_track_params_setup[track_id].fx2.setting2 = fx.fx2_setup2;
+            part.audio_track_params_setup[track_id].fx2.setting3 = fx.fx2_setup3;
+            part.audio_track_params_setup[track_id].fx2.setting4 = fx.fx2_setup4;
+            part.audio_track_params_setup[track_id].fx2.setting5 = fx.fx2_setup5;
+            part.audio_track_params_setup[track_id].fx2.setting6 = fx.fx2_setup6;
+        }
+
+        if let Some(rec) = part_data.recorders.get(track_id) {
+            let target = &mut part.recorder_setup[track_id];
+            target.src.in_ab = rec.in_ab;
+            target.src.in_cd = rec.in_cd;
+            target.src.rlen = rec.rlen;
+            target.src.trig = rec.trig;
+            target.src.src3 = rec.src3;
+            target.src.xloop = rec.xloop;
+            target.proc.fin = rec.fin;
+            target.proc.fout = rec.fout;
+            target.proc.ab = rec.ab;
+            target.proc.qrec = rec.qrec;
+            target.proc.qpl = rec.qpl;
+            target.proc.cd = rec.cd;
+        }
+
+        // Update Machine parameters (SRC page)
+        // Track and Cue levels (mixer), independent of the AMP page's VOL
+        if let Some(volume) = part_data.volumes.get(track_id) {
+            part.audio_track_volumes[track_id].main = volume.main;
+            part.audio_track_volumes[track_id].cue = volume.cue;
+        }
+
+        if let Some(machine) = part_data.machines.get(track_id) {
+            let machine_type = part.audio_track_machine_types[track_id];
+
+            // Which Sample Slot the track plays. Both pools are written back:
+            // switching the machine type later must find the other pool's slot
+            // exactly as the device left it.
+            part.audio_track_machine_slots[track_id].static_slot_id = machine.static_slot_id;
+            part.audio_track_machine_slots[track_id].flex_slot_id = machine.flex_slot_id;
+
+            match machine_type {
+                0 | 1 => {
+                    // Static or Flex machine
+                    if let Some(ptch) = machine.machine_params.ptch {
+                        part.audio_track_machine_params[track_id]
+                            .static_machine
+                            .ptch = ptch;
+                    }
+                    if let Some(strt) = machine.machine_params.strt {
+                        part.audio_track_machine_params[track_id]
+                            .static_machine
+                            .strt = strt;
+                    }
+                    if let Some(len) = machine.machine_params.len {
+                        part.audio_track_machine_params[track_id].static_machine.len = len;
+                    }
+                    if let Some(rate) = machine.machine_params.rate {
+                        part.audio_track_machine_params[track_id]
+                            .static_machine
+                            .rate = rate;
+                    }
+                    if let Some(rtrg) = machine.machine_params.rtrg {
+                        part.audio_track_machine_params[track_id]
+                            .static_machine
+                            .rtrg = rtrg;
+                    }
+                    if let Some(rtim) = machine.machine_params.rtim {
+                        part.audio_track_machine_params[track_id]
+                            .static_machine
+                            .rtim = rtim;
+                    }
+
+                    // Machine setup
+                    if let Some(xloop) = machine.machine_setup.xloop {
+                        part.audio_track_machine_setup[track_id]
+                            .static_machine
+                            .xloop = xloop;
+                    }
+                    if let Some(slic) = machine.machine_setup.slic {
+                        part.audio_track_machine_setup[track_id].static_machine.slic = slic;
+                    }
+                    if let Some(len) = machine.machine_setup.len {
+                        part.audio_track_machine_setup[track_id].static_machine.len = len;
+                    }
+                    if let Some(rate) = machine.machine_setup.rate {
+                        part.audio_track_machine_setup[track_id].static_machine.rate = rate;
+                    }
+                    if let Some(tstr) = machine.machine_setup.tstr {
+                        part.audio_track_machine_setup[track_id].static_machine.tstr = tstr;
+                    }
+                    if let Some(tsns) = machine.machine_setup.tsns {
+                        part.audio_track_machine_setup[track_id].static_machine.tsns = tsns;
+                    }
+                }
+                2 => {
+                    // Thru machine
+                    if let Some(in_ab) = machine.machine_params.in_ab {
+                        part.audio_track_machine_params[track_id].thru_machine.in_ab = in_ab;
+                    }
+                    if let Some(vol_ab) = machine.machine_params.vol_ab {
+                        part.audio_track_machine_params[track_id]
+                            .thru_machine
+                            .vol_ab = vol_ab;
+                    }
+                    if let Some(in_cd) = machine.machine_params.in_cd {
+                        part.audio_track_machine_params[track_id].thru_machine.in_cd = in_cd;
+                    }
+                    if let Some(vol_cd) = machine.machine_params.vol_cd {
+                        part.audio_track_machine_params[track_id]
+                            .thru_machine
+                            .vol_cd = vol_cd;
+                    }
+                }
+                4 => {
+                    // Pickup machine
+                    if let Some(ptch) = machine.machine_params.ptch {
+                        part.audio_track_machine_params[track_id]
+                            .pickup_machine
+                            .ptch = ptch;
+                    }
+                    if let Some(len) = machine.machine_params.len {
+                        part.audio_track_machine_params[track_id].pickup_machine.len = len;
+                    }
+                    if let Some(dir) = machine.machine_params.dir {
+                        part.audio_track_machine_params[track_id].pickup_machine.dir = dir;
+                    }
+                    if let Some(gain) = machine.machine_params.gain {
+                        part.audio_track_machine_params[track_id]
+                            .pickup_machine
+                            .gain = gain;
+                    }
+                    if let Some(op) = machine.machine_params.op {
+                        part.audio_track_machine_params[track_id].pickup_machine.op = op;
+                    }
+
+                    // SRC SETUP. Pickup keeps its own TSTR and TSNS, apart from the
+                    // ones Static and Flex share: the reader shows these, so a writer
+                    // that skipped them would drop the edit, and make a Revert, Lock
+                    // or Reload of the knob do nothing without a word.
+                    if let Some(tstr) = machine.machine_setup.tstr {
+                        part.audio_track_machine_setup[track_id].pickup_machine.tstr = tstr;
+                    }
+                    if let Some(tsns) = machine.machine_setup.tsns {
+                        part.audio_track_machine_setup[track_id].pickup_machine.tsns = tsns;
+                    }
+                }
+                _ => {
+                    // Neighbor (type 3) or unknown - no parameters to update
+                }
+            }
+        }
+    }
+
+    // Update MIDI track parameters
+    for track_id in 0..8 {
+        // Update MIDI NOTE parameters
+        if let Some(midi_note) = part_data.midi_notes.get(track_id) {
+            part.midi_track_params_values[track_id].midi.note = midi_note.note;
+            part.midi_track_params_values[track_id].midi.vel = midi_note.vel;
+            part.midi_track_params_values[track_id].midi.len = midi_note.len;
+            part.midi_track_params_values[track_id].midi.not2 = midi_note.not2;
+            part.midi_track_params_values[track_id].midi.not3 = midi_note.not3;
+            part.midi_track_params_values[track_id].midi.not4 = midi_note.not4;
+
+            // NOTE Setup parameters
+            part.midi_track_params_setup[track_id].note.chan = midi_note.chan;
+            part.midi_track_params_setup[track_id].note.bank = midi_note.bank;
+            part.midi_track_params_setup[track_id].note.prog = midi_note.prog;
+            part.midi_track_params_setup[track_id].note.sbank = midi_note.sbnk;
+        }
+
+        // Update MIDI ARP parameters
+        if let Some(midi_arp) = part_data.midi_arps.get(track_id) {
+            part.midi_track_params_values[track_id].arp.tran = midi_arp.tran;
+            part.midi_track_params_values[track_id].arp.leg = midi_arp.leg;
+            part.midi_track_params_values[track_id].arp.mode = midi_arp.mode;
+            part.midi_track_params_values[track_id].arp.spd = midi_arp.spd;
+            part.midi_track_params_values[track_id].arp.rnge = midi_arp.rnge;
+            part.midi_track_params_values[track_id].arp.nlen = midi_arp.nlen;
+
+            // ARP Setup parameters
+            part.midi_track_params_setup[track_id].arp.len = midi_arp.len;
+            part.midi_track_params_setup[track_id].arp.key = midi_arp.key;
+        }
+
+        // Update MIDI LFO parameters
+        if let Some(midi_lfo) = part_data.midi_lfos.get(track_id) {
+            // Main LFO values
+            part.midi_track_params_values[track_id].lfo.spd1 = midi_lfo.spd1;
+            part.midi_track_params_values[track_id].lfo.spd2 = midi_lfo.spd2;
+            part.midi_track_params_values[track_id].lfo.spd3 = midi_lfo.spd3;
+            part.midi_track_params_values[track_id].lfo.dep1 = midi_lfo.dep1;
+            part.midi_track_params_values[track_id].lfo.dep2 = midi_lfo.dep2;
+            part.midi_track_params_values[track_id].lfo.dep3 = midi_lfo.dep3;
+
+            // LFO Setup 1 (Parameter Target & Wave)
+            part.midi_track_params_setup[track_id].lfo1.lfo1_pmtr = midi_lfo.lfo1_pmtr;
+            part.midi_track_params_setup[track_id].lfo1.lfo2_pmtr = midi_lfo.lfo2_pmtr;
+            part.midi_track_params_setup[track_id].lfo1.lfo3_pmtr = midi_lfo.lfo3_pmtr;
+            part.midi_track_params_setup[track_id].lfo1.lfo1_wave = midi_lfo.lfo1_wave;
+            part.midi_track_params_setup[track_id].lfo1.lfo2_wave = midi_lfo.lfo2_wave;
+            part.midi_track_params_setup[track_id].lfo1.lfo3_wave = midi_lfo.lfo3_wave;
+
+            // LFO Setup 2 (Multiplier & Trigger)
+            part.midi_track_params_setup[track_id].lfo2.lfo1_mult = midi_lfo.lfo1_mult;
+            part.midi_track_params_setup[track_id].lfo2.lfo2_mult = midi_lfo.lfo2_mult;
+            part.midi_track_params_setup[track_id].lfo2.lfo3_mult = midi_lfo.lfo3_mult;
+            part.midi_track_params_setup[track_id].lfo2.lfo1_trig = midi_lfo.lfo1_trig;
+            part.midi_track_params_setup[track_id].lfo2.lfo2_trig = midi_lfo.lfo2_trig;
+            part.midi_track_params_setup[track_id].lfo2.lfo3_trig = midi_lfo.lfo3_trig;
+
+            // Custom LFO design
+            if midi_lfo.custom_lfo_design.len() == 16 {
+                for (i, &val) in midi_lfo.custom_lfo_design.iter().enumerate() {
+                    part.midi_tracks_custom_lfos[track_id].0[i] = val;
+                }
+            }
+        }
+
+        // Update MIDI CTRL1 parameters
+        if let Some(midi_ctrl1) = part_data.midi_ctrl1s.get(track_id) {
+            part.midi_track_params_values[track_id].ctrl1.pb = midi_ctrl1.pb;
+            part.midi_track_params_values[track_id].ctrl1.at = midi_ctrl1.at;
+            part.midi_track_params_values[track_id].ctrl1.cc1 = midi_ctrl1.cc1;
+            part.midi_track_params_values[track_id].ctrl1.cc2 = midi_ctrl1.cc2;
+            part.midi_track_params_values[track_id].ctrl1.cc3 = midi_ctrl1.cc3;
+            part.midi_track_params_values[track_id].ctrl1.cc4 = midi_ctrl1.cc4;
+
+            // CTRL1 Setup parameters (CC numbers)
+            part.midi_track_params_setup[track_id].ctrl1.cc1 = midi_ctrl1.cc1_num;
+            part.midi_track_params_setup[track_id].ctrl1.cc2 = midi_ctrl1.cc2_num;
+            part.midi_track_params_setup[track_id].ctrl1.cc3 = midi_ctrl1.cc3_num;
+            part.midi_track_params_setup[track_id].ctrl1.cc4 = midi_ctrl1.cc4_num;
+        }
+
+        // Update MIDI CTRL2 parameters
+        if let Some(midi_ctrl2) = part_data.midi_ctrl2s.get(track_id) {
+            part.midi_track_params_values[track_id].ctrl2.cc5 = midi_ctrl2.cc5;
+            part.midi_track_params_values[track_id].ctrl2.cc6 = midi_ctrl2.cc6;
+            part.midi_track_params_values[track_id].ctrl2.cc7 = midi_ctrl2.cc7;
+            part.midi_track_params_values[track_id].ctrl2.cc8 = midi_ctrl2.cc8;
+            part.midi_track_params_values[track_id].ctrl2.cc9 = midi_ctrl2.cc9;
+            part.midi_track_params_values[track_id].ctrl2.cc10 = midi_ctrl2.cc10;
+
+            // CTRL2 Setup parameters (CC numbers)
+            part.midi_track_params_setup[track_id].ctrl2.cc5 = midi_ctrl2.cc5_num;
+            part.midi_track_params_setup[track_id].ctrl2.cc6 = midi_ctrl2.cc6_num;
+            part.midi_track_params_setup[track_id].ctrl2.cc7 = midi_ctrl2.cc7_num;
+            part.midi_track_params_setup[track_id].ctrl2.cc8 = midi_ctrl2.cc8_num;
+            part.midi_track_params_setup[track_id].ctrl2.cc9 = midi_ctrl2.cc9_num;
+            part.midi_track_params_setup[track_id].ctrl2.cc10 = midi_ctrl2.cc10_num;
+        }
+    }
+}
+
 pub fn save_parts_data(
     project_path: &str,
     bank_id: &str,
@@ -3634,429 +4081,7 @@ pub fn save_parts_data(
         }
 
         // Get mutable reference to the unsaved (working) copy only
-        let part_unsaved = &mut bank_data.parts.unsaved.0[part_id];
-
-        // A track's machine can be changed from the editor, so the payload decides it.
-        // This has to land before anything else: both the clamping below and the
-        // per-track writes further down read this byte to know which machine's layout
-        // they are working with. A name the mapping does not recognise leaves the
-        // bank's own byte untouched.
-        for track_id in 0..8 {
-            if let Some(machine) = part_data.machines.get(track_id) {
-                if let Some(byte) = machine_type_byte(&machine.machine_type) {
-                    part_unsaved.audio_track_machine_types[track_id] = byte;
-                }
-            }
-        }
-
-        // Hold every value to what the hardware produces before any of it is written
-        let mut part_data = part_data.clone();
-        clamp_part_data(&mut part_data, &part_unsaved.audio_track_machine_types);
-        let part_data = &part_data;
-
-        // Update audio track parameters for each track
-        for track_id in 0..8 {
-            // Update AMP parameters
-            if let Some(amp) = part_data.amps.get(track_id) {
-                println!("[DEBUG] Writing to parts.unsaved ONLY - Part {}, Track {}: ATK before={}, ATK after={}",
-                         part_id, track_id,
-                         part_unsaved.audio_track_params_values[track_id].amp.atk,
-                         amp.atk);
-
-                part_unsaved.audio_track_params_values[track_id].amp.atk = amp.atk;
-                part_unsaved.audio_track_params_values[track_id].amp.hold = amp.hold;
-                part_unsaved.audio_track_params_values[track_id].amp.rel = amp.rel;
-                part_unsaved.audio_track_params_values[track_id].amp.vol = amp.vol;
-                part_unsaved.audio_track_params_values[track_id].amp.bal = amp.bal;
-                part_unsaved.audio_track_params_values[track_id].amp.f = amp.xvol;
-
-                // AMP Setup parameters
-                part_unsaved.audio_track_params_setup[track_id].amp.amp = amp.amp_setup_amp;
-                part_unsaved.audio_track_params_setup[track_id].amp.sync = amp.amp_setup_sync;
-                part_unsaved.audio_track_params_setup[track_id].amp.atck = amp.amp_setup_atck;
-                part_unsaved.audio_track_params_setup[track_id].amp.fx1 = amp.amp_setup_fx1;
-                part_unsaved.audio_track_params_setup[track_id].amp.fx2 = amp.amp_setup_fx2;
-            }
-
-            // Update LFO parameters
-            if let Some(lfo) = part_data.lfos.get(track_id) {
-                // Main LFO values
-                part_unsaved.audio_track_params_values[track_id].lfo.spd1 = lfo.spd1;
-                part_unsaved.audio_track_params_values[track_id].lfo.spd2 = lfo.spd2;
-                part_unsaved.audio_track_params_values[track_id].lfo.spd3 = lfo.spd3;
-                part_unsaved.audio_track_params_values[track_id].lfo.dep1 = lfo.dep1;
-                part_unsaved.audio_track_params_values[track_id].lfo.dep2 = lfo.dep2;
-                part_unsaved.audio_track_params_values[track_id].lfo.dep3 = lfo.dep3;
-
-                // LFO Setup 1 (Parameter Target & Wave)
-                part_unsaved.audio_track_params_setup[track_id]
-                    .lfo_setup_1
-                    .lfo1_pmtr = lfo.lfo1_pmtr;
-                part_unsaved.audio_track_params_setup[track_id]
-                    .lfo_setup_1
-                    .lfo2_pmtr = lfo.lfo2_pmtr;
-                part_unsaved.audio_track_params_setup[track_id]
-                    .lfo_setup_1
-                    .lfo3_pmtr = lfo.lfo3_pmtr;
-                part_unsaved.audio_track_params_setup[track_id]
-                    .lfo_setup_1
-                    .lfo1_wave = lfo.lfo1_wave;
-                part_unsaved.audio_track_params_setup[track_id]
-                    .lfo_setup_1
-                    .lfo2_wave = lfo.lfo2_wave;
-                part_unsaved.audio_track_params_setup[track_id]
-                    .lfo_setup_1
-                    .lfo3_wave = lfo.lfo3_wave;
-
-                // LFO Setup 2 (Multiplier & Trigger)
-                part_unsaved.audio_track_params_setup[track_id]
-                    .lfo_setup_2
-                    .lfo1_mult = lfo.lfo1_mult;
-                part_unsaved.audio_track_params_setup[track_id]
-                    .lfo_setup_2
-                    .lfo2_mult = lfo.lfo2_mult;
-                part_unsaved.audio_track_params_setup[track_id]
-                    .lfo_setup_2
-                    .lfo3_mult = lfo.lfo3_mult;
-                part_unsaved.audio_track_params_setup[track_id]
-                    .lfo_setup_2
-                    .lfo1_trig = lfo.lfo1_trig;
-                part_unsaved.audio_track_params_setup[track_id]
-                    .lfo_setup_2
-                    .lfo2_trig = lfo.lfo2_trig;
-                part_unsaved.audio_track_params_setup[track_id]
-                    .lfo_setup_2
-                    .lfo3_trig = lfo.lfo3_trig;
-
-                // Custom LFO design
-                if lfo.custom_lfo_design.len() == 16 {
-                    for (i, &val) in lfo.custom_lfo_design.iter().enumerate() {
-                        part_unsaved.audio_tracks_custom_lfo_designs[track_id].0[i] = val;
-                    }
-                }
-            }
-
-            // Update FX parameters
-            if let Some(fx) = part_data.fxs.get(track_id) {
-                // FX types
-                part_unsaved.audio_track_fx1[track_id] = fx.fx1_type;
-                part_unsaved.audio_track_fx2[track_id] = fx.fx2_type;
-
-                // FX1 main parameters
-                part_unsaved.audio_track_params_values[track_id].fx1.param_1 = fx.fx1_param1;
-                part_unsaved.audio_track_params_values[track_id].fx1.param_2 = fx.fx1_param2;
-                part_unsaved.audio_track_params_values[track_id].fx1.param_3 = fx.fx1_param3;
-                part_unsaved.audio_track_params_values[track_id].fx1.param_4 = fx.fx1_param4;
-                part_unsaved.audio_track_params_values[track_id].fx1.param_5 = fx.fx1_param5;
-                part_unsaved.audio_track_params_values[track_id].fx1.param_6 = fx.fx1_param6;
-
-                // FX2 main parameters
-                part_unsaved.audio_track_params_values[track_id].fx2.param_1 = fx.fx2_param1;
-                part_unsaved.audio_track_params_values[track_id].fx2.param_2 = fx.fx2_param2;
-                part_unsaved.audio_track_params_values[track_id].fx2.param_3 = fx.fx2_param3;
-                part_unsaved.audio_track_params_values[track_id].fx2.param_4 = fx.fx2_param4;
-                part_unsaved.audio_track_params_values[track_id].fx2.param_5 = fx.fx2_param5;
-                part_unsaved.audio_track_params_values[track_id].fx2.param_6 = fx.fx2_param6;
-
-                // FX1 setup parameters
-                part_unsaved.audio_track_params_setup[track_id].fx1.setting1 = fx.fx1_setup1;
-                part_unsaved.audio_track_params_setup[track_id].fx1.setting2 = fx.fx1_setup2;
-                part_unsaved.audio_track_params_setup[track_id].fx1.setting3 = fx.fx1_setup3;
-                part_unsaved.audio_track_params_setup[track_id].fx1.setting4 = fx.fx1_setup4;
-                part_unsaved.audio_track_params_setup[track_id].fx1.setting5 = fx.fx1_setup5;
-                part_unsaved.audio_track_params_setup[track_id].fx1.setting6 = fx.fx1_setup6;
-
-                // FX2 setup parameters
-                part_unsaved.audio_track_params_setup[track_id].fx2.setting1 = fx.fx2_setup1;
-                part_unsaved.audio_track_params_setup[track_id].fx2.setting2 = fx.fx2_setup2;
-                part_unsaved.audio_track_params_setup[track_id].fx2.setting3 = fx.fx2_setup3;
-                part_unsaved.audio_track_params_setup[track_id].fx2.setting4 = fx.fx2_setup4;
-                part_unsaved.audio_track_params_setup[track_id].fx2.setting5 = fx.fx2_setup5;
-                part_unsaved.audio_track_params_setup[track_id].fx2.setting6 = fx.fx2_setup6;
-            }
-
-            if let Some(rec) = part_data.recorders.get(track_id) {
-                let target = &mut part_unsaved.recorder_setup[track_id];
-                target.src.in_ab = rec.in_ab;
-                target.src.in_cd = rec.in_cd;
-                target.src.rlen = rec.rlen;
-                target.src.trig = rec.trig;
-                target.src.src3 = rec.src3;
-                target.src.xloop = rec.xloop;
-                target.proc.fin = rec.fin;
-                target.proc.fout = rec.fout;
-                target.proc.ab = rec.ab;
-                target.proc.qrec = rec.qrec;
-                target.proc.qpl = rec.qpl;
-                target.proc.cd = rec.cd;
-            }
-
-            // Update Machine parameters (SRC page)
-            // Track and Cue levels (mixer), independent of the AMP page's VOL
-            if let Some(volume) = part_data.volumes.get(track_id) {
-                part_unsaved.audio_track_volumes[track_id].main = volume.main;
-                part_unsaved.audio_track_volumes[track_id].cue = volume.cue;
-            }
-
-            if let Some(machine) = part_data.machines.get(track_id) {
-                let machine_type = part_unsaved.audio_track_machine_types[track_id];
-
-                // Which Sample Slot the track plays. Both pools are written back:
-                // switching the machine type later must find the other pool's slot
-                // exactly as the device left it.
-                part_unsaved.audio_track_machine_slots[track_id].static_slot_id =
-                    machine.static_slot_id;
-                part_unsaved.audio_track_machine_slots[track_id].flex_slot_id =
-                    machine.flex_slot_id;
-
-                match machine_type {
-                    0 | 1 => {
-                        // Static or Flex machine
-                        if let Some(ptch) = machine.machine_params.ptch {
-                            part_unsaved.audio_track_machine_params[track_id]
-                                .static_machine
-                                .ptch = ptch;
-                        }
-                        if let Some(strt) = machine.machine_params.strt {
-                            part_unsaved.audio_track_machine_params[track_id]
-                                .static_machine
-                                .strt = strt;
-                        }
-                        if let Some(len) = machine.machine_params.len {
-                            part_unsaved.audio_track_machine_params[track_id]
-                                .static_machine
-                                .len = len;
-                        }
-                        if let Some(rate) = machine.machine_params.rate {
-                            part_unsaved.audio_track_machine_params[track_id]
-                                .static_machine
-                                .rate = rate;
-                        }
-                        if let Some(rtrg) = machine.machine_params.rtrg {
-                            part_unsaved.audio_track_machine_params[track_id]
-                                .static_machine
-                                .rtrg = rtrg;
-                        }
-                        if let Some(rtim) = machine.machine_params.rtim {
-                            part_unsaved.audio_track_machine_params[track_id]
-                                .static_machine
-                                .rtim = rtim;
-                        }
-
-                        // Machine setup
-                        if let Some(xloop) = machine.machine_setup.xloop {
-                            part_unsaved.audio_track_machine_setup[track_id]
-                                .static_machine
-                                .xloop = xloop;
-                        }
-                        if let Some(slic) = machine.machine_setup.slic {
-                            part_unsaved.audio_track_machine_setup[track_id]
-                                .static_machine
-                                .slic = slic;
-                        }
-                        if let Some(len) = machine.machine_setup.len {
-                            part_unsaved.audio_track_machine_setup[track_id]
-                                .static_machine
-                                .len = len;
-                        }
-                        if let Some(rate) = machine.machine_setup.rate {
-                            part_unsaved.audio_track_machine_setup[track_id]
-                                .static_machine
-                                .rate = rate;
-                        }
-                        if let Some(tstr) = machine.machine_setup.tstr {
-                            part_unsaved.audio_track_machine_setup[track_id]
-                                .static_machine
-                                .tstr = tstr;
-                        }
-                        if let Some(tsns) = machine.machine_setup.tsns {
-                            part_unsaved.audio_track_machine_setup[track_id]
-                                .static_machine
-                                .tsns = tsns;
-                        }
-                    }
-                    2 => {
-                        // Thru machine
-                        if let Some(in_ab) = machine.machine_params.in_ab {
-                            part_unsaved.audio_track_machine_params[track_id]
-                                .thru_machine
-                                .in_ab = in_ab;
-                        }
-                        if let Some(vol_ab) = machine.machine_params.vol_ab {
-                            part_unsaved.audio_track_machine_params[track_id]
-                                .thru_machine
-                                .vol_ab = vol_ab;
-                        }
-                        if let Some(in_cd) = machine.machine_params.in_cd {
-                            part_unsaved.audio_track_machine_params[track_id]
-                                .thru_machine
-                                .in_cd = in_cd;
-                        }
-                        if let Some(vol_cd) = machine.machine_params.vol_cd {
-                            part_unsaved.audio_track_machine_params[track_id]
-                                .thru_machine
-                                .vol_cd = vol_cd;
-                        }
-                    }
-                    4 => {
-                        // Pickup machine
-                        if let Some(ptch) = machine.machine_params.ptch {
-                            part_unsaved.audio_track_machine_params[track_id]
-                                .pickup_machine
-                                .ptch = ptch;
-                        }
-                        if let Some(len) = machine.machine_params.len {
-                            part_unsaved.audio_track_machine_params[track_id]
-                                .pickup_machine
-                                .len = len;
-                        }
-                        if let Some(dir) = machine.machine_params.dir {
-                            part_unsaved.audio_track_machine_params[track_id]
-                                .pickup_machine
-                                .dir = dir;
-                        }
-                        if let Some(gain) = machine.machine_params.gain {
-                            part_unsaved.audio_track_machine_params[track_id]
-                                .pickup_machine
-                                .gain = gain;
-                        }
-                        if let Some(op) = machine.machine_params.op {
-                            part_unsaved.audio_track_machine_params[track_id]
-                                .pickup_machine
-                                .op = op;
-                        }
-                    }
-                    _ => {
-                        // Neighbor (type 3) or unknown - no parameters to update
-                    }
-                }
-            }
-        }
-
-        // Update MIDI track parameters
-        for track_id in 0..8 {
-            // Update MIDI NOTE parameters
-            if let Some(midi_note) = part_data.midi_notes.get(track_id) {
-                part_unsaved.midi_track_params_values[track_id].midi.note = midi_note.note;
-                part_unsaved.midi_track_params_values[track_id].midi.vel = midi_note.vel;
-                part_unsaved.midi_track_params_values[track_id].midi.len = midi_note.len;
-                part_unsaved.midi_track_params_values[track_id].midi.not2 = midi_note.not2;
-                part_unsaved.midi_track_params_values[track_id].midi.not3 = midi_note.not3;
-                part_unsaved.midi_track_params_values[track_id].midi.not4 = midi_note.not4;
-
-                // NOTE Setup parameters
-                part_unsaved.midi_track_params_setup[track_id].note.chan = midi_note.chan;
-                part_unsaved.midi_track_params_setup[track_id].note.bank = midi_note.bank;
-                part_unsaved.midi_track_params_setup[track_id].note.prog = midi_note.prog;
-                part_unsaved.midi_track_params_setup[track_id].note.sbank = midi_note.sbnk;
-            }
-
-            // Update MIDI ARP parameters
-            if let Some(midi_arp) = part_data.midi_arps.get(track_id) {
-                part_unsaved.midi_track_params_values[track_id].arp.tran = midi_arp.tran;
-                part_unsaved.midi_track_params_values[track_id].arp.leg = midi_arp.leg;
-                part_unsaved.midi_track_params_values[track_id].arp.mode = midi_arp.mode;
-                part_unsaved.midi_track_params_values[track_id].arp.spd = midi_arp.spd;
-                part_unsaved.midi_track_params_values[track_id].arp.rnge = midi_arp.rnge;
-                part_unsaved.midi_track_params_values[track_id].arp.nlen = midi_arp.nlen;
-
-                // ARP Setup parameters
-                part_unsaved.midi_track_params_setup[track_id].arp.len = midi_arp.len;
-                part_unsaved.midi_track_params_setup[track_id].arp.key = midi_arp.key;
-            }
-
-            // Update MIDI LFO parameters
-            if let Some(midi_lfo) = part_data.midi_lfos.get(track_id) {
-                // Main LFO values
-                part_unsaved.midi_track_params_values[track_id].lfo.spd1 = midi_lfo.spd1;
-                part_unsaved.midi_track_params_values[track_id].lfo.spd2 = midi_lfo.spd2;
-                part_unsaved.midi_track_params_values[track_id].lfo.spd3 = midi_lfo.spd3;
-                part_unsaved.midi_track_params_values[track_id].lfo.dep1 = midi_lfo.dep1;
-                part_unsaved.midi_track_params_values[track_id].lfo.dep2 = midi_lfo.dep2;
-                part_unsaved.midi_track_params_values[track_id].lfo.dep3 = midi_lfo.dep3;
-
-                // LFO Setup 1 (Parameter Target & Wave)
-                part_unsaved.midi_track_params_setup[track_id]
-                    .lfo1
-                    .lfo1_pmtr = midi_lfo.lfo1_pmtr;
-                part_unsaved.midi_track_params_setup[track_id]
-                    .lfo1
-                    .lfo2_pmtr = midi_lfo.lfo2_pmtr;
-                part_unsaved.midi_track_params_setup[track_id]
-                    .lfo1
-                    .lfo3_pmtr = midi_lfo.lfo3_pmtr;
-                part_unsaved.midi_track_params_setup[track_id]
-                    .lfo1
-                    .lfo1_wave = midi_lfo.lfo1_wave;
-                part_unsaved.midi_track_params_setup[track_id]
-                    .lfo1
-                    .lfo2_wave = midi_lfo.lfo2_wave;
-                part_unsaved.midi_track_params_setup[track_id]
-                    .lfo1
-                    .lfo3_wave = midi_lfo.lfo3_wave;
-
-                // LFO Setup 2 (Multiplier & Trigger)
-                part_unsaved.midi_track_params_setup[track_id]
-                    .lfo2
-                    .lfo1_mult = midi_lfo.lfo1_mult;
-                part_unsaved.midi_track_params_setup[track_id]
-                    .lfo2
-                    .lfo2_mult = midi_lfo.lfo2_mult;
-                part_unsaved.midi_track_params_setup[track_id]
-                    .lfo2
-                    .lfo3_mult = midi_lfo.lfo3_mult;
-                part_unsaved.midi_track_params_setup[track_id]
-                    .lfo2
-                    .lfo1_trig = midi_lfo.lfo1_trig;
-                part_unsaved.midi_track_params_setup[track_id]
-                    .lfo2
-                    .lfo2_trig = midi_lfo.lfo2_trig;
-                part_unsaved.midi_track_params_setup[track_id]
-                    .lfo2
-                    .lfo3_trig = midi_lfo.lfo3_trig;
-
-                // Custom LFO design
-                if midi_lfo.custom_lfo_design.len() == 16 {
-                    for (i, &val) in midi_lfo.custom_lfo_design.iter().enumerate() {
-                        part_unsaved.midi_tracks_custom_lfos[track_id].0[i] = val;
-                    }
-                }
-            }
-
-            // Update MIDI CTRL1 parameters
-            if let Some(midi_ctrl1) = part_data.midi_ctrl1s.get(track_id) {
-                part_unsaved.midi_track_params_values[track_id].ctrl1.pb = midi_ctrl1.pb;
-                part_unsaved.midi_track_params_values[track_id].ctrl1.at = midi_ctrl1.at;
-                part_unsaved.midi_track_params_values[track_id].ctrl1.cc1 = midi_ctrl1.cc1;
-                part_unsaved.midi_track_params_values[track_id].ctrl1.cc2 = midi_ctrl1.cc2;
-                part_unsaved.midi_track_params_values[track_id].ctrl1.cc3 = midi_ctrl1.cc3;
-                part_unsaved.midi_track_params_values[track_id].ctrl1.cc4 = midi_ctrl1.cc4;
-
-                // CTRL1 Setup parameters (CC numbers)
-                part_unsaved.midi_track_params_setup[track_id].ctrl1.cc1 = midi_ctrl1.cc1_num;
-                part_unsaved.midi_track_params_setup[track_id].ctrl1.cc2 = midi_ctrl1.cc2_num;
-                part_unsaved.midi_track_params_setup[track_id].ctrl1.cc3 = midi_ctrl1.cc3_num;
-                part_unsaved.midi_track_params_setup[track_id].ctrl1.cc4 = midi_ctrl1.cc4_num;
-            }
-
-            // Update MIDI CTRL2 parameters
-            if let Some(midi_ctrl2) = part_data.midi_ctrl2s.get(track_id) {
-                part_unsaved.midi_track_params_values[track_id].ctrl2.cc5 = midi_ctrl2.cc5;
-                part_unsaved.midi_track_params_values[track_id].ctrl2.cc6 = midi_ctrl2.cc6;
-                part_unsaved.midi_track_params_values[track_id].ctrl2.cc7 = midi_ctrl2.cc7;
-                part_unsaved.midi_track_params_values[track_id].ctrl2.cc8 = midi_ctrl2.cc8;
-                part_unsaved.midi_track_params_values[track_id].ctrl2.cc9 = midi_ctrl2.cc9;
-                part_unsaved.midi_track_params_values[track_id].ctrl2.cc10 = midi_ctrl2.cc10;
-
-                // CTRL2 Setup parameters (CC numbers)
-                part_unsaved.midi_track_params_setup[track_id].ctrl2.cc5 = midi_ctrl2.cc5_num;
-                part_unsaved.midi_track_params_setup[track_id].ctrl2.cc6 = midi_ctrl2.cc6_num;
-                part_unsaved.midi_track_params_setup[track_id].ctrl2.cc7 = midi_ctrl2.cc7_num;
-                part_unsaved.midi_track_params_setup[track_id].ctrl2.cc8 = midi_ctrl2.cc8_num;
-                part_unsaved.midi_track_params_setup[track_id].ctrl2.cc9 = midi_ctrl2.cc9_num;
-                part_unsaved.midi_track_params_setup[track_id].ctrl2.cc10 = midi_ctrl2.cc10_num;
-            }
-        }
+        write_part_data(&mut bank_data.parts.unsaved.0[part_id], part_data);
     }
 
     // Update parts_edited_bitmask to indicate which parts have been modified
@@ -4278,35 +4303,65 @@ pub fn commit_all_parts_data(project_path: &str, bank_id: &str) -> Result<(), St
     Ok(())
 }
 
+/// Copies the given values from one copy of a Part into the edited one.
+///
+/// `from` is a `copy_value` of the Part; each path is a JSON pointer into it. A path
+/// that is not a valid lock path, or is absent from either copy, is skipped silently.
+/// The edited Part is read as JSON, patched, and written back through the same writers
+/// the editors use, so only the sections that were addressed are written at all: a
+/// `/part/` pointer writes the Part's parameters, a `/scenes/` one writes its scenes.
+///
+/// An error from the scenes writer can leave some scenes written, so the caller must
+/// drop the bank instead of saving it.
+pub(crate) fn overlay(
+    bank: &mut BankFile,
+    part_id: u8,
+    from: &serde_json::Value,
+    paths: &[String],
+) -> Result<(), String> {
+    let idx = part_id as usize;
+    if idx >= 4 {
+        return Err(format!("Invalid part ID: {} (must be 0-3)", part_id));
+    }
+    let mut target = copy_value(bank, &bank.parts.unsaved.0[idx], part_id);
+    let (mut touches_part, mut touches_scenes) = (false, false);
+    for path in paths.iter().filter(|p| crate::part_locks::valid_path(p)) {
+        let (Some(value), Some(slot)) = (from.pointer(path), target.pointer_mut(path)) else {
+            continue;
+        };
+        *slot = value.clone();
+        if path.starts_with("/part/") {
+            touches_part = true;
+        } else {
+            touches_scenes = true;
+        }
+    }
+    let copy: PartCopy =
+        serde_json::from_value(target).map_err(|e| format!("Failed to read Part: {}", e))?;
+    if touches_part {
+        write_part_data(&mut bank.parts.unsaved.0[idx], &copy.part);
+    }
+    if touches_scenes {
+        write_scenes(&mut bank.parts.unsaved.0[idx], &copy.scenes)?;
+    }
+    Ok(())
+}
+
 /// Reload a single part: copy parts.saved back to parts.unsaved (like Octatrack's "RELOAD" command)
 /// Returns the reloaded part data so the frontend can update its state.
+///
+/// `keep` lists values (JSON pointers, see `overlay`) that stay as the edited copy had
+/// them. With none, this is a byte copy that clears the edited bit. With some, the
+/// saved Part is put back first and the kept values are copied in from the edited one
+/// as it was before - one write - and the Part stays flagged as edited as long as it
+/// still differs from the saved copy.
 pub fn reload_part_data(
     project_path: &str,
     bank_id: &str,
     part_id: u8,
+    keep: &[String],
 ) -> Result<PartData, String> {
-    let path = Path::new(project_path);
-
-    let bank_letters = [
-        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P",
-    ];
-
-    let bank_num = bank_letters
-        .iter()
-        .position(|&letter| letter == bank_id)
-        .map(|idx| idx + 1)
-        .ok_or_else(|| format!("Invalid bank ID: {}", bank_id))?;
-
-    let bank_file_name = format!("bank{:02}.work", bank_num);
-    let mut bank_file_path = path.join(&bank_file_name);
-
-    if !bank_file_path.exists() {
-        let bank_file_name = format!("bank{:02}.strd", bank_num);
-        bank_file_path = path.join(&bank_file_name);
-        if !bank_file_path.exists() {
-            return Err(format!("Bank file not found: {}", bank_id));
-        }
-    }
+    let bank_file_path = bank_file_path(project_path, bank_id)?;
 
     let mut bank_data = BankFile::from_data_file(&bank_file_path)
         .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
@@ -4321,10 +4376,8 @@ pub fn reload_part_data(
         return Err("SAVE PART FIRST".to_string());
     }
 
-    println!(
-        "[DEBUG] Reloading part {} (copying saved to unsaved)",
-        part_idx
-    );
+    let edited_before = (!keep.is_empty())
+        .then(|| copy_value(&bank_data, &bank_data.parts.unsaved.0[part_idx], part_id));
 
     // Copy the saved part back to unsaved part
     bank_data.parts.unsaved.0[part_idx] = bank_data.parts.saved.0[part_idx];
@@ -4332,10 +4385,12 @@ pub fn reload_part_data(
     // Clear the edited bit for this part since we just reloaded it
     bank_data.parts_edited_bitmask &= !(1 << part_idx);
 
-    println!(
-        "[DEBUG] parts_edited_bitmask after reload: {}",
-        bank_data.parts_edited_bitmask
-    );
+    if let Some(edited_before) = edited_before {
+        overlay(&mut bank_data, part_id, &edited_before, keep)?;
+        if bank_data.parts.unsaved.0[part_idx] != bank_data.parts.saved.0[part_idx] {
+            mark_part_edited(&mut bank_data, part_id);
+        }
+    }
 
     bank_data.checksum = bank_data
         .calculate_checksum()
@@ -4345,15 +4400,42 @@ pub fn reload_part_data(
         .to_data_file(&bank_file_path)
         .map_err(|e| format!("Failed to write bank file: {:?}", e))?;
 
-    println!("[DEBUG] Part {} reloaded successfully", part_idx);
+    Ok(part_data(&bank_data.parts.unsaved.0[part_idx], part_id))
+}
 
-    // Read all parts data and return the specific part
-    let response = read_parts_data(project_path, bank_id)?;
-    response
-        .parts
-        .into_iter()
-        .find(|p| p.part_id == part_id)
-        .ok_or_else(|| format!("Failed to find reloaded part {}", part_id))
+/// Puts single values of a Part back to what the saved copy holds.
+///
+/// The edited bit is set, since the Part has been written to since it was last saved or
+/// reloaded, whether or not it still differs from the saved copy. Errors `SAVE PART FIRST` when
+/// there is no saved copy to take values from.
+pub fn revert_part_values(
+    project_path: &str,
+    bank_id: &str,
+    part_id: u8,
+    paths: &[String],
+) -> Result<PartData, String> {
+    let part_idx = part_id as usize;
+    if part_idx >= 4 {
+        return Err(format!("Invalid part ID: {} (must be 0-3)", part_id));
+    }
+    let bank_file_path = bank_file_path(project_path, bank_id)?;
+    let mut bank = BankFile::from_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to read bank file: {:?}", e))?;
+    if bank.parts_saved_state[part_idx] != 1 {
+        return Err("SAVE PART FIRST".to_string());
+    }
+
+    let saved = copy_value(&bank, &bank.parts.saved.0[part_idx], part_id);
+    overlay(&mut bank, part_id, &saved, paths)?;
+    mark_part_edited(&mut bank, part_id);
+
+    bank.checksum = bank
+        .calculate_checksum()
+        .map_err(|e| format!("Failed to calculate checksum: {:?}", e))?;
+    bank.to_data_file(&bank_file_path)
+        .map_err(|e| format!("Failed to write bank file: {:?}", e))?;
+
+    Ok(part_data(&bank.parts.unsaved.0[part_idx], part_id))
 }
 
 /// One copy of a Part, as the Parts and Scenes editors read it.
@@ -8219,6 +8301,8 @@ pub fn copy_bank(
             )
         })?;
 
+        forget_part_locks(dest_project, dest_bank_index, &[0, 1, 2, 3]);
+
         println!(
             "[DEBUG] Copied bank {} from {} to bank {} in {}",
             source_bank_index, source_project, dest_bank_index, dest_project
@@ -8330,6 +8414,11 @@ pub fn copy_scenes(
     dest_bank
         .to_data_file(&dest_bank_path)
         .map_err(|e| format!("Failed to write destination bank: {:?}", e))?;
+    // Scenes are values a lock can sit on, but the Part is not replaced, so what holds
+    // is re-derived rather than dropped
+    if let Err(e) = crate::part_locks::prune(dest_project, &bank_letter(dest_bank_index)) {
+        eprintln!("Could not prune part locks: {}", e);
+    }
     Ok(())
 }
 
@@ -8460,6 +8549,7 @@ pub fn copy_parts(
     dest_bank
         .to_data_file(&dest_bank_path)
         .map_err(|e| format!("Failed to write destination bank: {:?}", e))?;
+    forget_part_locks(dest_project, dest_bank_index, &dest_part_indices);
 
     println!(
         "[DEBUG] Copied {} source part(s) to {} destination part(s) from bank {} to bank {}",
@@ -8988,6 +9078,9 @@ pub fn copy_tracks(
     dest_bank
         .to_data_file(&dest_bank_path)
         .map_err(|e| format!("Failed to write destination bank: {:?}", e))?;
+    if mode == "part_params" || mode == "both" {
+        forget_part_locks(dest_project, dest_bank_index, &[dest_part_index]);
+    }
 
     println!(
         "[DEBUG] Copied {} tracks from bank {} Part {} to bank {} Part {} (mode: {})",
@@ -9060,6 +9153,8 @@ pub fn clear_banks(project: &str, bank_indices: &[u8]) -> Result<(), String> {
         BankFile::default()
             .to_data_file(&work)
             .map_err(|e| format!("Failed to write bank {}: {:?}", bank_num, e))?;
+        // The Parts are gone, and so is whatever their locks were held on
+        forget_part_locks(project, bank_index, &[0, 1, 2, 3]);
     }
     Ok(())
 }
@@ -19245,6 +19340,115 @@ pub(crate) mod tests {
             assert_eq!(reloaded_parts.parts.len(), original_parts.parts.len());
         }
 
+        /// Every bank the writers below are held to: the generated test project's bank A
+        /// and the real device's, whose Parts carry values the generated one never does.
+        fn banks_for_writer_roundtrip() -> Vec<BankFile> {
+            let project = TestProject::new();
+            let generated = BankFile::from_data_file(
+                &bank_file_path(&project.path, "A").expect("bank A of the test project"),
+            )
+            .expect("read the test project's bank");
+            let real = BankFile::from_data_file(
+                &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests/fixtures/real_device/bank01.work"),
+            )
+            .expect("read the real device's bank");
+            vec![generated, real]
+        }
+
+        /// A writer that cannot put back what the reader gave it would change a Part
+        /// the moment the overlay copied a value into it, so this is the floor.
+        #[test]
+        fn write_part_data_of_its_own_reading_changes_no_byte() {
+            for bank in banks_for_writer_roundtrip() {
+                for (i, part) in bank.parts.unsaved.0.iter().enumerate() {
+                    let mut clone = part.clone();
+                    write_part_data(&mut clone, &part_data(part, i as u8));
+                    assert_eq!(&clone, part, "Part {} changed", i);
+                }
+            }
+        }
+
+        /// Moves every number of a reading to some other value, leaving the ones that
+        /// name a thing (a track, a type) alone.
+        fn nudge(v: &mut serde_json::Value, key: &str) {
+            match v {
+                serde_json::Value::Number(n) => {
+                    let keep = key.ends_with("_id") || key.ends_with("_type");
+                    if !keep {
+                        *v = serde_json::Value::from(if n.as_u64() == Some(2) { 3 } else { 2 });
+                    }
+                }
+                serde_json::Value::Array(items) => items.iter_mut().for_each(|i| nudge(i, key)),
+                serde_json::Value::Object(map) => map.iter_mut().for_each(|(k, i)| nudge(i, k)),
+                _ => {}
+            }
+        }
+
+        /// The pointers at which two readings differ, so a failure names fields and does
+        /// not dump a whole Part.
+        fn differences(
+            a: &serde_json::Value,
+            b: &serde_json::Value,
+            at: String,
+            out: &mut Vec<String>,
+        ) {
+            match (a, b) {
+                (serde_json::Value::Object(x), serde_json::Value::Object(y)) => {
+                    for (k, v) in x {
+                        differences(v, &y[k], format!("{}/{}", at, k), out);
+                    }
+                }
+                (serde_json::Value::Array(x), serde_json::Value::Array(y)) => {
+                    for (i, v) in x.iter().enumerate() {
+                        differences(v, &y[i], format!("{}/{}", at, i), out);
+                    }
+                }
+                _ if a != b => out.push(format!("{} ({} -> {})", at, a, b)),
+                _ => {}
+            }
+        }
+
+        /// A field the reader shows and the writer drops is an edit that is lost, and a
+        /// Revert, Lock or Reload of it that fails without a word. So every field of
+        /// every machine must come back as written, on each machine in turn.
+        #[test]
+        fn write_part_data_lands_every_field_the_reader_shows() {
+            for bank in banks_for_writer_roundtrip() {
+                for layout in [[0u8, 1, 2, 3, 4, 4, 1, 0], [4, 3, 2, 1, 0, 0, 3, 2]] {
+                    let mut part = bank.parts.unsaved.0[0].clone();
+                    part.audio_track_machine_types = layout;
+                    let mut data = serde_json::to_value(part_data(&part, 0)).unwrap();
+                    nudge(&mut data, "");
+                    let sent: PartData = serde_json::from_value(data).unwrap();
+
+                    let mut expected = sent.clone();
+                    clamp_part_data(&mut expected, &layout);
+                    write_part_data(&mut part, &sent);
+                    let mut lost = Vec::new();
+                    differences(
+                        &serde_json::to_value(expected).unwrap(),
+                        &serde_json::to_value(part_data(&part, 0)).unwrap(),
+                        String::new(),
+                        &mut lost,
+                    );
+                    assert!(lost.is_empty(), "layout {:?}: {:?}", layout, lost);
+                }
+            }
+        }
+
+        #[test]
+        fn write_scenes_of_its_own_reading_changes_no_byte() {
+            for bank in banks_for_writer_roundtrip() {
+                for (i, part) in bank.parts.unsaved.0.iter().enumerate() {
+                    let mut clone = part.clone();
+                    let scenes = scenes_for_part(&bank, part, (false, false));
+                    write_scenes(&mut clone, &scenes).unwrap();
+                    assert_eq!(&clone, part, "Part {} changed", i);
+                }
+            }
+        }
+
         /// The Sample Slot a track plays and the Track/Cue levels are per Part, so
         /// editing them has to survive a save/reload the same way the AMP page does.
         #[test]
@@ -19936,7 +20140,7 @@ pub(crate) mod tests {
                     vec![0],
                 )
                 .unwrap();
-                reload_part_data(&project.path, "A", 1).unwrap();
+                reload_part_data(&project.path, "A", 1, &[]).unwrap();
 
                 assert_eq!(amp_vol(&project.path, "A", 1, 0), Some(100));
             }
@@ -20868,7 +21072,7 @@ pub(crate) mod tests {
             // Must commit the part first before it can be reloaded
             commit_part_data(&project.path, "A", 0).unwrap();
 
-            let result = reload_part_data(&project.path, "A", 0);
+            let result = reload_part_data(&project.path, "A", 0, &[]);
             assert!(result.is_ok(), "Should reload part data: {:?}", result);
         }
 
@@ -20879,7 +21083,7 @@ pub(crate) mod tests {
             // Must commit the part first before it can be reloaded
             commit_part_data(&project.path, "A", 0).unwrap();
 
-            let part_data = reload_part_data(&project.path, "A", 0).unwrap();
+            let part_data = reload_part_data(&project.path, "A", 0, &[]).unwrap();
             assert_eq!(part_data.part_id, 0, "Should return correct part ID");
             assert_eq!(part_data.machines.len(), 8, "Should have 8 machines");
         }
@@ -20888,7 +21092,7 @@ pub(crate) mod tests {
         fn test_reload_part_data_requires_saved_state() {
             // Reload requires the part to have been saved first
             let project = TestProject::new();
-            let result = reload_part_data(&project.path, "A", 0);
+            let result = reload_part_data(&project.path, "A", 0, &[]);
 
             // Should fail because part hasn't been committed/saved
             assert!(result.is_err());
@@ -21037,7 +21241,7 @@ pub(crate) mod tests {
             });
             assert!(!read_part_copies(&project.path, "A", 0).unwrap().identical);
 
-            reload_part_data(&project.path, "A", 0).unwrap();
+            reload_part_data(&project.path, "A", 0, &[]).unwrap();
             assert!(read_part_copies(&project.path, "A", 0).unwrap().identical);
         }
 
@@ -21093,7 +21297,7 @@ pub(crate) mod tests {
             let project = TestProject::new();
             commit_part_data(&project.path, "A", 0).unwrap();
 
-            let result = reload_part_data(&project.path, "A", 4);
+            let result = reload_part_data(&project.path, "A", 4, &[]);
             assert!(result.is_err());
         }
     }

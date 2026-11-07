@@ -20,6 +20,7 @@ import { WriteStatus, IDLE_STATUS } from "../types/writeStatus";
 import { TrackBadge } from "../components/TrackBadge";
 import { ScrollToTop } from "../components/ScrollToTop";
 import { Version } from "../components/Version";
+import { ShortcutsButton } from "../components/ShortcutsButton";
 import { formatMixerLevel, formatMetronomePitch } from "../utils/format";
 import { isModalOpen } from "../hooks/useEscapeClose";
 import "../App.css";
@@ -1179,6 +1180,7 @@ export function ProjectDetail() {
           >
             <i className="fas fa-sync-alt"></i>
           </button>
+          <ShortcutsButton page="project" section={activeTab} />
           <Version />
         </div>
       </div>

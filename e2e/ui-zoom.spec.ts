@@ -14,6 +14,8 @@ async function setupMocks(page: Page) {
       invoke: async (cmd: string, args?: any) => {
         ;(window as any).__invokeCalls.push([cmd, args])
         switch (cmd) {
+          case 'get_ui_zoom':
+            return (window as any).__zoom ?? 1
           case 'step_ui_zoom': {
             // The backend's levels, enough of them to step through here
             const levels = [0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2]
@@ -190,5 +192,58 @@ test.describe('UI zoom from the keyboard', () => {
     await page.keyboard.type('a-b=0')
     await expect(search).toHaveValue('a-b=0')
     expect(await zoomCalls(page)).toEqual([])
+  })
+})
+
+test.describe('The Shortcuts & zoom window', () => {
+  test.beforeEach(async ({ page }) => {
+    await setupMocks(page)
+    await page.goto('/')
+    await expect(page.locator('h1')).toBeVisible()
+  })
+
+  const dialog = (page: Page) => page.getByRole('dialog', { name: 'Shortcuts & zoom' })
+
+  test('the header icon opens the projects list shortcuts, then the global ones', async ({ page }) => {
+    await page.getByRole('button', { name: 'Shortcuts & zoom' }).click()
+    await expect(dialog(page).locator('h4')).toHaveText(['Projects list', 'Everywhere'])
+    await expect(dialog(page)).toContainText('Search the projects')
+  })
+
+  test('? opens it and Escape closes it, without leaving the page', async ({ page }) => {
+    await page.keyboard.press('?')
+    await expect(dialog(page)).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(dialog(page)).toHaveCount(0)
+    await expect(page.locator('h1')).toBeVisible()
+  })
+
+  test('its zoom buttons step the zoom, and a zoom from the keyboard shows in it', async ({ page }) => {
+    await page.getByRole('button', { name: 'Shortcuts & zoom' }).click()
+    const value = dialog(page).getByRole('status', { name: 'Zoom' })
+    const reset = dialog(page).getByRole('button', { name: 'Reset zoom to 100%' })
+    await expect(value).toHaveText('100%')
+    await expect(reset).toBeDisabled()
+    await dialog(page).getByRole('button', { name: 'Zoom in' }).click()
+    await expect(value).toHaveText('110%')
+    await page.keyboard.press('Control+Equal')
+    await expect(value).toHaveText('125%')
+    await reset.click()
+    await expect(value).toHaveText('100%')
+    expect(await zoomCalls(page)).toEqual([1, 1, 0])
+  })
+
+  test('? opens it with a parameter field focused', async ({ page }) => {
+    // The home page has no value field: one stands in for the editors' fields
+    await page.evaluate(() => {
+      const input = document.createElement('input')
+      input.type = 'text'
+      input.className = 'param-value'
+      input.value = '64'
+      document.body.append(input)
+      input.focus()
+    })
+    await page.keyboard.press('?')
+    await expect(dialog(page)).toBeVisible()
   })
 })

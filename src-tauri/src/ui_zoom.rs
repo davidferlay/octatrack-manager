@@ -56,6 +56,12 @@ pub fn zoom_file(app: &tauri::AppHandle) -> Option<PathBuf> {
         .map(|dir| dir.join("ui-zoom"))
 }
 
+/// The zoom in force (1 is 100%).
+#[tauri::command]
+pub fn get_ui_zoom(state: tauri::State<UiZoom>) -> Result<f64, String> {
+    state.0.lock().map(|zoom| *zoom).map_err(|e| e.to_string())
+}
+
 /// Steps the zoom (1 up, -1 down, 0 back to 100%), applies it and keeps it. Returns the new zoom.
 #[tauri::command]
 pub fn step_ui_zoom(

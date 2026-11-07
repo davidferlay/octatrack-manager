@@ -100,16 +100,17 @@ export function WaveGlyph({ wave }: { wave: string }) {
  * attached across renders instead of being torn down and rebuilt on every knob drag.
  */
 export function WheelStepper(
-  { step, className, title, children }: {
+  { step, className, title, children, ...rest }: {
     /** Moves the value one step, or null where the field cannot be changed. */
     step: ((by: 1 | -1) => void) | null;
     className: string;
     title?: string;
     children: ReactNode;
-  },
+  } & { [K in `data-${string}`]?: string },
 ) {
+  // The data-* attributes are how the right-click menu finds the value under the pointer
   return (
-    <div className={className} title={title} ref={useWheelStep(step)}>
+    <div className={className} title={title} ref={useWheelStep(step)} {...rest}>
       {children}
     </div>
   );

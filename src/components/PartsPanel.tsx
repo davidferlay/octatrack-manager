@@ -19,6 +19,7 @@ import {
 } from '../utils/partFieldHelp';
 import { formatFxType, getFxMainLabels, getFxSetupLabels, FX_TYPES, fxTypesForSlot } from '../utils/fxLabels';
 import { fxDefaults } from '../utils/fxDefaults';
+import { fieldPath } from '../utils/partLocks';
 import { SlotPickerModal } from './SlotPickerModal';
 import './PartsPanel.css';
 
@@ -113,14 +114,33 @@ export default function PartsPanel({
   // Part, so both write the same two copies the device keeps and need the same buttons
   const commits = usePartCommits<PartData>({
     projectPath, bankId, partNames, onWriteStatusChange,
-    onReloaded: (partIndex, part) => setPartsData(prev => {
-      const next = [...prev];
-      next[partIndex] = part;
-      return next;
-    }),
+    onReloaded: (partIndex, part) => {
+      // Reload and Revert can move a track's slot or machine without the editor having
+      // been the one to do it, and the page keeps what it shows of both
+      const before = partsDataRef.current[partIndex];
+      setPartsData(prev => {
+        const next = [...prev];
+        next[partIndex] = part;
+        return next;
+      });
+      if (!before) return;
+      const slotMoved = part.machines.some((m, i) =>
+        m.static_slot_id !== before.machines[i]?.static_slot_id
+        || m.flex_slot_id !== before.machines[i]?.flex_slot_id);
+      if (slotMoved) onSlotAssignmentSaved?.();
+      // The page keeps the machine types of the Part on screen only
+      if (partIndex !== activePartIndex) return;
+      part.machines.forEach((m, i) => {
+        if (m.machine_type !== before.machines[i]?.machine_type) {
+          onMachineTypeChanged?.(i, m.machine_type);
+        }
+      });
+    },
     onError: setError,
+    reloadKey,
+    flush: () => flushPartSaveRef.current(),
   });
-  const { modifiedPartIds, markModified, adoptBankState } = commits;
+  const { modifiedPartIds, markModified, adoptBankState, refreshLocks } = commits;
   // Reached through a ref by the project page, which asks for a re-read after an undo
   const loadPartsDataRef = useRef<(() => void) | null>(null);
 
@@ -128,7 +148,9 @@ export default function PartsPanel({
   const lfoDrawingRef = useRef<{ isDrawing: boolean; partId: number; section: 'lfos' | 'midi_lfos'; trackId: number } | null>(null);
 
   // Ref for debouncing save operations (prevents rapid saves during keyboard input)
-  const saveDebounceRef = useRef<{ timer: ReturnType<typeof setTimeout> | null; partId: number | null }>({ timer: null, partId: null });
+  const saveDebounceRef = useRef<{ timer: ReturnType<typeof setTimeout> | null; partId: number | null; what: string }>({ timer: null, partId: null, what: '' });
+  // usePartCommits is called above the save helpers, so it reaches the flush through this
+  const flushPartSaveRef = useRef<() => Promise<void>>(async () => {});
 
   // Ref to always access latest partsData (avoids stale closure issues in debounced callbacks)
   const partsDataRef = useRef<PartData[]>(partsData);
@@ -173,6 +195,21 @@ export default function PartsPanel({
     const value = field.split('.')
       .reduce<unknown>((at, key) => (at as Record<string, unknown> | undefined)?.[key], entry);
     return typeof value === 'number' || typeof value === 'string' ? value : undefined;
+  };
+
+  /**
+   * What lets the right-click menu find a value, and the lock mark show: the value's key,
+   * and a flag when it is locked. Edit mode only, like the menu itself.
+   */
+  const lockAttrs = (
+    partId: number, section: keyof PartData, trackId: number, field: string,
+  ): { 'data-lock-path'?: string; 'data-locked'?: string } => {
+    if (!isEditMode) return {};
+    const path = fieldPath(section, trackId, field);
+    return {
+      'data-lock-path': path,
+      ...(commits.locks[partId]?.includes(path) ? { 'data-locked': '' } : {}),
+    };
   };
 
   // Determine if selected track is MIDI (tracks 8-15 or ALL_MIDI_TRACKS) or Audio (tracks 0-7 or ALL_AUDIO_TRACKS)
@@ -227,6 +264,47 @@ export default function PartsPanel({
   };
   loadPartsDataRef.current = loadPartsData;
 
+  /**
+   * Writes a Part to parts.unsaved from the latest state, rather than from a snapshot
+   * closed over when the write was queued.
+   */
+  const persistPart = useCallback(async (partId: number, what: string) => {
+    const partToSave = partsDataRef.current.find(p => p.part_id === partId);
+    if (!partToSave) {
+      console.error('[PartsPanel] Part not found at save time:', partId);
+      return;
+    }
+    console.log('[PartsPanel] Debounced save - saving part', partId, what);
+    try {
+      await invoke('save_parts', { path: projectPath, bankId: bankId, partsData: [partToSave] });
+      console.log('[PartsPanel] Auto-saved part', partId, 'to parts.unsaved');
+      const partName = partNames[partId] || `Part ${partId + 1}`;
+      onWriteStatusChange?.(writeStatus.success(`Part ${partName} saved as *`));
+      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
+      // The write may have turned a locked value back to the saved one
+      refreshLocks();
+    } catch (err) {
+      console.error('Failed to auto-save part:', err);
+      onWriteStatusChange?.(writeStatus.error('Auto-save failed'));
+      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
+    }
+  }, [projectPath, bankId, partNames, onWriteStatusChange, refreshLocks]);
+
+  /**
+   * Writes the edit still waiting out its delay, and resolves once it is in the file.
+   * Reload, Revert and Lock work on the file, and the panel replaces its Part with what
+   * they return: a pending edit would either be written over them afterwards or be
+   * lost with the Part it was made on.
+   */
+  const flushPartSave = useCallback(async () => {
+    const pending = saveDebounceRef.current;
+    if (!pending.timer || pending.partId === null) return;
+    clearTimeout(pending.timer);
+    pending.timer = null;
+    await persistPart(pending.partId, pending.what);
+  }, [persistPart]);
+  flushPartSaveRef.current = flushPartSave;
+
   // Generic function to update a parameter value and auto-save to parts.unsaved
   /**
    * Marks the Part as modified and queues the debounced write to parts.unsaved.
@@ -244,40 +322,13 @@ export default function PartsPanel({
     onWriteStatusChange?.(writeStatus.writing());
 
     saveDebounceRef.current.timer = setTimeout(() => {
-      // Read the latest state at save time rather than closing over a snapshot
-      setPartsData(currentPartsData => {
-        const currentPartIndex = currentPartsData.findIndex(p => p.part_id === partId);
-        if (currentPartIndex === -1) {
-          console.error('[PartsPanel] Part not found at save time:', partId);
-          return currentPartsData;
-        }
-
-        const partToSave = currentPartsData[currentPartIndex];
-        console.log('[PartsPanel] Debounced save - saving part', partId, what);
-
-        invoke('save_parts', {
-          path: projectPath,
-          bankId: bankId,
-          partsData: [partToSave]
-        }).then(() => {
-          console.log('[PartsPanel] Auto-saved part', partId, 'to parts.unsaved');
-          const partName = partNames[partId] || `Part ${partId + 1}`;
-          onWriteStatusChange?.(writeStatus.success(`Part ${partName} saved as *`));
-          setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
-        }).catch(err => {
-          console.error('Failed to auto-save part:', err);
-          onWriteStatusChange?.(writeStatus.error('Auto-save failed'));
-          setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
-        });
-
-        return currentPartsData; // Read only - the mutation already happened
-      });
-
       saveDebounceRef.current.timer = null;
+      void persistPart(partId, what);
     }, 500);
 
     saveDebounceRef.current.partId = partId;
-  }, [projectPath, bankId, partNames, onWriteStatusChange]);
+    saveDebounceRef.current.what = what;
+  }, [markModified, onWriteStatusChange, persistPart]);
 
   const updatePartParam = useCallback(<T extends keyof PartData>(
     partId: number,
@@ -457,12 +508,13 @@ export default function PartsPanel({
       const partName = partNames[partId] || `Part ${partId + 1}`;
       onWriteStatusChange?.(writeStatus.success(`Part ${partName} saved as *`));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
+      refreshLocks();
     }).catch(err => {
       console.error('Failed to save LFO design:', err);
       onWriteStatusChange?.(writeStatus.error('Save failed'));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
     });
-  }, [projectPath, bankId, partsData, onWriteStatusChange]);
+  }, [projectPath, bankId, partsData, onWriteStatusChange, refreshLocks]);
 
   // Parameter value component - editable in edit mode, read-only in view mode
   // Update a param locally without saving to backend (for knob dragging)
@@ -525,12 +577,13 @@ export default function PartsPanel({
       onWriteStatusChange?.(writeStatus.success(`Part ${partName} saved as *`));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
       if (options?.slotAssignmentChanged) onSlotAssignmentSaved?.();
+      refreshLocks();
     }).catch(err => {
       console.error('Failed to save part:', err);
       onWriteStatusChange?.(writeStatus.error('Save failed'));
       setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
     });
-  }, [projectPath, bankId, partNames, onWriteStatusChange, onSlotAssignmentSaved]);
+  }, [projectPath, bankId, partNames, onWriteStatusChange, onSlotAssignmentSaved, refreshLocks]);
 
   // Render param with rotary knob for All view
   /**
@@ -661,6 +714,7 @@ export default function PartsPanel({
         className={`param-item${changed ? ' param-changed' : ''}`}
         key={key}
         step={stepValue}
+        {...lockAttrs(partId, section, trackId, field)}
         title={[helpTitle(label, help), changed && `Saved: ${format(savedValue as number)}`]
           .filter(Boolean).join('\n') || undefined}
       >
@@ -959,6 +1013,8 @@ export default function PartsPanel({
     return (
       <button
         className={`parts-level parts-sample-field${changed ? ' param-changed' : ''}`}
+        {...lockAttrs(activePart.part_id, 'machines', machine.track_id,
+          isStatic ? 'static_slot_id' : 'flex_slot_id')}
         disabled={!isEditMode}
         title={[
           `SLOT ${label} - ${filename}`,
@@ -1003,6 +1059,7 @@ export default function PartsPanel({
       <span className="machine-type-field">
         <select
           className="machine-type machine-type-select editable"
+          {...lockAttrs(activePart.part_id, 'machines', trackId, 'machine_type')}
           value={machineType}
           title={[machineHelp(machineType), changed ? `Saved: ${saved}` : null]
             .filter(Boolean).join('\n') || undefined}
@@ -1047,6 +1104,7 @@ export default function PartsPanel({
       <span className="fx-type-field" data-value={formatFxType(fxType)}>
         <select
           className="fx-type-select editable"
+          {...lockAttrs(activePart.part_id, 'fxs', trackId, `${slot}_type`)}
           value={fxType}
           title={changed ? `Saved: ${formatFxType(saved)}` : undefined}
           onChange={e => changeFxType(
@@ -1089,6 +1147,7 @@ export default function PartsPanel({
         <WheelStepper
           className={`parts-level${changed ? ' param-changed' : ''}`}
           key={key}
+          {...lockAttrs(activePart.part_id, 'volumes', trackId, key)}
           step={isEditMode ? (by: 1 | -1) => commit(stepInSpec(value, by, TRACK_LEVEL_SPEC)) : null}
           title={[
             LEVEL_HELP[label as keyof typeof LEVEL_HELP],
@@ -1235,6 +1294,9 @@ export default function PartsPanel({
     );
   };
 
+  // ponytail: the LFO DESIGN steps carry no lockAttrs, so they have no right-click menu
+  // (the diffs window still reverts and locks them). Add it here: one step is
+  // `custom_lfo_design.<n>` under 'lfos' or 'midi_lfos'.
   const renderLfoEnvelope = (
     customLfoDesign: number[],
     partId?: number,
@@ -2693,7 +2755,10 @@ export default function PartsPanel({
   const activePart = partsData[activePartIndex];
 
   return (
-    <div className={`bank-card ${modifiedPartIds.size > 0 ? 'edit-mode' : ''}`}>
+    <div
+      className={`bank-card ${modifiedPartIds.size > 0 ? 'edit-mode' : ''}`}
+      onContextMenu={isEditMode ? e => commits.openFieldMenu(e, activePartIndex) : undefined}
+    >
       <div className="bank-card-header">
         <div className="bank-card-header-left">
           <h3>{bankName} - Parts</h3>

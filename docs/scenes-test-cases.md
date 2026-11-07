@@ -237,3 +237,10 @@ is shown and set on its own and never touches what a scene holds.
 | SC169 | Saving | Scene values marked | On a saved Part, change a scene lock and a crossfader end in Edit mode | Both are marked as changed in the Scene, Matrix and Compare views, the lock with its saved value on hover; the other end is not marked |
 | SC170 | Saving | A lock taken out | On a saved Part, take a lock out of a scene, turn on Show all params | Its empty cell is marked in the Scene and Matrix views, hovering it names the saved value, and See diffs lists it with - as the current value |
 | SC171 | Saving | Tab menu and D here too | In Edit mode on the Scenes tab, right-click a Part tab, then press D | The menu offers Reload, Save and See diffs for that Part; D opens the diffs of the Part on screen |
+| SC172 | Saving | Right-click a scene cell | In Edit mode on a saved Part, right-click a scene lock that differs from the saved copy | Reload saved value (showing the saved value) and Pin value are offered, as on a Parts field; Escape closes the menu |
+| SC173 | Saving | Reload a saved scene lock | Choose Reload saved value on a changed lock, then on a lock the edits added, then on an empty cell whose lock the edits removed | The first returns to its saved value, the added lock is removed, the removed lock comes back; each no longer differs in See diffs |
+| SC174 | Saving | Pin a scene value | Choose Pin value on a changed scene lock, press Reload | The cell shows a small pin in the Scene, Matrix and Compare views; Reload keeps its value and the Reload tooltip names 1 pinned value |
+| SC175 | Saving | Menu on a matching cell | Right-click a scene lock that matches the saved copy | Reload saved value and Pin value are disabled |
+| SC176 | Saving | Pinned scene value goes with Save | Pin a changed scene value, then Save the Part | The pin is gone |
+| SC177 | Saving | Pinning is not an Undo step | Pin a scene value, then hover Undo | Undo still names the last scene edit, not the pin |
+| SC178 | Saving | No menu in View mode | In View mode, right-click a scene value | No menu opens and no pin shows |
