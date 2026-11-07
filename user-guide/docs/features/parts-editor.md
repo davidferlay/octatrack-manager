@@ -183,6 +183,8 @@ When a track's machine, or its FX1 or FX2 effect, is of another type than in the
 
 While anything is pinned, a small cross above the pins unpins every value of the Part on screen. It is the only place that does it for all of them at once.
 
+Right-clicking a row offers Go to param, then the row's Reload saved value and Pin value. Go to param closes the window and shows the value where it is edited: it selects the track, the page and the LFO tab in the Parts editor, or opens the Scenes tab on the scene, then points the field out with a brief orange pulse.
+
 In Edit mode, a value of the Part on screen that differs from its saved copy reads in orange, or carries an asterisk at the top right of certain fields. Hovering over it shows the saved value. Parameter changes in Scenes are marked the same way.
 
 #### Pinning values out of Part reload
@@ -192,7 +194,7 @@ Pinning a value only changes what the app's Reload does with it: the value can s
 - Reload puts the saved Part back, then restores the pinned values. The Part stays marked as modified, since those values still differ from the saved copy.
 - Every Reload button says how many it leaves alone, for example "Reload puts the Saved values back, except 2 pinned values".
 - A value is unpinned by itself once it equals the saved one: after Save, after Reload saved value, or after turning the value back by hand. The same goes if the machine or effect type of its track is changed by hand afterwards, unless the type itself is pinned.
-- Pins stay until you unpin them, including after a restart. They are listed in the file `part-pins.json` in the project folder, so they follow the project when it is copied. The file is removed once nothing is pinned.
+- Pins stay until you unpin them, including after a restart. They are listed in the file `om_parts-pinned-values.json` in the project folder, so they follow the project when it is copied. The file is removed once nothing is pinned.
 - Pinning and unpinning are not Undo steps.
 - The device's own Reload Part ignores them: it puts the whole saved Part back.
 
@@ -201,7 +203,7 @@ Pinning a value only changes what the app's Reload does with it: the value can s
 In Edit mode, right-clicking a field of the Parts editor offers:
 
 - Reload saved value, with the saved value in brackets. It is disabled on a pinned value.
-- Pin value - exclude from Part reload, or Unpin value - include in Part reload on a pinned field.
+- Pin value - Exclude it from Part reload, or Unpin value - Include it in Part reload on a pinned field.
 
 Both are disabled on a value that matches the saved copy and on a Part without a saved copy. A pinned field shows a small pin at its top right. The steps of the LFO DESIGN drawing have no such menu, and neither does View mode.
 

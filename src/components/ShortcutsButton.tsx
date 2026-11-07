@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { isModalOpen, useEscapeClose } from "../hooks/useEscapeClose";
 import { isMac, shortcutsFor, type ShortcutPage } from "../utils/shortcuts";
@@ -50,10 +50,28 @@ export function ShortcutsButton({ page, section }: { page: ShortcutPage; section
         title={`${TITLE} (?)`}
         aria-label={TITLE}
       >
-        <i className="fas fa-gear"></i>
+        <AccessIcon />
       </button>
       {open && <ShortcutsModal page={page} section={section} onClose={close} />}
     </>
+  );
+}
+
+/**
+ * The accessibility figure, arms open: our own drawing, in the rounded style the user
+ * picked (Font Awesome's circled and wheelchair versions were tried first). Zoom and the
+ * keyboard are both about reaching the app, hence the theme.
+ */
+function AccessIcon({ style }: { style?: CSSProperties }) {
+  return (
+    <svg className="access-icon" viewBox="0 0 24 24" width="1em" height="1em" style={style} aria-hidden="true">
+      <circle cx="12" cy="2.7" r="2.5" fill="currentColor" />
+      <path d="M3.6 7.2 Q12 9.4 20.4 7.2" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+      <path
+        d="M9.2 8.6 L9.3 11 L7.6 21.6 L9.6 21.9 L12 14.6 L14.4 21.9 L16.4 21.6 L14.7 11 L14.8 8.6 Z"
+        fill="currentColor" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
@@ -91,7 +109,7 @@ function ShortcutsModal({ page, section, onClose }: { page: ShortcutPage; sectio
         onClick={(e) => e.stopPropagation()}
       >
         <div className="modal-header">
-          <h3><i className="fas fa-gear" style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }}></i>{TITLE}</h3>
+          <h3><AccessIcon style={{ color: 'var(--elektron-orange)', marginRight: '0.5rem' }} />{TITLE}</h3>
           <div className="shortcuts-zoom" title={`Zoom: ${mac ? 'Cmd' : 'Ctrl'} + / - / 0`}>
             <span className="shortcuts-zoom-label">Zoom</span>
             <button className="toolbar-button" aria-label="Zoom out" onClick={() => step(-1)}><i className="fas fa-minus"></i></button>

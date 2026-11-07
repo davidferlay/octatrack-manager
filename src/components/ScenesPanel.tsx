@@ -32,6 +32,8 @@ interface ScenesPanelProps {
   preloaded?: ScenesResponse;
   /** Bumped when the bank was rewritten underneath us, so it is read again. */
   reloadKey?: number;
+  /** Go to param from the diffs window: show where one of these values is edited. */
+  onGoToParam?: (partIndex: number, paths: string[]) => void;
   /** Which scene is open. Held by the project page so it survives leaving the tab. */
   selectedScene: number;
   onSceneChange: (sceneId: number) => void;
@@ -84,7 +86,7 @@ const SAVE_DELAY = 500;
 
 export function ScenesPanel({
   projectPath, bankId, bankName, partId, partNames, isEditMode = false,
-  onPartChange, onWriteStatusChange, preloaded, reloadKey, selectedScene, onSceneChange,
+  onPartChange, onWriteStatusChange, preloaded, reloadKey, selectedScene, onSceneChange, onGoToParam,
 }: ScenesPanelProps) {
   const [data, setData] = useState<ScenesResponse | null>(preloaded ?? null);
   const [error, setError] = useState<string | null>(null);
@@ -136,7 +138,7 @@ export function ScenesPanel({
   // Scene data lives in the Part, so this editor writes the same `parts.unsaved` the
   // Parts editor does and offers the device's same way back from it
   const commits = usePartCommits({
-    projectPath, bankId, partNames, onWriteStatusChange,
+    projectPath, bankId, partNames, onWriteStatusChange, goTo: onGoToParam,
     // Reload puts the saved Part back, so every scene in it has to be read again
     onReloaded: () => { reload(); },
     onError: setError,
@@ -665,6 +667,7 @@ export function ScenesPanel({
   return (
     <div
       className={`scenes-panel bank-card ${commits.modifiedPartIds.size > 0 ? 'edit-mode' : ''}`}
+      data-bank-id={bankId}
       onContextMenu={isEditMode ? e => commits.openFieldMenu(e, partId) : undefined}
     >
       {randomizeOpen && (

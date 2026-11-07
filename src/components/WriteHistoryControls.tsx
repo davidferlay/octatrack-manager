@@ -105,14 +105,19 @@ export function WriteHistoryControls({ history, visible }: {
   visible: boolean;
 }) {
   const { state, busy, undo, redo } = history;
-  if (!visible) return null;
 
+  // Hidden rather than left out in View mode: the pair still takes its room, so the
+  // header does not shift between the two modes
   return (
-    <div className="write-history-controls">
+    <div
+      className="write-history-controls"
+      style={visible ? undefined : { visibility: 'hidden' }}
+      aria-hidden={visible ? undefined : true}
+    >
       <button
         className="history-button"
         onClick={undo}
-        disabled={busy || !state.can_undo}
+        disabled={!visible || busy || !state.can_undo}
         title={state.can_undo
           ? `Undo: ${state.undo_label}`
           : 'Nothing to undo in this project'}
@@ -123,7 +128,7 @@ export function WriteHistoryControls({ history, visible }: {
       <button
         className="history-button"
         onClick={redo}
-        disabled={busy || !state.can_redo}
+        disabled={!visible || busy || !state.can_redo}
         title={state.can_redo
           ? `Redo: ${state.redo_label}`
           : 'Nothing to redo in this project'}

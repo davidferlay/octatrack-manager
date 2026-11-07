@@ -6,7 +6,7 @@ sidebar_position: 1
 
 Octatrack Manager is designed for intuitivity. While you can use your mouse for everything, many tasks can also be performed with keyboard shortcuts.
 
-The gear icon at the top right of every page (or <kbd>?</kbd>) opens the Shortcuts & zoom window: the shortcuts of the page you are on, then the ones that work everywhere, with the interface zoom at the top. Change the zoom there with the - and + buttons, and go back to 100% with the reset button.
+The accessibility icon at the top right of every page (or <kbd>?</kbd>) opens the Shortcuts & zoom window: the shortcuts of the page you are on, then the ones that work everywhere, with the interface zoom at the top. Change the zoom there with the - and + buttons, and go back to 100% with the reset button.
 
 ## Universal Navigation
 

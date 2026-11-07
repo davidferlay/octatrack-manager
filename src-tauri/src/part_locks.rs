@@ -1,7 +1,7 @@
 //! Locks: values of a Part that Reload keeps instead of putting back to the saved copy.
 //!
 //! A value is named by a JSON pointer into the serialized `PartCopy` (see
-//! `project_reader::copy_value`). Locks live in `<project>/part-pins.json`, shaped
+//! `project_reader::copy_value`). Locks live in `<project>/om_parts-pinned-values.json`, shaped
 //! `{"A": {"0": ["/part/fxs/0/fx1_param3"]}}` - bank letter, then Part index - and the
 //! file is removed when no lock is left.
 //!
@@ -34,7 +34,7 @@ const PART_SECTIONS: [&str; 11] = [
 const SCENE_PAGES: [&str; 5] = ["machine", "lfo", "amp", "fx1", "fx2"];
 
 pub fn locks_file(project: &str) -> PathBuf {
-    Path::new(project).join("part-pins.json")
+    Path::new(project).join("om_parts-pinned-values.json")
 }
 
 /// A decimal index in `0..max`, written the one canonical way (no sign, no leading
@@ -265,6 +265,16 @@ mod tests {
     };
 
     const ATK: &str = "/part/amps/0/atk";
+
+    /// The name a user sees on the card, and the one QA cases and the guide give
+    #[test]
+    fn the_file_is_named_for_the_app() {
+        assert_eq!(
+            locks_file("/card/PROJECT").file_name().unwrap(),
+            "om_parts-pinned-values.json"
+        );
+    }
+
     const SCENE_FX1_3: &str = "/scenes/scenes/2/tracks/1/fx1/3";
     const SCENE_FX1_2: &str = "/scenes/scenes/2/tracks/1/fx1/2";
 

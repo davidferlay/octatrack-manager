@@ -6,6 +6,7 @@ import { WriteStatus, writeStatus } from '../types/writeStatus';
 import { useEscapeClose } from '../hooks/useEscapeClose';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { partChanges, actionName, trackRank, type PartCopies, type PartChange } from '../utils/partDiff';
+import { paramLocation } from '../utils/partLocks';
 import { ContextMenu, MenuItem } from './ContextMenu';
 import { TrackBadge } from './TrackBadge';
 
@@ -56,6 +57,12 @@ export interface PartCommitState {
   openFieldMenu: (e: ReactMouseEvent, partIndex: number) => void;
   closeFieldMenu: () => void;
   /**
+   * Shows where a value is edited, for Go to param in the diffs window: the editor
+   * switches tab, track, page or scene as needed and points the field out. Left out
+   * where nothing can navigate.
+   */
+  goTo?: (partIndex: number, paths: string[]) => void;
+  /**
    * The values locked in each of the bank's four Parts, as JSON pointers. A locked
    * value survives Reload: see the lock rules in the Part locks module.
    */
@@ -73,7 +80,7 @@ export interface PartCommitState {
 const NO_LOCKS: string[][] = [[], [], [], []];
 
 export function usePartCommits<T>({
-  projectPath, bankId, partNames, onWriteStatusChange, onReloaded, onError, reloadKey, flush,
+  projectPath, bankId, partNames, onWriteStatusChange, onReloaded, onError, reloadKey, flush, goTo,
 }: {
   projectPath: string;
   bankId: string;
@@ -91,6 +98,8 @@ export function usePartCommits<T>({
    * queued before it, a Reload followed by the old values coming back.
    */
   flush?: () => Promise<void>;
+  /** See `PartCommitState.goTo`. */
+  goTo?: (partIndex: number, paths: string[]) => void;
 }): PartCommitState {
   // Through a ref, so the callbacks below do not change with the editor's own
   const flushRef = useRef(flush);
@@ -306,7 +315,7 @@ export function usePartCommits<T>({
     modifiedPartIds, partsSavedState, isCommitting, isReloading,
     commitPart, commitAllParts, reloadPart, markModified, adoptBankState, readCopies, flushEdits,
     diffsFor, showDiffs: setDiffsFor, hideDiffs, tabMenu, openTabMenu, closeTabMenu,
-    fieldMenu, openFieldMenu, closeFieldMenu,
+    fieldMenu, openFieldMenu, closeFieldMenu, goTo,
     locks, refreshLocks, lockValues, revertValues, reloadTitle,
   };
 }
@@ -479,10 +488,10 @@ export function FieldMenu({ state }: { state: PartCommitState }) {
         onSelect={() => row && state.revertValues(fieldMenu.partIndex, row.revert, `Reload saved ${action}`)}
       />
       {locked && row ? (
-        <MenuItem icon="fa-thumbtack-slash" label="Unpin value - include in Part reload" enabled={!busy}
+        <MenuItem icon="fa-thumbtack-slash" label="Unpin value - Include it in Part reload" enabled={!busy}
           onSelect={() => state.lockValues(fieldMenu.partIndex, [], unlockPathsOf(row, held))} />
       ) : (
-        <MenuItem icon="fa-thumbtack" label="Pin value - exclude from Part reload" enabled={!busy && !!row && row.lock.length > 0}
+        <MenuItem icon="fa-thumbtack" label="Pin value - Exclude it from Part reload" enabled={!busy && !!row && row.lock.length > 0}
           title={row ? undefined : none}
           onSelect={() => row && state.lockValues(fieldMenu.partIndex, row.lock, [])} />
       )}
@@ -514,6 +523,8 @@ function PartDiffsModal({ state, partIndex, partNames }: {
   // From the start of an action until the re-read lands: the rows on screen are stale
   // in between, so acting on them would send the old reload and pin lists
   const [refreshing, setRefreshing] = useState(false);
+  // The row right-clicked, and where
+  const [rowMenu, setRowMenu] = useState<{ row: Shown; x: number; y: number } | null>(null);
   const held = state.locks[partIndex] ?? [];
   const frozen = busy || refreshing;
 
@@ -602,7 +613,11 @@ function PartDiffsModal({ state, partIndex, partNames }: {
               r.settled ? 'part-changes-settled' : '',
             ].filter(Boolean).join(' ') || undefined;
             return (
-            <tr key={rowKey(r)} className={cls}>
+            <tr
+              key={rowKey(r)}
+              className={cls}
+              onContextMenu={e => { e.preventDefault(); setRowMenu({ row: r, x: e.clientX, y: e.clientY }); }}
+            >
               {first && (
                 <td rowSpan={span} className="part-changes-track">
                   {r.track && <TrackBadge trackId={trackIdOf(r.track)} />}
@@ -630,7 +645,7 @@ function PartDiffsModal({ state, partIndex, partNames }: {
                       aria-label={pinned ? `Unpin ${action}` : `Pin ${action}`}
                       title={pinned
                         ? 'Pinned, excluded from Part reload: click to include it again'
-                        : 'Pin value - exclude from Part reload'}
+                        : 'Pin value - Exclude it from Part reload'}
                       disabled={frozen || (!pinned && r.lock.length === 0)}
                       onClick={() => act(() => (pinned
                         ? state.lockValues(partIndex, [], unlockPathsOf(r, held))
@@ -676,6 +691,15 @@ function PartDiffsModal({ state, partIndex, partNames }: {
         <div className="modal-body">
           {body()}
         </div>
+        {rowMenu && <RowMenu
+          {...rowMenu}
+          held={held}
+          frozen={frozen}
+          onClose={() => setRowMenu(null)}
+          goTo={state.goTo && (() => { hideDiffs(); state.goTo?.(partIndex, rowMenu.row.paths); })}
+          reload={paths => act(() => state.revertValues(partIndex, paths, `Reload saved ${actionName(rowMenu.row)}`))}
+          pin={(add, remove) => act(() => state.lockValues(partIndex, add, remove))}
+        />}
         <div className="modal-footer">
           <div className="modal-buttons-row">
             <button
@@ -711,6 +735,47 @@ function PartDiffsModal({ state, partIndex, partNames }: {
       </div>
     </div>,
     document.body,
+  );
+}
+
+/**
+ * Right-click on a row of the diffs window: Go to param, which closes the window and
+ * shows the value where it is edited, then the row's own Reload saved value and Pin.
+ * A row already put back as saved only offers Go to param.
+ */
+function RowMenu({ row, x, y, held, frozen, onClose, goTo, reload, pin }: {
+  row: Shown;
+  x: number;
+  y: number;
+  held: string[];
+  frozen: boolean;
+  onClose: () => void;
+  goTo?: () => void;
+  reload: (paths: string[]) => void;
+  pin: (add: string[], remove: string[]) => void;
+}) {
+  const pinned = !row.settled && isHeld(row, held);
+  return (
+    <ContextMenu x={x} y={y} onClose={onClose}>
+      <MenuItem icon="fa-location-crosshairs" label="Go to param"
+        enabled={!!goTo && paramLocation(row.paths[0] ?? '') !== null}
+        onSelect={() => goTo?.()} />
+      {!row.settled && (
+        <>
+          <MenuItem icon="fa-rotate-left" label="Reload saved value" enabled={!frozen && !pinned}
+            title={pinned ? 'Pinned: unpin it to reload the saved value' : undefined}
+            onSelect={() => reload(row.revert)} />
+          {pinned ? (
+            <MenuItem icon="fa-thumbtack-slash" label="Unpin value - Include it in Part reload" enabled={!frozen}
+              onSelect={() => pin([], unlockPathsOf(row, held))} />
+          ) : (
+            <MenuItem icon="fa-thumbtack" label="Pin value - Exclude it from Part reload"
+              enabled={!frozen && row.lock.length > 0}
+              onSelect={() => pin(row.lock, [])} />
+          )}
+        </>
+      )}
+    </ContextMenu>
   );
 }
 

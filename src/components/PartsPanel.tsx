@@ -48,6 +48,8 @@ interface PartsPanelProps {
   onSlotAssignmentSaved?: () => void;
   /** Bumped when the bank was rewritten underneath us, so it is read again. */
   reloadKey?: number;
+  /** Go to param from the diffs window: show where one of these values is edited. */
+  onGoToParam?: (partIndex: number, paths: string[]) => void;
   /**
    * A track was switched to a different machine.
    *
@@ -97,6 +99,7 @@ export default function PartsPanel({
   onPoolChanged,
   sampleSlots,
   reloadKey,
+  onGoToParam,
 }: PartsPanelProps) {
   const [partsData, setPartsData] = useState<PartData[]>([]);
   // Open Sample Slot picker: which track of which Part it is assigning, and its pool
@@ -113,7 +116,7 @@ export default function PartsPanel({
   // Reload / Save / Save All, shared with the Scenes editor - scene data lives in the
   // Part, so both write the same two copies the device keeps and need the same buttons
   const commits = usePartCommits<PartData>({
-    projectPath, bankId, partNames, onWriteStatusChange,
+    projectPath, bankId, partNames, onWriteStatusChange, goTo: onGoToParam,
     onReloaded: (partIndex, part) => {
       // Reload and Revert can move a track's slot or machine without the editor having
       // been the one to do it, and the page keeps what it shows of both
@@ -2757,6 +2760,7 @@ export default function PartsPanel({
   return (
     <div
       className={`bank-card ${modifiedPartIds.size > 0 ? 'edit-mode' : ''}`}
+      data-bank-id={bankId}
       onContextMenu={isEditMode ? e => commits.openFieldMenu(e, activePartIndex) : undefined}
     >
       <div className="bank-card-header">

@@ -175,6 +175,8 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
     // mock does it for save_parts, the write a hand edit makes.
     const lockStore: string[][] = [[], [], [], []]
     let editedBack = false
+    // Values put back by revert_part_values: read_part_copies then shows them saved
+    const reverted: string[] = []
     // Once reload_part has run, the files report the Part as not edited, as the device's
     // edited bit would after a plain Reload: only the app's own locks can keep it marked
     let reloaded = false
@@ -278,9 +280,18 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
             ;(savedScenes.scenes[0].tracks[0].amp as (number | null)[])[3] = 90
             ;(savedScenes.scenes[0].tracks[0].lfo as (number | null)[])[0] = 10
             savedScenes.scene_a = 4
+            const edited = { part: makePart(partId), scenes: makeScenes() }
+            for (const path of reverted) {
+              const keys = path.split('/').slice(1)
+              const last = keys.pop()!
+              let from: any = { part: saved, scenes: savedScenes }
+              let to: any = edited
+              for (const k of keys) { from = from?.[k]; to = to?.[k] }
+              if (from && to) to[last] = from[last]
+            }
             return {
               saved: opts.partsSavedState[partId] === 1 ? { part: saved, scenes: savedScenes } : null,
-              edited: { part: makePart(partId), scenes: makeScenes() },
+              edited,
               identical: false,
             }
           }
@@ -295,6 +306,7 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
             return lockStore.map(l => [...l])
           }
           case 'revert_part_values':
+            reverted.push(...args.paths)
             return makePart(args.partId)
 
           case 'save_parts':
@@ -2069,6 +2081,16 @@ test.describe('Parts Editor - Machine type', () => {
     await expect(page.locator('.parts-track-header span.machine-type').first())
       .toHaveText('MIDI')
     await expect(machinePicker(page)).toHaveCount(0)
+  })
+
+  test('the machine keeps its width when Edit mode turns on', async ({ page }) => {
+    const machine = page.locator('.parts-track-header .machine-type').first()
+    const view = await machine.boundingBox()
+    await enterEditMode(page)
+    await expect(machinePicker(page).first()).toBeVisible()
+    const edit = await machinePicker(page).first().boundingBox()
+    expect(edit!.width).toBeCloseTo(view!.width, 0)
+    expect(edit!.x).toBeCloseTo(view!.x, 0)
   })
 })
 
@@ -4865,9 +4887,20 @@ test.describe('Parts Editor - Undo and redo', () => {
     await expect(page.locator('.scene-matrix-head.selected')).toHaveText('6')
   })
 
-  test('neither is shown outside Edit mode', async ({ page }) => {
+  test('neither is shown outside Edit mode, and the header does not move', async ({ page }) => {
+    const tabs = page.locator('.header-tabs')
+    const before = await tabs.boundingBox()
     await page.locator('.mode-toggle').click()
-    await expect(page.locator('.write-history-controls')).toHaveCount(0)
+    await expect(page.locator('.write-history-controls')).toBeHidden()
+    expect(await tabs.boundingBox()).toEqual(before)
+  })
+
+  test('the version stays inside the header in Edit mode on a narrow window', async ({ page }) => {
+    await page.setViewportSize({ width: 1200, height: 800 })
+    const version = page.locator('.project-header .app-version')
+    await expect(version).toBeVisible()
+    const box = (await version.boundingBox())!
+    expect(box.x + box.width).toBeLessThanOrEqual(1200)
   })
 })
 
@@ -5012,8 +5045,8 @@ test.describe('Parts Editor - Reload saved value and pin', () => {
   test('right-click on a Parts field offers Reload saved value and Pin value', async ({ page }) => {
     await atkField(page).click({ button: 'right' })
     const menu = page.getByRole('menu')
-    await expect(menu.getByRole('menuitem')).toHaveText([/Reload saved value \(99\)$/, 'Pin value - exclude from Part reload'])
-    await expect(menu.getByRole('menuitem', { name: 'Pin value - exclude from Part reload' })).toBeEnabled()
+    await expect(menu.getByRole('menuitem')).toHaveText([/Reload saved value \(99\)$/, 'Pin value - Exclude it from Part reload'])
+    await expect(menu.getByRole('menuitem', { name: 'Pin value - Exclude it from Part reload' })).toBeEnabled()
     await page.keyboard.press('Escape')
     await expect(menu).toHaveCount(0)
   })
@@ -5021,7 +5054,7 @@ test.describe('Parts Editor - Reload saved value and pin', () => {
   test('Pin value marks the field and sends it', async ({ page }) => {
     await expect(atkField(page)).not.toHaveAttribute('data-locked', /.*/)
     await atkField(page).click({ button: 'right' })
-    await page.getByRole('menuitem', { name: 'Pin value - exclude from Part reload' }).click()
+    await page.getByRole('menuitem', { name: 'Pin value - Exclude it from Part reload' }).click()
 
     const calls = await getInvokeCalls(page, 'set_part_locks')
     expect(calls).toHaveLength(1)
@@ -5033,7 +5066,7 @@ test.describe('Parts Editor - Reload saved value and pin', () => {
 
     // Once pinned, the menu offers the way back
     await atkField(page).click({ button: 'right' })
-    await expect(page.getByRole('menuitem', { name: 'Unpin value - include in Part reload' })).toBeVisible()
+    await expect(page.getByRole('menuitem', { name: 'Unpin value - Include it in Part reload' })).toBeVisible()
   })
 
   test('the diffs window reverts a group', async ({ page }) => {
@@ -5055,7 +5088,7 @@ test.describe('Parts Editor - Reload saved value and pin', () => {
   test('Reload keeps the Part edited and says what it keeps', async ({ page }) => {
     const reload = page.locator('button.cancel-button', { hasText: 'Reload' })
     await atkField(page).click({ button: 'right' })
-    await page.getByRole('menuitem', { name: 'Pin value - exclude from Part reload' }).click()
+    await page.getByRole('menuitem', { name: 'Pin value - Exclude it from Part reload' }).click()
 
     await expect(reload).toHaveAttribute('title', 'Reload puts the Saved values back, except 1 pinned value')
     await reload.click()
@@ -5078,7 +5111,7 @@ test.describe('Parts Editor - Reload saved value and pin', () => {
 
   test('editing a pinned value back to saved clears its mark', async ({ page }) => {
     await atkField(page).click({ button: 'right' })
-    await page.getByRole('menuitem', { name: 'Pin value - exclude from Part reload' }).click()
+    await page.getByRole('menuitem', { name: 'Pin value - Exclude it from Part reload' }).click()
     await expect(atkField(page)).toHaveAttribute('data-locked', '')
 
     // The saved ATK is 99; the mock's backend drops the pin once save_parts has run
@@ -5086,6 +5119,53 @@ test.describe('Parts Editor - Reload saved value and pin', () => {
     await input.fill('99')
     await input.blur()
     await expect(page.locator('[data-locked]')).toHaveCount(0)
+  })
+
+  test('a reloaded row stays listed in white, both sides saved, until the window closes', async ({ page }) => {
+    await page.getByRole('button', { name: 'See diffs' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Edited params against saved' })
+    const count = dialog.locator('.part-changes-count')
+    const before = Number((await count.textContent())!.match(/\d+/)![0])
+    // T2's only row, so also the one its track cell sits in. Found by that cell: once
+    // reloaded the row has no buttons left to find it by
+    const row = dialog.locator('tr', { has: page.locator('td.part-changes-track', { hasText: 'T2' }) })
+    await expect(row).toHaveCount(1)
+    await row.getByRole('button', { name: 'Reload saved T2 AMP ATK' }).click()
+    await expect(row).toHaveClass(/part-changes-settled/)
+    await expect(row.locator('td.part-changes-saved')).toHaveText('99')
+    await expect(row.locator('td.part-changes-current')).toHaveText('99')
+    await expect(row.locator('td.part-changes-current')).toHaveCSS('color', 'rgb(255, 255, 255)')
+    await expect(row.locator('td.part-changes-track')).toHaveCSS('opacity', '1')
+    await expect(row.getByRole('button')).toHaveCount(0)
+    await expect(count).toContainText(String(before - 1))
+    // Closed and opened again, the row is gone
+    await dialog.getByRole('button', { name: 'Close' }).click()
+    await page.getByRole('button', { name: 'See diffs' }).click()
+    await expect(dialog.locator('tr.part-changes-settled')).toHaveCount(0)
+    await expect(dialog.getByRole('button', { name: 'Pin T2 AMP ATK' })).toHaveCount(0)
+  })
+
+  test('Go to param on a diffs row shows the field on its track and page', async ({ page }) => {
+    // From T1 to T2, whose ATK differs too
+    await page.getByRole('button', { name: 'See diffs' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Edited params against saved' })
+    await dialog.locator('tr', { has: page.getByRole('button', { name: 'Pin T2 AMP ATK' }) }).click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Go to param' }).click()
+    await expect(dialog).toHaveCount(0)
+    const field = page.locator('[data-lock-path="/part/amps/1/atk"]')
+    await expect(field).toBeInViewport()
+    await expect(field).toHaveClass(/param-flash/)
+  })
+
+  test('Go to param on a scene row opens the Scenes tab on that scene', async ({ page }) => {
+    await page.getByRole('button', { name: 'See diffs' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Edited params against saved' })
+    // Scene 1's T1 VOL differs from the saved copy
+    await dialog.locator('tr', { hasText: 'Scene 1 AMP' }).click({ button: 'right' })
+    await page.getByRole('menuitem', { name: 'Go to param' }).click()
+    await expect(page.locator('.scenes-grid')).toBeVisible()
+    await expect(page.locator('.scene-card.active .scene-number')).toHaveText('1')
+    await expect(page.locator('[data-lock-path="/scenes/scenes/0/tracks/0/amp/3"]').first()).toHaveClass(/param-flash/)
   })
 
   test('View mode has no field menu and no row actions', async ({ page }) => {
@@ -5112,8 +5192,8 @@ test.describe('Scenes - Reload saved value and pin', () => {
     const cell = page.locator('.scene-value-wrap.param-changed')
     await cell.click({ button: 'right' })
     const menu = page.getByRole('menu')
-    await expect(menu.getByRole('menuitem')).toHaveText([/Reload saved value \(\d+\)$/, 'Pin value - exclude from Part reload'])
-    await menu.getByRole('menuitem', { name: 'Pin value - exclude from Part reload' }).click()
+    await expect(menu.getByRole('menuitem')).toHaveText([/Reload saved value \(\d+\)$/, 'Pin value - Exclude it from Part reload'])
+    await menu.getByRole('menuitem', { name: 'Pin value - Exclude it from Part reload' }).click()
 
     const calls = await getInvokeCalls(page, 'set_part_locks')
     expect(calls).toHaveLength(1)

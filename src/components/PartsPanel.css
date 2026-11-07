@@ -196,6 +196,10 @@
 .parts-track-header .machine-type {
   flex: 0 0 auto;
   box-sizing: border-box;
+  /* One width in both modes, the badge's and the picker's alike, wide enough for the
+     longest name (NEIGHBOR): toggling Edit mode must not move anything */
+  width: 7.75em;
+  text-align: center;
   font-size: 11px;
   font-weight: 600;
   line-height: 1.4;
@@ -1631,17 +1635,21 @@
 
 .part-changes-action.part-changes-unpin-all:hover:not(:disabled) {
   opacity: 1;
+  color: #ef4444;
+}
+
+/* A little taller than the app's other tables: these rows carry actions */
+.part-changes-table td {
+  padding-top: 0.65rem;
+  padding-bottom: 0.65rem;
 }
 
 .part-changes-action:disabled {
   cursor: default;
 }
 
-/* Put back as saved while the window is open: listed until it closes, both sides alike */
-.part-changes-table tr.part-changes-settled td {
-  opacity: 0.45;
-}
-
+/* Put back as saved while the window is open: listed until it closes, both sides alike.
+   Only the current value changes, from the orange of an edit to the white of the rest */
 .part-changes-table tr.part-changes-settled td.part-changes-current {
-  color: inherit;
+  color: var(--elektron-text-primary);
 }

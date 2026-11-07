@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, act, renderHook, within, waitFor } from '@testing-library/react'
+import { render, screen, act, renderHook, within, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { usePartCommits, PartSaveControls, PartCommitState } from './PartSaveControls'
 import { WriteStatus } from '../types/writeStatus'
@@ -1248,6 +1248,30 @@ describe('the diffs window actions', () => {
     expect(row.querySelector('.part-changes-current')!.textContent)
       .toBe(row.querySelector('.part-changes-saved')!.textContent)
     expect(within(row).queryByRole('button')).toBeNull()
+  })
+
+  it('right-clicking a row offers Go to param, which closes the window and goes there', async () => {
+    const goTo = vi.fn()
+    const state = open({ goTo })
+    const d = await dialog()
+    const row = within(d).getByRole('button', { name: 'Pin T1 AMP ATK' }).closest('tr')!
+    fireEvent.contextMenu(row)
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).getAllByRole('menuitem').map(i => i.textContent?.trim()))
+      .toEqual(['Go to param', 'Reload saved value', 'Pin value - Exclude it from Part reload'])
+    await userEvent.setup().click(within(menu).getByRole('menuitem', { name: 'Go to param' }))
+    expect(state.hideDiffs).toHaveBeenCalled()
+    expect(goTo).toHaveBeenCalledWith(0, ['/part/amps/0/atk'])
+  })
+
+  it('the row menu pins and reloads like the row buttons, and Go to param waits for an editor', async () => {
+    const state = open()
+    const d = await dialog()
+    fireEvent.contextMenu(within(d).getByRole('button', { name: 'Pin T1 AMP ATK' }).closest('tr')!)
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).getByRole('menuitem', { name: 'Go to param' })).toBeDisabled()
+    await userEvent.setup().click(within(menu).getByRole('menuitem', { name: /Pin value/ }))
+    expect(state.lockValues).toHaveBeenCalledWith(0, ['/part/amps/0/atk'], [])
   })
 
   it('the window\'s Reload names the pinned count', async () => {

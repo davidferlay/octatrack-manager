@@ -841,6 +841,28 @@ h1 {
   margin: 0.25rem 0;
 }
 
+/* Go to param: the field the diffs window pointed to pulses twice */
+/* Drawn inside the field, so nothing around it can clip the ring */
+@keyframes paramFlash {
+  0%, 100% { box-shadow: inset 0 0 0 0 rgba(245, 158, 11, 0); }
+  35% { box-shadow: inset 0 0 0 3px rgba(245, 158, 11, 0.9); }
+}
+
+.param-flash {
+  animation: paramFlash 0.75s ease-in-out 2;
+}
+
+/* The Shortcuts & zoom figure sits on the text line as a Font Awesome icon does */
+.access-icon {
+  vertical-align: -0.125em;
+}
+
+/* A figure is lighter than the glyphs beside it, so it is drawn a little larger. Scaled
+   rather than sized, so the button keeps the size of its neighbours */
+.shortcuts-button .access-icon {
+  transform: scale(1.1);
+}
+
 /*
  * A pinned value, which Part reload leaves alone, carries a small pin at its top-right
  * corner. The mark
@@ -1223,7 +1245,11 @@ h1 {
 /* Status indicator area - contains save status and bank warning */
 .status-indicator-area {
   position: relative;
-  min-width: 200px;
+  /* Gives way first when the header is short of room, so the tabs and the version on
+     the right are never pushed out; a message wider than what is left is cut */
+  flex: 0 1 200px;
+  min-width: 0;
+  overflow: hidden;
   height: 24px;
 }
 

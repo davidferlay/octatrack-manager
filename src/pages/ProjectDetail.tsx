@@ -23,6 +23,7 @@ import { Version } from "../components/Version";
 import { ShortcutsButton } from "../components/ShortcutsButton";
 import { formatMixerLevel, formatMetronomePitch } from "../utils/format";
 import { isModalOpen } from "../hooks/useEscapeClose";
+import { paramLocation } from "../utils/partLocks";
 import "../App.css";
 
 // Most type definitions are now imported from ProjectsContext via Bank and ProjectMetadata types
@@ -484,6 +485,52 @@ export function ProjectDetail() {
     setSelectedSceneIndex(sceneId);
     if (projectPath) sessionStorage.setItem(`projScene:${projectPath}`, String(sceneId));
   }, [projectPath]);
+
+  /**
+   * Go to param, from a diffs window: open the tab, track, page or scene where the value
+   * is edited, then scroll to the field and flash it. The field is found by the pointer
+   * it carries (`data-lock-path`), inside its bank's panel, once that panel has drawn it.
+   */
+  const [focusTarget, setFocusTarget] = useState<{ bankId: string; paths: string[] } | null>(null);
+  const goToParam = useCallback((bankId: string, partIndex: number, paths: string[]) => {
+    const where = paramLocation(paths[0] ?? '');
+    if (!where) return;
+    setActiveTab(where.tab);
+    setSharedPartsActivePartIndex(partIndex);
+    if (where.tab === 'parts') {
+      if (where.track !== undefined) setSelectedTrackIndex(where.track);
+      if (where.page !== undefined) setSharedPartsPageIndex(where.page);
+      if (where.lfoTab) setSharedPartsLfoTab(where.lfoTab);
+    } else if (where.sceneId !== undefined) {
+      chooseScene(where.sceneId);
+    }
+    setFocusTarget({ bankId, paths });
+  }, [chooseScene]);
+  useEffect(() => {
+    if (!focusTarget) return;
+    let frame = 0;
+    let tries = 0;
+    // ponytail: polls for up to a second while the tab and its bank draw; a panel
+    // callback saying "drawn" would replace it if a slow bank ever misses the window
+    const find = () => {
+      const panel = document.querySelector(`[data-bank-id="${focusTarget.bankId}"]`);
+      const field = focusTarget.paths
+        .map(p => panel?.querySelector<HTMLElement>(`[data-lock-path="${p}"]`))
+        .find(Boolean);
+      if (field) {
+        field.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        field.classList.add('param-flash');
+        setTimeout(() => field.classList.remove('param-flash'), 1600);
+        setFocusTarget(null);
+      } else if (++tries < 60) {
+        frame = requestAnimationFrame(find);
+      } else {
+        setFocusTarget(null);
+      }
+    };
+    frame = requestAnimationFrame(find);
+    return () => cancelAnimationFrame(frame);
+  }, [focusTarget]);
 
   // Remember edit mode per project across navigation (e.g. round-trip to the Audio Pool page)
   useEffect(() => {
@@ -1694,6 +1741,7 @@ export function ProjectDetail() {
                             flex_slots: metadata.sample_slots.flex_slots,
                           } : undefined}
                           onWriteStatusChange={handleWriteStatusChange}
+                          onGoToParam={(partIndex, paths) => goToParam(bank.id, partIndex, paths)}
                         />
                       );
                     });
@@ -1748,6 +1796,7 @@ export function ProjectDetail() {
                             reloadKey={restoreKey}
                             selectedScene={selectedSceneIndex}
                             onSceneChange={chooseScene}
+                            onGoToParam={(partIndex, paths) => goToParam(bank.id, partIndex, paths)}
                           />
                         );
                       })}

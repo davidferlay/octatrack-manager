@@ -31,7 +31,7 @@ The Octatrack is a deep and powerful machine, but its small screen can make cert
 - **Cross-Project Copying:** Copy banks, parts, scenes, patterns, tracks, and sample slots between projects, with configurable options for each operation.
 - **Parts Editing:** Modify sound design snapshots for both audio and MIDI tracks, with full support for machine parameters and effects, and see exactly what Save or Reload would overwrite before doing it.
 - **Scenes Editing:** See which parameters each of a Part's 16 scenes holds, as a list, a matrix or a side-by-side comparison, set the crossfader ends and mutes, and edit, copy, clear or randomize scenes.
-- Any screen: the window opens sized for your display, and <kbd>Ctrl</kbd> + <kbd>+</kbd> / <kbd>-</kbd> zooms the whole interface (also from the Shortcuts & zoom window, behind the gear icon).
+- Any screen: the window opens sized for your display, and <kbd>Ctrl</kbd> + <kbd>+</kbd> / <kbd>-</kbd> zooms the whole interface (also from the Shortcuts & zoom window, behind the accessibility icon).
 
 ## Essential Concepts
 

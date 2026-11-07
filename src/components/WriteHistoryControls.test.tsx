@@ -212,11 +212,14 @@ describe('the two buttons', () => {
 
   const button = (name: 'Undo' | 'Redo') => screen.getByRole('button', { name })
 
-  it('is not there at all outside Edit mode', () => {
+  it('outside Edit mode keeps its room but is hidden and cannot be pressed', () => {
     const { container } = render(
-      <WriteHistoryControls history={state()} visible={false} />,
+      <WriteHistoryControls history={state({ can_undo: true, can_redo: true })} visible={false} />,
     )
-    expect(container).toBeEmptyDOMElement()
+    const pair = container.firstElementChild as HTMLElement
+    expect(pair).toHaveStyle({ visibility: 'hidden' })
+    expect(pair).toHaveAttribute('aria-hidden', 'true')
+    for (const b of pair.querySelectorAll('button')) expect(b).toBeDisabled()
   })
 
   it('offers both, in order', () => {
