@@ -19362,7 +19362,7 @@ pub(crate) mod tests {
         fn write_part_data_of_its_own_reading_changes_no_byte() {
             for bank in banks_for_writer_roundtrip() {
                 for (i, part) in bank.parts.unsaved.0.iter().enumerate() {
-                    let mut clone = part.clone();
+                    let mut clone = *part;
                     write_part_data(&mut clone, &part_data(part, i as u8));
                     assert_eq!(&clone, part, "Part {} changed", i);
                 }
@@ -19416,7 +19416,7 @@ pub(crate) mod tests {
         fn write_part_data_lands_every_field_the_reader_shows() {
             for bank in banks_for_writer_roundtrip() {
                 for layout in [[0u8, 1, 2, 3, 4, 4, 1, 0], [4, 3, 2, 1, 0, 0, 3, 2]] {
-                    let mut part = bank.parts.unsaved.0[0].clone();
+                    let mut part = bank.parts.unsaved.0[0];
                     part.audio_track_machine_types = layout;
                     let mut data = serde_json::to_value(part_data(&part, 0)).unwrap();
                     nudge(&mut data, "");
@@ -19441,7 +19441,7 @@ pub(crate) mod tests {
         fn write_scenes_of_its_own_reading_changes_no_byte() {
             for bank in banks_for_writer_roundtrip() {
                 for (i, part) in bank.parts.unsaved.0.iter().enumerate() {
-                    let mut clone = part.clone();
+                    let mut clone = *part;
                     let scenes = scenes_for_part(&bank, part, (false, false));
                     write_scenes(&mut clone, &scenes).unwrap();
                     assert_eq!(&clone, part, "Part {} changed", i);
@@ -28506,5 +28506,286 @@ mod exhaustive_fixture {
             // Off plus the twenty-four major and minor keys
             ms.arp.key = cycle(p, t, 25);
         }
+    }
+}
+
+/// Builds the Set used to check slot reorganising and the Parts diffs on the Octatrack.
+///
+/// Every sample is a run of beeps whose count is its identity, high pitched for the files
+/// assigned to Flex slots and low for Static ones, so what plays tells which sample a
+/// track or lock reaches. Writes `OTMFEAT` into `OTM_TEST_OUT` (default
+/// ~/OneDrive/OctatrackManager/Testing/reorganise-and-diffs-test) and refuses to overwrite.
+/// The steps to follow on the device are in the README next to it.
+#[cfg(test)]
+mod hardware_test_sets {
+    use super::*;
+    use crate::project_manager::{create_project_sync, create_set_sync};
+    use std::fs;
+
+    const WORDS: [&str; 6] = ["one", "two", "three", "four", "five", "six"];
+
+    /// `count` beeps of 30 ms, 40 ms apart, at `freq`: 44.1 kHz 16-bit mono, at most
+    /// 420 ms, so the device and the app both take it as a one-shot.
+    fn write_beeps(path: &Path, count: usize, freq: f64) {
+        let rate = 44_100u32;
+        let tone = (0.030 * rate as f64) as usize;
+        let gap = (0.040 * rate as f64) as usize;
+        let mut samples: Vec<i16> = Vec::new();
+        for _ in 0..count {
+            for i in 0..tone {
+                // A 64-sample fade at both ends, so no beep clicks
+                let ramp = (i.min(tone - 1 - i) as f64 / 64.0).min(1.0);
+                let t = i as f64 / rate as f64;
+                let v = 0.6 * ramp * (2.0 * std::f64::consts::PI * freq * t).sin();
+                samples.push((v * i16::MAX as f64) as i16);
+            }
+            samples.extend(std::iter::repeat_n(0i16, gap));
+        }
+        let data_len = (samples.len() * 2) as u32;
+        let mut b: Vec<u8> = Vec::with_capacity(44 + data_len as usize);
+        b.extend(b"RIFF");
+        b.extend((36 + data_len).to_le_bytes());
+        b.extend(b"WAVEfmt ");
+        b.extend(16u32.to_le_bytes());
+        b.extend(1u16.to_le_bytes()); // PCM
+        b.extend(1u16.to_le_bytes()); // mono
+        b.extend(rate.to_le_bytes());
+        b.extend((rate * 2).to_le_bytes());
+        b.extend(2u16.to_le_bytes());
+        b.extend(16u16.to_le_bytes());
+        b.extend(b"data");
+        b.extend(data_len.to_le_bytes());
+        for s in samples {
+            b.extend(s.to_le_bytes());
+        }
+        fs::write(path, b).unwrap();
+    }
+
+    /// A trig on `step` (0-based), in the device's mask byte order (see decode_trig_masks).
+    fn trig(bank: &mut BankFile, pattern: usize, track: usize, step: usize) {
+        let byte = BYTE_TO_STEP_OFFSET
+            .iter()
+            .position(|&o| o == step / 8 * 8)
+            .unwrap();
+        bank.patterns.0[pattern].audio_track_trigs.0[track]
+            .trig_masks
+            .trigger[byte] |= 1 << (step % 8);
+    }
+
+    /// A trig on `step` that plays slot `slot` (1-based) of the track's pool.
+    fn locked_trig(bank: &mut BankFile, pattern: usize, track: usize, step: usize, slot: u8) {
+        trig(bank, pattern, track, step);
+        bank.patterns.0[pattern].audio_track_trigs.0[track].plocks.0[step].flex_slot_id = slot - 1;
+    }
+
+    fn assign(project: &str, pool: &str, slots: &[(u16, &str)]) {
+        let assignments = slots
+            .iter()
+            .map(|&(slot_index, file)| SlotAssignment {
+                slot_index,
+                audio_path: format!("../AUDIO/BEEPS/{file}.wav"),
+                set_defaults: true,
+            })
+            .collect();
+        assign_samples_to_slots(project, pool, assignments).unwrap();
+    }
+
+    fn bank_a(project: &str) -> (PathBuf, BankFile) {
+        let path = Path::new(project).join("bank01.work");
+        let bank = BankFile::from_data_file(&path).unwrap();
+        (path, bank)
+    }
+
+    fn write_bank(path: &Path, bank: &mut BankFile) {
+        bank.checksum = bank.calculate_checksum().unwrap();
+        bank.to_data_file(path).unwrap();
+    }
+
+    /// SLOTMOVE: Flex F001-F004, F006, F007 and Static S001-S003, S005 hold samples (F005
+    /// and S004 are gaps for Tidy to close). Part 1, saved and unedited: T1-T4 Flex on
+    /// F001-F004, T5-T7 Static on S001-S003, T8 Static on S005. Four patterns, each
+    /// playing four sounds on steps 1, 5, 9 and 13:
+    /// A01 T1-T4 (high 1, 2, 3, 4), A02 T5-T8 (low 1, 2, 3, 4),
+    /// A03 T1 locked to F007, F006, F002, F001 (high 6, 5, 2, 1),
+    /// A04 T5 locked to S005, S003, S001, S002 (low 4, 3, 1, 2).
+    fn build_slotmove(set: &Path) {
+        let project = create_project_sync(set, "SLOTMOVE").unwrap();
+        assign(
+            &project,
+            "FLEX",
+            &[
+                (1, "high_one"),
+                (2, "high_two"),
+                (3, "high_three"),
+                (4, "high_four"),
+                (6, "high_five"),
+                (7, "high_six"),
+            ],
+        );
+        assign(
+            &project,
+            "STATIC",
+            &[
+                (1, "low_one"),
+                (2, "low_two"),
+                (3, "low_three"),
+                (5, "low_four"),
+            ],
+        );
+
+        let (path, mut bank) = bank_a(&project);
+        for part in [&mut bank.parts.unsaved.0[0], &mut bank.parts.saved.0[0]] {
+            for t in 0..4 {
+                part.audio_track_machine_types[t] = 1; // Flex
+                part.audio_track_machine_slots[t].flex_slot_id = t as u8; // F001-F004
+            }
+            for (t, slot) in [(4, 1u8), (5, 2), (6, 3), (7, 5)] {
+                part.audio_track_machine_types[t] = 0; // Static
+                part.audio_track_machine_slots[t].static_slot_id = slot - 1;
+            }
+        }
+        bank.parts_saved_state[0] = 1;
+        bank.parts_edited_bitmask = 0;
+        for (i, t) in (0..4).enumerate() {
+            trig(&mut bank, 0, t, i * 4);
+            trig(&mut bank, 1, t + 4, i * 4);
+        }
+        for (i, slot) in [7u8, 6, 2, 1].into_iter().enumerate() {
+            locked_trig(&mut bank, 2, 0, i * 4, slot);
+        }
+        for (i, slot) in [5u8, 3, 1, 2].into_iter().enumerate() {
+            locked_trig(&mut bank, 3, 4, i * 4, slot);
+        }
+        write_bank(&path, &mut bank);
+
+        use crate::slot_reorganise::{taken_slots, Pool};
+        let taken = |pool| {
+            taken_slots(&project, pool)
+                .unwrap()
+                .into_iter()
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(taken(Pool::Flex), [1, 2, 3, 4, 6, 7]);
+        assert_eq!(taken(Pool::Static), [1, 2, 3, 5]);
+        // Every assigned slot plays its whole file
+        let markers =
+            MarkersFile::from_data_file(&Path::new(&project).join("markers.work")).unwrap();
+        // high_one: one 30 ms beep and a 40 ms gap at 44.1 kHz, 1323 + 1764 frames
+        assert_eq!(markers.flex_slots[0].trim_end, 3087);
+    }
+
+    /// PARTDIFF: Part 1 of bank A holds edits against its saved copy, made with the app's
+    /// own Parts and scene writes after a Save:
+    /// T1 (Flex F001, high 1) AMP VOL 100 -> 40, FX2 DELAY -> PLATE REVERB (TIME 100, MIX 110),
+    /// T2 machine Static S001 (low 1) -> Flex F002 (high 2), scene 1 locks T1 AMP VOL to 20.
+    /// Part 2 was never saved and holds an edit (T3 AMP VOL 30). Part 3 is marked edited but
+    /// both copies are the same. Part 4 is saved and clean. A01 (Part 1): T1 on steps 1 and
+    /// 9, T2 on steps 5 and 13.
+    fn build_partdiff(set: &Path) {
+        let project = create_project_sync(set, "PARTDIFF").unwrap();
+        assign(&project, "FLEX", &[(1, "high_one"), (2, "high_two")]);
+        assign(&project, "STATIC", &[(1, "low_one")]);
+
+        // The saved baseline, written as the editor would, then saved with Save Part
+        let mut parts = read_parts_data(&project, "A").unwrap().parts;
+        let p1 = &mut parts[0];
+        p1.machines[0].machine_type = "Flex".into();
+        p1.machines[0].flex_slot_id = 0;
+        p1.machines[1].machine_type = "Static".into();
+        p1.machines[1].static_slot_id = 0;
+        p1.amps[0].vol = 100;
+        p1.fxs[0].fx2_type = 8; // DELAY
+        save_parts_data(&project, "A", parts).unwrap();
+        for part_id in 0..4 {
+            commit_part_data(&project, "A", part_id).unwrap();
+        }
+
+        let (path, mut bank) = bank_a(&project);
+        trig(&mut bank, 0, 0, 0);
+        trig(&mut bank, 0, 0, 8);
+        trig(&mut bank, 0, 1, 4);
+        trig(&mut bank, 0, 1, 12);
+        write_bank(&path, &mut bank);
+
+        // The edits, as the editors write them
+        let mut parts = read_parts_data(&project, "A").unwrap().parts;
+        parts[0].amps[0].vol = 40;
+        parts[0].fxs[0].fx2_type = 20; // PLATE REVERB
+        parts[0].fxs[0].fx2_param1 = 100; // TIME
+        parts[0].fxs[0].fx2_param6 = 110; // MIX
+        parts[0].machines[1].machine_type = "Flex".into();
+        parts[0].machines[1].flex_slot_id = 1; // F002
+        parts[1].amps[2].vol = 30;
+        save_parts_data(&project, "A", parts.into_iter().take(2).collect()).unwrap();
+        let none = || vec![None; 6];
+        save_scene(
+            &project,
+            "A",
+            0,
+            0,
+            vec![SceneTrackLocks {
+                track_id: 0,
+                machine: none(),
+                lfo: none(),
+                amp: vec![None, None, None, Some(20), None, None],
+                fx1: none(),
+                fx2: none(),
+                xlv: None,
+            }],
+        )
+        .unwrap();
+
+        // Part 2 never saved; Part 3 marked edited with nothing changed
+        let (path, mut bank) = bank_a(&project);
+        bank.parts_saved_state[1] = 0;
+        bank.parts_edited_bitmask |= 1 << 2;
+        write_bank(&path, &mut bank);
+
+        // Read back the way the diffs window reads it
+        let (_, bank) = bank_a(&project);
+        assert_eq!(bank.parts_saved_state, [1, 0, 1, 1]);
+        assert_eq!(bank.parts_edited_bitmask, 0b0111);
+        let p1 = read_part_copies(&project, "A", 0).unwrap();
+        let (saved, edited) = (&p1.saved.as_ref().unwrap(), &p1.edited);
+        assert!(!p1.identical);
+        assert_eq!((saved.part.amps[0].vol, edited.part.amps[0].vol), (100, 40));
+        assert_eq!(
+            (saved.part.fxs[0].fx2_type, edited.part.fxs[0].fx2_type),
+            (8, 20)
+        );
+        assert_eq!(saved.part.machines[1].machine_type, "Static");
+        assert_eq!(edited.part.machines[1].machine_type, "Flex");
+        assert_eq!(edited.part.machines[1].flex_slot_id, 1);
+        assert_eq!(saved.scenes.scenes[0].tracks[0].amp[3], None);
+        assert_eq!(edited.scenes.scenes[0].tracks[0].amp[3], Some(20));
+        // Scene 1 is the crossfader's A end, so the lock is heard with the fader fully left
+        assert_eq!(edited.scenes.scene_a, 0);
+        // ... and the B end is another scene, one with no locks
+        assert_ne!(edited.scenes.scene_b, 0);
+        assert!(read_part_copies(&project, "A", 1).unwrap().saved.is_none());
+        assert!(read_part_copies(&project, "A", 2).unwrap().identical);
+        assert!(read_part_copies(&project, "A", 3).unwrap().identical);
+    }
+
+    #[test]
+    #[ignore] // Writes the OTMFEAT test Set for the device; see the README next to it
+    fn create_reorganise_and_diffs_test_set() {
+        let out = std::env::var("OTM_TEST_OUT").unwrap_or_else(|_| {
+            format!(
+                "{}/OneDrive/OctatrackManager/Testing/reorganise-and-diffs-test",
+                std::env::var("HOME").unwrap()
+            )
+        });
+        fs::create_dir_all(&out).unwrap();
+        let set = PathBuf::from(create_set_sync(Path::new(&out), "OTMFEAT").unwrap());
+        let beeps = set.join("AUDIO").join("BEEPS");
+        fs::create_dir_all(&beeps).unwrap();
+        for (i, word) in WORDS.iter().enumerate() {
+            write_beeps(&beeps.join(format!("high_{word}.wav")), i + 1, 1760.0);
+            write_beeps(&beeps.join(format!("low_{word}.wav")), i + 1, 440.0);
+        }
+        build_slotmove(&set);
+        build_partdiff(&set);
+        println!("Written: {}", set.display());
     }
 }
