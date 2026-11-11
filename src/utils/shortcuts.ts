@@ -97,15 +97,42 @@ const TABS: Record<string, ShortcutGroup[]> = {
 
 /**
  * The groups for `page`, the page's own first and Everywhere last. On the project page
- * `section` is the open tab. `mac` says Cmd for Ctrl.
+ * `section` is the open tab. `mac` says Cmd for Ctrl, `azerty` , for ?.
  */
-export function shortcutsFor(page: ShortcutPage, section?: string, mac = false): ShortcutGroup[] {
+export function shortcutsFor(page: ShortcutPage, section?: string, mac = false, azerty = false): ShortcutGroup[] {
   const groups = page === 'home' ? [HOME, EVERYWHERE]
     : page === 'audio-pool' ? [AUDIO_POOL, PREVIEW, EVERYWHERE]
     : [...(TABS[section ?? ''] ?? []), PROJECT, EVERYWHERE];
-  if (!mac) return groups;
-  return groups.map(g => ({ ...g, rows: g.rows.map(r => ({ ...r, keys: r.keys.replace(/Ctrl/g, 'Cmd') })) }));
+  if (!mac && !azerty) return groups;
+  return groups.map(g => ({ ...g, rows: g.rows.map(r => {
+    const keys = mac ? r.keys.replace(/Ctrl/g, 'Cmd') : r.keys;
+    return { ...r, keys: azerty && keys === '?' ? ',' : keys };
+  }) }));
 }
 
 /** Whether the app runs on macOS, where Cmd stands in for Ctrl. */
 export const isMac = () => /Mac/.test(navigator.platform || navigator.userAgent);
+
+/*
+ * AZERTY puts ? on Shift + the key in M's place, whose bare press types ,. No layout
+ * API works in every webview (navigator.keyboard is Chromium only, not WebKit), so the
+ * layout is read off that key when pressed - e.code is where it sits, e.key what it types -
+ * and remembered.
+ */
+const AZERTY_KEY = 'keyboard-azerty';
+
+/** Whether a key press seen earlier showed an AZERTY keyboard. Until one does: no. */
+export function isAzerty(): boolean {
+  try { return localStorage.getItem(AZERTY_KEY) === 'true'; } catch { return false; }
+}
+
+/** The key that opens the shortcuts window: ?, or on AZERTY the same key without Shift. */
+export const opensShortcuts = (e: KeyboardEvent) => e.key === '?' || (e.key === ',' && e.code === 'KeyM');
+
+/** Remembers the layout when `e` shows it, and returns it; undefined when `e` says nothing. */
+export function learnLayout(e: KeyboardEvent): boolean | undefined {
+  if (e.code !== 'KeyM' && e.key !== ',' && e.key !== '?') return undefined;
+  const azerty = e.code === 'KeyM' && (e.key === ',' || e.key === '?');
+  try { localStorage.setItem(AZERTY_KEY, String(azerty)); } catch { /* not remembered */ }
+  return azerty;
+}

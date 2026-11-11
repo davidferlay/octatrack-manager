@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { isModalOpen, useEscapeClose } from "../hooks/useEscapeClose";
-import { isMac, shortcutsFor, type ShortcutPage } from "../utils/shortcuts";
+import { isAzerty, isMac, learnLayout, opensShortcuts, shortcutsFor, type ShortcutPage } from "../utils/shortcuts";
 import { getUiZoom, stepUiZoom } from "../utils/uiZoom";
 
 const TITLE = 'Shortcuts & zoom';
 
 /**
- * True when ? is being typed as text. Only free-text fields count: a parameter value
- * (`.param-value`), a read-only field, a select or a checkbox never takes a ?, and those
+ * True when ? or , is being typed as text. Only free-text fields count: a parameter value
+ * (`.param-value`), a read-only field, a select or a checkbox never takes either, and those
  * keep focus after a click, so counting them would make ? do nothing on most of a page.
  */
 function typing(target: EventTarget | null): boolean {
@@ -27,11 +27,14 @@ function typing(target: EventTarget | null): boolean {
  */
 export function ShortcutsButton({ page, section }: { page: ShortcutPage; section?: string }) {
   const [open, setOpen] = useState(false);
+  const [azerty, setAzerty] = useState(isAzerty);
   const close = useCallback(() => setOpen(false), []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== '?' || e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return;
+      const learnt = learnLayout(e);
+      if (learnt !== undefined) setAzerty(learnt);
+      if (!opensShortcuts(e) || e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return;
       // Not on top of another window: ? closes this one, and only this one
       if (!open && isModalOpen()) return;
       e.preventDefault();
@@ -47,12 +50,12 @@ export function ShortcutsButton({ page, section }: { page: ShortcutPage; section
       <button
         className="toolbar-button shortcuts-button"
         onClick={() => setOpen(true)}
-        title={`${TITLE} (?)`}
+        title={`${TITLE} (${azerty ? ',' : '?'})`}
         aria-label={TITLE}
       >
         <AccessIcon />
       </button>
-      {open && <ShortcutsModal page={page} section={section} onClose={close} />}
+      {open && <ShortcutsModal page={page} section={section} azerty={azerty} onClose={close} />}
     </>
   );
 }
@@ -75,7 +78,7 @@ function AccessIcon({ style }: { style?: CSSProperties }) {
   );
 }
 
-function ShortcutsModal({ page, section, onClose }: { page: ShortcutPage; section?: string; onClose: () => void }) {
+function ShortcutsModal({ page, section, azerty, onClose }: { page: ShortcutPage; section?: string; azerty: boolean; onClose: () => void }) {
   const [zoom, setZoom] = useState<number | null>(null);
   // A click on the backdrop closes, but only one that began there: a press inside that
   // ends over the backdrop, selecting text say, must not close it
@@ -130,7 +133,7 @@ function ShortcutsModal({ page, section, onClose }: { page: ShortcutPage; sectio
           <button className="modal-close" aria-label="Close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
-          {shortcutsFor(page, section, mac).map(group => (
+          {shortcutsFor(page, section, mac, azerty).map(group => (
             <section key={group.title} className="shortcuts-group">
               <h4>{group.title}</h4>
               <table className="shortcuts-table">

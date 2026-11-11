@@ -19,6 +19,7 @@ These shortcuts work across the entire application:
 | <kbd>Enter</kbd> | Click the focused button or select the focused item. |
 | <kbd>Escape</kbd> | Close a modal, cancel a dialog, or deselect all items. Whatever is on top closes first, one layer per press: a context menu before the dialog holding it, and a dialog before the page behind it. |
 | <kbd>?</kbd> | Open or close the Shortcuts & zoom window (not while typing text, such as in a search box). |
+| <kbd>,</kbd> | Open or close the Shortcuts & zoom window (not while typing text, such as in a search box). Only for keyboard with AZERTY layout. |
 | <kbd>Ctrl</kbd>+<kbd>+</kbd> (or <kbd>=</kbd>) | Zoom the whole interface in, up to 200%. A badge shows the new level. |
 | <kbd>Ctrl</kbd>+<kbd>-</kbd> | Zoom the whole interface out, down to 50%. |
 | <kbd>Ctrl</kbd>+<kbd>0</kbd> | Back to 100%. The zoom you choose is kept for the next launch, and the window opens large enough for it. On macOS, use <kbd>Cmd</kbd>. The keypad's <kbd>+</kbd>, <kbd>-</kbd> and <kbd>0</kbd> work too. |

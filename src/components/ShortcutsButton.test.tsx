@@ -8,6 +8,7 @@ import { ShortcutsButton } from './ShortcutsButton'
 
 describe('the Shortcuts & zoom window', () => {
   beforeEach(() => {
+    localStorage.clear()
     invokeMock.mockReset()
     invokeMock.mockImplementation(async (cmd: string, args?: { step: number }) => {
       if (cmd === 'get_ui_zoom') return 1.1
@@ -37,6 +38,28 @@ describe('the Shortcuts & zoom window', () => {
     await user.keyboard('?')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Name')).toHaveValue('?')
+  })
+
+  // e.code is the physical key: AZERTY types , (Shift: ?) from the key in M's place
+  const kbds = () => [...screen.getByRole('dialog').querySelectorAll('kbd')].map(k => k.textContent)
+
+  it('on AZERTY, , opens and closes it, and it then shows , for ?', () => {
+    render(<ShortcutsButton page="home" />)
+    fireEvent.keyDown(document.body, { key: ',', code: 'KeyM' })
+    expect(kbds()).toContain(',')
+    expect(kbds()).not.toContain('?')
+    expect(screen.getByRole('button', { name: 'Shortcuts & zoom' })).toHaveAttribute('title', 'Shortcuts & zoom (,)')
+    fireEvent.keyDown(document.body, { key: ',', code: 'KeyM' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('elsewhere , does nothing and it shows ?', () => {
+    render(<ShortcutsButton page="home" />)
+    fireEvent.keyDown(document.body, { key: ',', code: 'Comma' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Shortcuts & zoom' })).toHaveAttribute('title', 'Shortcuts & zoom (?)')
+    fireEvent.keyDown(document.body, { key: '?', code: 'Slash', shiftKey: true })
+    expect(kbds()).toContain('?')
   })
 
   it('? still opens it from a value field, which never takes a ?', async () => {

@@ -16,6 +16,15 @@ describe('the shortcuts listed for each page', () => {
     expect(everywhere.rows.map(r => r.keys)).toEqual(expect.arrayContaining(['Ctrl + / - / 0', '?', 'Escape']))
   })
 
+  it('on AZERTY, says , for ?, alone or with Cmd for Ctrl', () => {
+    for (const mac of [false, true]) {
+      const keys = shortcutsFor('home', undefined, mac, true).flatMap(g => g.rows.map(r => r.keys))
+      expect(keys).toContain(',')
+      expect(keys).not.toContain('?')
+      expect(keys).toContain(mac ? 'Cmd + F' : 'Ctrl + F')
+    }
+  })
+
   it('a project lists what the open tab offers, then the whole project page', () => {
     expect(titles(shortcutsFor('project', 'flex-slots'))).toEqual(['Sample slots', 'Sample preview', 'Project', 'Everywhere'])
     expect(titles(shortcutsFor('project', 'parts'))).toEqual(['Parts', 'Project', 'Everywhere'])
