@@ -25,7 +25,7 @@ Every write made by the editors goes on one list, in the order it happened, whic
 |---|---|
 | [Parts](./parts-editor.md) | Any parameter change, machine, effect or sample slot assignment |
 | [Parts](./parts-editor.md) and [Scenes](./scenes.md) | Save, Save All and Reload of a Part |
-| [Parts](./parts-editor.md) and [Scenes](./scenes.md) | Reload saved value (one value or one group) |
+| [Parts](./parts-editor.md) and [Scenes](./scenes.md) | Reload value from Part (one value or one group) |
 | [Scenes](./scenes.md) | Any scene change: values, Paste, Clear, Randomize, Swap A/B, track copies |
 | [Scenes](./scenes.md) | Moving a crossfader end, muting or unmuting an end |
 | [Overview](./project-detail.md) | Memory settings |
@@ -35,7 +35,7 @@ A run of quick edits to the same thing, such as turning a value with the mouse w
 
 Undoing a Save also puts back the Part's previously saved copy, so the device's Reload Part behaves as it did before that Save.
 
-Pinning and unpinning values are not on the list: they only change what the next Reload does. Undoing a Save or a Reload saved value does not bring back the pins it cleared.
+Pinning and unpinning values are not on the list: they only change what the next Reload does. Undoing a Save or a Reload value from Part does not bring back the pins it cleared.
 
 ## What cannot be undone
 

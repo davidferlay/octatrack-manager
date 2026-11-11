@@ -481,11 +481,11 @@ export function FieldMenu({ state }: { state: PartCommitState }) {
       <MenuItem
         icon="fa-rotate-left"
         label={row && head
-          ? (row.group ? `Reload saved ${head.page} (${head.saved})` : `Reload saved value (${row.saved})`)
-          : 'Reload saved value'}
+          ? (row.group ? `Reload ${head.page} from Part (${head.saved})` : `Reload value from Part (${row.saved})`)
+          : 'Reload value from Part'}
         enabled={!busy && !!row && !locked}
-        title={locked ? 'Pinned: unpin it to reload the saved value' : row ? undefined : none}
-        onSelect={() => row && state.revertValues(fieldMenu.partIndex, row.revert, `Reload saved ${action}`)}
+        title={locked ? 'Pinned: unpin it to reload this value from the Part' : row ? undefined : none}
+        onSelect={() => row && state.revertValues(fieldMenu.partIndex, row.revert, `Reload ${action} from Part`)}
       />
       {locked && row ? (
         <MenuItem icon="fa-thumbtack-slash" label="Unpin value - Include it in Part reload" enabled={!busy}
@@ -587,7 +587,7 @@ function PartDiffsModal({ state, partIndex, partNames }: {
                 <button
                   className="part-changes-action part-changes-unpin-all"
                   aria-label={`Unpin all values of ${name}`}
-                  title="Unpin all: Part reload puts every saved value back"
+                  title="Unpin all: Reload all values from Part then puts every value back"
                   disabled={frozen}
                   onClick={() => act(() => state.lockValues(partIndex, [], held))}
                 >
@@ -632,10 +632,10 @@ function PartDiffsModal({ state, partIndex, partNames }: {
                   <>
                     <button
                       className="part-changes-action"
-                      aria-label={`Reload saved ${action}`}
-                      title={pinned ? 'Pinned: unpin it to reload the saved value' : 'Reload the saved value'}
+                      aria-label={`Reload ${action} from Part`}
+                      title={pinned ? 'Pinned: unpin it to reload this value from the Part' : 'Reload value from Part: this value goes back to the one saved in the Part, as the Saved column shows'}
                       disabled={frozen || pinned}
-                      onClick={() => act(() => state.revertValues(partIndex, r.revert, `Reload saved ${action}`))}
+                      onClick={() => act(() => state.revertValues(partIndex, r.revert, `Reload ${action} from Part`))}
                     >
                       <i className="fas fa-rotate-left" aria-hidden="true" />
                     </button>
@@ -697,15 +697,16 @@ function PartDiffsModal({ state, partIndex, partNames }: {
           frozen={frozen}
           onClose={() => setRowMenu(null)}
           goTo={state.goTo && (() => { hideDiffs(); state.goTo?.(partIndex, rowMenu.row.paths); })}
-          reload={paths => act(() => state.revertValues(partIndex, paths, `Reload saved ${actionName(rowMenu.row)}`))}
+          reload={paths => act(() => state.revertValues(partIndex, paths, `Reload ${actionName(rowMenu.row)} from Part`))}
           pin={(add, remove) => act(() => state.lockValues(partIndex, add, remove))}
         />}
         <div className="modal-footer">
           <div className="modal-buttons-row">
             <button
               className="modal-button"
-              aria-label={`Reload ${name}`}
-              title={held.length > 0 ? state.reloadTitle(partIndex) : 'Reload puts the Saved values back'}
+              aria-label={`Reload all values from Part ${name}`}
+              title={`Reload all values from Part: every value goes back to the one saved in the Part, as the Saved column shows${
+                held.length > 0 ? `, except ${held.length} pinned ${held.length === 1 ? 'value' : 'values'}` : ''}`}
               disabled={busy || partsSavedState[partIndex] !== 1}
               onClick={async () => {
                 // With pins, Reload leaves those values as they are: the window stays and
@@ -718,16 +719,29 @@ function PartDiffsModal({ state, partIndex, partNames }: {
                 }
               }}
             >
-              Reload
+              Reload all values from Part
             </button>
             <button
               className="modal-button"
-              aria-label={`Save ${name}`}
-              title="Save makes the Current values the saved ones"
-              disabled={busy}
-              onClick={async () => { await state.commitPart(partIndex); hideDiffs(); }}
+              aria-label={`Save all current values to Part ${name}`}
+              title="Save all current values to Part: every value as the Current column shows becomes the one saved in the Part, which a reload goes back to"
+              disabled={frozen}
+              onClick={async () => {
+                // With nothing listed there is nothing to show settled: it closes
+                if (rows.length === 0) {
+                  await state.commitPart(partIndex);
+                  hideDiffs();
+                  return;
+                }
+                // Like a row's Reload value from Part, the window stays and reads again: each
+                // row settles on its current value, the saved one now
+                await act(async () => {
+                  await state.commitPart(partIndex);
+                  setSeen(new Map(rows.map(r => [rowKey(r), { ...r, saved: r.current }])));
+                });
+              }}
             >
-              Save
+              Save all current values to Part
             </button>
             <button className="modal-button" onClick={hideDiffs}>Close</button>
           </div>
@@ -740,7 +754,7 @@ function PartDiffsModal({ state, partIndex, partNames }: {
 
 /**
  * Right-click on a row of the diffs window: Go to param, which closes the window and
- * shows the value where it is edited, then the row's own Reload saved value and Pin.
+ * shows the value where it is edited, then the row's own Reload value from Part and Pin.
  * A row already put back as saved only offers Go to param.
  */
 function RowMenu({ row, x, y, held, frozen, onClose, goTo, reload, pin }: {
@@ -762,8 +776,8 @@ function RowMenu({ row, x, y, held, frozen, onClose, goTo, reload, pin }: {
         onSelect={() => goTo?.()} />
       {!row.settled && (
         <>
-          <MenuItem icon="fa-rotate-left" label="Reload saved value" enabled={!frozen && !pinned}
-            title={pinned ? 'Pinned: unpin it to reload the saved value' : undefined}
+          <MenuItem icon="fa-rotate-left" label="Reload value from Part" enabled={!frozen && !pinned}
+            title={pinned ? 'Pinned: unpin it to reload this value from the Part' : undefined}
             onSelect={() => reload(row.revert)} />
           {pinned ? (
             <MenuItem icon="fa-thumbtack-slash" label="Unpin value - Include it in Part reload" enabled={!frozen}

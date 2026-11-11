@@ -116,7 +116,7 @@ describe('FieldMenu', () => {
   it('offers the saved value and pins a differing value', async () => {
     const state = stub(copiesWith(vol))
     render(<FieldMenu state={state} />)
-    const reset = await screen.findByRole('menuitem', { name: /Reload saved value \(0\)/ })
+    const reset = await screen.findByRole('menuitem', { name: /Reload value from Part \(0\)/ })
     expect(reset).toBeEnabled()
     const user = userEvent.setup()
     await user.click(screen.getByRole('menuitem', { name: /Pin value/ }))
@@ -124,11 +124,11 @@ describe('FieldMenu', () => {
     expect(state.closeFieldMenu).toHaveBeenCalled()
   })
 
-  it('Reload saved sends the row revert with its undo label', async () => {
+  it('Reload value from Part sends the row revert with its undo label', async () => {
     const state = stub(copiesWith(vol))
     render(<FieldMenu state={state} />)
-    await userEvent.setup().click(await screen.findByRole('menuitem', { name: /Reload saved/ }))
-    expect(state.revertValues).toHaveBeenCalledWith(0, [AMP_VOL], 'Reload saved T1 AMP VOL')
+    await userEvent.setup().click(await screen.findByRole('menuitem', { name: /^Reload .*from Part/ }))
+    expect(state.revertValues).toHaveBeenCalledWith(0, [AMP_VOL], 'Reload T1 AMP VOL from Part')
   })
 
   it('disables both entries on a value matching the saved copy', async () => {
@@ -136,7 +136,7 @@ describe('FieldMenu', () => {
     const lock = await screen.findByRole('menuitem', { name: /Pin value/ })
     expect(lock).toBeDisabled()
     expect(lock).toHaveAttribute('title', 'Matches the saved copy')
-    expect(screen.getByRole('menuitem', { name: /Reload saved/ })).toBeDisabled()
+    expect(screen.getByRole('menuitem', { name: /^Reload .*from Part/ })).toBeDisabled()
   })
 
   it('says so when there is no saved copy', async () => {
@@ -152,21 +152,21 @@ describe('FieldMenu', () => {
       {}, '/part/fxs/0/fx1_param3',
     )
     render(<FieldMenu state={state} />)
-    const reset = await screen.findByRole('menuitem', { name: /Reload saved FX1/ })
-    expect(reset.textContent).toMatch(/Reload saved FX1 \(.+\)/)
+    const reset = await screen.findByRole('menuitem', { name: /Reload FX1 from Part/ })
+    expect(reset.textContent).toMatch(/Reload FX1 from Part \(.+\)/)
     await userEvent.setup().click(reset)
     const [, paths, label] = (state.revertValues as ReturnType<typeof vi.fn>).mock.calls[0]
     expect(paths).toContain('/part/fxs/0/fx1_type')
-    expect(label).toBe('Reload saved T1 FX1')
+    expect(label).toBe('Reload T1 FX1 from Part')
   })
 
   it('offers Unpin on a pinned value, and no reload of it', async () => {
     const state = stub(copiesWith(vol), { locks: [[AMP_VOL], [], [], []] })
     render(<FieldMenu state={state} />)
     const unpin = await screen.findByRole('menuitem', { name: /Unpin value/ })
-    const reload = screen.getByRole('menuitem', { name: /Reload saved/ })
+    const reload = screen.getByRole('menuitem', { name: /^Reload .*from Part/ })
     expect(reload).toBeDisabled()
-    expect(reload).toHaveAttribute('title', 'Pinned: unpin it to reload the saved value')
+    expect(reload).toHaveAttribute('title', 'Pinned: unpin it to reload this value from the Part')
     await userEvent.setup().click(unpin)
     expect(state.lockValues).toHaveBeenCalledWith(0, [], [AMP_VOL])
   })
@@ -197,7 +197,7 @@ describe('FieldMenu', () => {
   it('refuses every entry while a write is in flight', async () => {
     render(<FieldMenu state={stub(copiesWith(vol), { isCommitting: true })} />)
     expect(await screen.findByRole('menuitem', { name: /Pin value/ })).toBeDisabled()
-    expect(screen.getByRole('menuitem', { name: /Reload saved/ })).toBeDisabled()
+    expect(screen.getByRole('menuitem', { name: /^Reload .*from Part/ })).toBeDisabled()
   })
 })
 

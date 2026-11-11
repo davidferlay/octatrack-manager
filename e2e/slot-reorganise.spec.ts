@@ -301,7 +301,7 @@ test.describe('Reorganising sample slots', () => {
       { path: '/test/TestProject', slotType: 'flex', sources: [1], target: 3 },
     ])
     await expect(toast(page)).toHaveText(/F001 and F003 swapped/)
-    await expect(toast(page)).toHaveClass(/warning/)
+    await expect(toast(page)).toHaveClass(/info/)
   })
 
   test('with Hide empty on, the drop box ends on the last row shown', async ({ page }) => {

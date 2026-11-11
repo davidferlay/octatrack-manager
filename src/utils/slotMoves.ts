@@ -92,12 +92,15 @@ const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`
 const pushedPart = (pushed: [number, number][], prefix: Prefix) =>
   `, ${plural(pushed.length, 'slot')} pushed down (${range(prefix, pushed.map(([o]) => o))} now ${range(prefix, pushed.map(([, n]) => n))})`
 
-/** Message for a drag-and-drop move; a swap or a push is a warning since other slots changed too. */
+/**
+ * Message for a drag-and-drop move; a push is a warning since slots beyond the drop
+ * changed too. A swap is not: it is exactly what dropping on a taken slot asks for.
+ */
 export function moveNotice(report: SlotMoveReport, prefix: Prefix): { message: string; kind: 'info' | 'warning' } {
   if (report.moves.length === 0) return { message: 'Nothing to move', kind: 'info' }
   if (report.swapped) {
     const [a, b] = report.swapped
-    return { message: `${label(prefix, a)} and ${label(prefix, b)} swapped`, kind: 'warning' }
+    return { message: `${label(prefix, a)} and ${label(prefix, b)} swapped`, kind: 'info' }
   }
   const pushedOld = new Set(report.pushed.map(([o]) => o))
   const dragged = report.moves.filter(([o]) => !pushedOld.has(o))

@@ -568,10 +568,10 @@ describe('the diffs window', () => {
     const state = idle({ modifiedPartIds: new Set([2]), diffsFor: 2, readCopies: vi.fn().mockResolvedValue(volMoved()) })
     controls(state, 0)
     const dialog = await screen.findByRole('dialog')
-    const save = within(dialog).getByRole('button', { name: 'Save PART 3' })
-    const reload = within(dialog).getByRole('button', { name: 'Reload PART 3' })
-    expect(save).toHaveAttribute('title', expect.stringMatching(/Current values the saved ones/))
-    expect(reload).toHaveAttribute('title', expect.stringMatching(/Saved values back/))
+    const save = within(dialog).getByRole('button', { name: 'Save all current values to Part PART 3' })
+    const reload = within(dialog).getByRole('button', { name: 'Reload all values from Part PART 3' })
+    expect(save).toHaveAttribute('title', expect.stringMatching(/as the Current column shows becomes the one saved/))
+    expect(reload).toHaveAttribute('title', expect.stringMatching(/goes back to the one saved in the Part, as the Saved column shows/))
     const user = userEvent.setup()
     await user.click(save)
     expect(state.commitPart).toHaveBeenCalledWith(2)
@@ -622,7 +622,7 @@ describe('the diffs window', () => {
 
   it('draws Save like Reload and Close, not as the primary action', async () => {
     controls(idle({ modifiedPartIds: new Set([0]), diffsFor: 0, readCopies: vi.fn().mockResolvedValue(volMoved()) }))
-    expect(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Save PART 1' })).not.toHaveClass('primary')
+    expect(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Save all current values to Part PART 1' })).not.toHaveClass('primary')
   })
 
   it('shows the track as the app\'s track badge, and the parameter\'s help on hover', async () => {
@@ -827,23 +827,44 @@ describe('the diffs window, further', () => {
     expect(await screen.findByText(/Could not read the Part: Error: bank file locked/)).toBeInTheDocument()
   })
 
-  it('closes once its Save has run', async () => {
-    const state = opened(copiesWith(c => { c.part.amps[0].vol = 70 }))
-    await userEvent.setup().click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Save PART 1' }))
+  it('stays open after its Save, each row settled on its current value, now the saved one', async () => {
+    const edited = copiesWith(c => { c.part.amps[0].vol = 70 })
+    const readCopies = vi.fn()
+      .mockResolvedValueOnce(edited)
+      // Re-read after the Save: the edited copy is the saved one
+      .mockResolvedValueOnce({ saved: edited.edited, edited: edited.edited, identical: true })
+    const state = opened(edited, { readCopies })
+    const d = await screen.findByRole('dialog')
+    await waitFor(() => expect(d.querySelector('td.part-changes-current')).not.toBeNull())
+    const current = d.querySelector('td.part-changes-current')!.textContent
+    expect(current).not.toBe(d.querySelector('td.part-changes-saved')!.textContent)
+    await userEvent.setup().click(within(d).getByRole('button', { name: 'Save all current values to Part PART 1' }))
+    expect(state.commitPart).toHaveBeenCalledWith(0)
+    expect(state.hideDiffs).not.toHaveBeenCalled()
+    await waitFor(() => expect(d.querySelector('tr.part-changes-settled')).not.toBeNull())
+    const row = d.querySelector('tr.part-changes-settled') as HTMLElement
+    expect(row.querySelector('.part-changes-saved')!.textContent).toBe(current)
+    expect(row.querySelector('.part-changes-current')!.textContent).toBe(current)
+    expect(within(row).queryByRole('button')).toBeNull()
+  })
+
+  it('closes after its Save when nothing was listed', async () => {
+    const state = opened({ saved: null, edited: copy(), identical: false }, { partsSavedState: [0, 1, 1, 1] })
+    await userEvent.setup().click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Save all current values to Part PART 1' }))
     expect(state.commitPart).toHaveBeenCalledWith(0)
     expect(state.hideDiffs).toHaveBeenCalled()
   })
 
   it('closes once its Reload has run', async () => {
     const state = opened(copiesWith(c => { c.part.amps[0].vol = 70 }))
-    await userEvent.setup().click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Reload PART 1' }))
+    await userEvent.setup().click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Reload all values from Part PART 1' }))
     expect(state.reloadPart).toHaveBeenCalledWith(0)
     expect(state.hideDiffs).toHaveBeenCalled()
   })
 
   it('stays open after its Reload while values are pinned, and reads both copies again', async () => {
     const state = opened(copiesWith(c => { c.part.amps[0].vol = 70 }), { locks: [['/part/amps/0/vol'], [], [], []] })
-    await userEvent.setup().click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Reload PART 1' }))
+    await userEvent.setup().click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Reload all values from Part PART 1' }))
     expect(state.reloadPart).toHaveBeenCalledWith(0)
     expect(state.hideDiffs).not.toHaveBeenCalled()
     await waitFor(() => expect(state.readCopies).toHaveBeenCalledTimes(2))
@@ -852,15 +873,15 @@ describe('the diffs window, further', () => {
   it('refuses Save and Reload while a write is in flight', async () => {
     opened(copiesWith(c => { c.part.amps[0].vol = 70 }), { isCommitting: true })
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByRole('button', { name: 'Save PART 1' })).toBeDisabled()
-    expect(within(dialog).getByRole('button', { name: 'Reload PART 1' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Save all current values to Part PART 1' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Reload all values from Part PART 1' })).toBeDisabled()
   })
 
   it('refuses Reload, but not Save, on a Part never saved', async () => {
     opened({ saved: null, edited: copy(), identical: false }, { partsSavedState: [0, 1, 1, 1] })
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByRole('button', { name: 'Reload PART 1' })).toBeDisabled()
-    expect(within(dialog).getByRole('button', { name: 'Save PART 1' })).toBeEnabled()
+    expect(within(dialog).getByRole('button', { name: 'Reload all values from Part PART 1' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Save all current values to Part PART 1' })).toBeEnabled()
   })
 
   it('counts several differences in the plural', async () => {
@@ -1094,10 +1115,10 @@ describe('locks', () => {
     const { result, reloaded } = harness()
     await act(async () => {})
     const before = reads().length
-    await act(() => result.current.revertValues(2, ['/part/fxs/0/fx1_param3'], 'Reload saved T1 FX1 FREQ'))
+    await act(() => result.current.revertValues(2, ['/part/fxs/0/fx1_param3'], 'Reload T1 FX1 FREQ from Part'))
     expect(invokeMock).toHaveBeenCalledWith('revert_part_values', {
       path: '/test/project', bankId: 'A', partId: 2,
-      paths: ['/part/fxs/0/fx1_param3'], label: 'Reload saved T1 FX1 FREQ',
+      paths: ['/part/fxs/0/fx1_param3'], label: 'Reload T1 FX1 FREQ from Part',
     })
     expect(reloaded).toEqual([{ index: 2, part: { atk: 5 } }])
     expect([...result.current.modifiedPartIds]).toEqual([2])
@@ -1115,7 +1136,7 @@ describe('edits the editor still holds back', () => {
   }
 
   const calls: [string, (r: { current: ReturnType<typeof usePartCommits<{ atk: number }>> }) => Promise<void>, string][] = [
-    ['Revert', r => r.current.revertValues(1, ['/part/amps/0/atk'], 'Reload saved T1 AMP ATK'), 'revert_part_values'],
+    ['Revert', r => r.current.revertValues(1, ['/part/amps/0/atk'], 'Reload T1 AMP ATK from Part'), 'revert_part_values'],
     ['Lock', r => r.current.lockValues(1, ['/part/amps/0/atk'], []), 'set_part_locks'],
     ['Reload', r => r.current.reloadPart(1), 'reload_part'],
     ['Save', r => r.current.commitPart(1), 'commit_part'],
@@ -1148,7 +1169,7 @@ describe('edits the editor still holds back', () => {
 
   it('works for an editor that has nothing to flush', async () => {
     const { result } = harness()
-    await act(() => result.current.revertValues(0, ['/part/amps/0/atk'], 'Reload saved T1 AMP ATK'))
+    await act(() => result.current.revertValues(0, ['/part/amps/0/atk'], 'Reload T1 AMP ATK from Part'))
     expect(invokeMock).toHaveBeenCalledWith('revert_part_values', expect.anything())
   })
 })
@@ -1172,24 +1193,24 @@ describe('the diffs window actions', () => {
   it('a type change reads as one group, its parameters under it', async () => {
     open()
     const d = await dialog()
-    await within(d).findByRole('button', { name: 'Reload saved T1 FX1' })
+    await within(d).findByRole('button', { name: 'Reload T1 FX1 from Part' })
     expect(d.querySelectorAll('tr.part-changes-head')).toHaveLength(1)
     const members = d.querySelectorAll('tr.part-changes-member')
     expect(members.length).toBeGreaterThan(0)
     // Only the head and the plain row carry actions
-    expect(within(d).getAllByRole('button', { name: /^Reload saved / })).toHaveLength(2)
+    expect(within(d).getAllByRole('button', { name: /^Reload .+ from Part$/ })).toHaveLength(2)
     expect(within(d).getAllByRole('button', { name: /^Pin / })).toHaveLength(2)
     expect(d.querySelector('.part-changes-member .fa-rotate-left')).toBeNull()
   })
 
-  it('Reload saved on the group sends the type and every saved position', async () => {
+  it('Reload value from Part on the group sends the type and every saved position', async () => {
     const state = open()
     const d = await dialog()
-    const btn = within(d).getByRole('button', { name: 'Reload saved T1 FX1' })
+    const btn = within(d).getByRole('button', { name: 'Reload T1 FX1 from Part' })
     await userEvent.setup().click(btn)
     const [part, paths, label] = (state.revertValues as ReturnType<typeof vi.fn>).mock.calls[0]
     expect(part).toBe(0)
-    expect(label).toBe('Reload saved T1 FX1')
+    expect(label).toBe('Reload T1 FX1 from Part')
     expect(paths).toContain('/part/fxs/0/fx1_type')
     expect(paths).toContain('/part/fxs/0/fx1_param1')
   })
@@ -1217,7 +1238,7 @@ describe('the diffs window actions', () => {
     expect(pin).toHaveAttribute('aria-pressed', 'true')
     expect(pin.closest('tr')!.querySelectorAll('.fa-thumbtack')).toHaveLength(1)
     expect(within(d).queryByRole('button', { name: 'Pin T1 AMP ATK' })).toBeNull()
-    expect(within(d).getByRole('button', { name: 'Reload saved T1 AMP ATK' })).toBeDisabled()
+    expect(within(d).getByRole('button', { name: 'Reload T1 AMP ATK from Part' })).toBeDisabled()
     await userEvent.setup().click(pin)
     expect(state.lockValues).toHaveBeenCalledWith(0, [], ['/part/amps/0/atk'])
   })
@@ -1242,7 +1263,7 @@ describe('the diffs window actions', () => {
       .mockResolvedValueOnce(copiesWith(c => { c.part.fxs[0].fx1_type = 18 }))
     open({ readCopies })
     const d = await dialog()
-    await userEvent.setup().click(within(d).getByRole('button', { name: 'Reload saved T1 AMP ATK' }))
+    await userEvent.setup().click(within(d).getByRole('button', { name: 'Reload T1 AMP ATK from Part' }))
     await waitFor(() => expect(d.querySelector('tr.part-changes-settled')).not.toBeNull())
     const row = d.querySelector('tr.part-changes-settled') as HTMLElement
     expect(row.querySelector('.part-changes-current')!.textContent)
@@ -1258,7 +1279,7 @@ describe('the diffs window actions', () => {
     fireEvent.contextMenu(row)
     const menu = await screen.findByRole('menu')
     expect(within(menu).getAllByRole('menuitem').map(i => i.textContent?.trim()))
-      .toEqual(['Go to param', 'Reload saved value', 'Pin value - Exclude it from Part reload'])
+      .toEqual(['Go to param', 'Reload value from Part', 'Pin value - Exclude it from Part reload'])
     await userEvent.setup().click(within(menu).getByRole('menuitem', { name: 'Go to param' }))
     expect(state.hideDiffs).toHaveBeenCalled()
     expect(goTo).toHaveBeenCalledWith(0, ['/part/amps/0/atk'])
@@ -1276,8 +1297,8 @@ describe('the diffs window actions', () => {
 
   it('the window\'s Reload names the pinned count', async () => {
     open({ locks: [['/part/amps/0/atk', '/part/amps/0/hold'], [], [], []] })
-    expect(within(await dialog()).getByRole('button', { name: 'Reload PART 1' }))
-      .toHaveAttribute('title', 'Reload puts the Saved values back, except 2 pinned values')
+    expect(within(await dialog()).getByRole('button', { name: 'Reload all values from Part PART 1' }))
+      .toHaveAttribute('title', 'Reload all values from Part: every value goes back to the one saved in the Part, as the Saved column shows, except 2 pinned values')
   })
 
   it('reads both copies again after an action', async () => {
@@ -1297,10 +1318,10 @@ describe('the diffs window actions', () => {
     expect(order).toEqual(['flush', 'read'])
   })
 
-  it('refuses Reload saved and Pin while a write is in flight', async () => {
+  it('refuses Reload value from Part and Pin while a write is in flight', async () => {
     open({ isCommitting: true })
     const d = await dialog()
-    expect(within(d).getByRole('button', { name: 'Reload saved T1 AMP ATK' })).toBeDisabled()
+    expect(within(d).getByRole('button', { name: 'Reload T1 AMP ATK from Part' })).toBeDisabled()
     expect(within(d).getByRole('button', { name: 'Pin T1 AMP ATK' })).toBeDisabled()
   })
 
@@ -1318,11 +1339,11 @@ describe('the diffs window actions', () => {
       .mockReturnValueOnce(new Promise<PartCopies>(r => { finishRead = r }))
     open({ readCopies, locks: [['/part/amps/0/atk'], [], [], []] })
     const d = await dialog()
-    await userEvent.setup().click(within(d).getByRole('button', { name: 'Reload saved T1 FX1' }))
-    expect(within(d).getByRole('button', { name: 'Reload saved T1 FX1' })).toBeDisabled()
+    await userEvent.setup().click(within(d).getByRole('button', { name: 'Reload T1 FX1 from Part' }))
+    expect(within(d).getByRole('button', { name: 'Reload T1 FX1 from Part' })).toBeDisabled()
     expect(within(d).getByRole('button', { name: 'Unpin T1 AMP ATK' })).toBeDisabled()
     expect(within(d).getByRole('button', { name: 'Unpin all values of PART 1' })).toBeDisabled()
     await act(async () => { finishRead(typeAndAmp()) })
-    expect(within(d).getByRole('button', { name: 'Reload saved T1 FX1' })).toBeEnabled()
+    expect(within(d).getByRole('button', { name: 'Reload T1 FX1 from Part' })).toBeEnabled()
   })
 })

@@ -377,7 +377,7 @@ go to the **Flex** (or **Static**) tab.
 | PE82 | Sample slots | Loop and timestretch read the device's words | Compare the Loop and Timestretch columns with the same slot on the device | Loop reads Off, On or Ping Pong; Timestretch reads Off, Normal or Beat |
 | PE83 | Sample slots | Copied rows carry the same text | Copy the slot table and paste it somewhere | The Gain column in the pasted text reads in dB, matching what the table shows on screen |
 | PE84 | Reorganise | Move to a free slot | In Edit mode, sorted by slot with no filter, drag a taken slot onto a free one | The sample, its attributes and markers are at the new slot; the old slot is empty; an info notice names the move |
-| PE85 | Reorganise | Drop on a taken slot swaps | Drag one taken slot onto another taken slot | The two slots exchange places with their attributes; a warning notice names the slot it swapped with |
+| PE85 | Reorganise | Drop on a taken slot swaps | Drag one taken slot onto another taken slot | The two slots exchange places with their attributes; a green (info) notice names the two slots swapped |
 | PE86 | Reorganise | Shift run moves as a block | Shift-click a run of three taken slots and drag it onto a free area | The three land as one continuous block at the drop slot, in their previous order |
 | PE87 | Reorganise | Ctrl picks close up | Ctrl/Cmd-click three scattered taken slots and drag them to a free area | They land as one continuous block in slot order; their old positions are free |
 | PE88 | Reorganise | Empty slots in a selection stay behind | Shift-select a run containing an empty slot and drag it | Only the taken slots move; the empty slot is not carried |

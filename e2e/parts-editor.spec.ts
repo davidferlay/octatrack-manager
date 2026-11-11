@@ -177,6 +177,8 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
     let editedBack = false
     // Values put back by revert_part_values: read_part_copies then shows them saved
     const reverted: string[] = []
+    // Parts commit_part has saved: read_part_copies then reports both copies alike
+    const committed = new Set<number>()
     // Once reload_part has run, the files report the Part as not edited, as the device's
     // edited bit would after a plain Reload: only the app's own locks can keep it marked
     let reloaded = false
@@ -264,7 +266,7 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
           // scene 1's T1 VOL, a T1 LFO lock only the saved copy holds, and the A end.
           case 'read_part_copies': {
             const partId = args?.partId ?? 0
-            if (opts.copiesIdentical) {
+            if (opts.copiesIdentical || committed.has(partId)) {
               const same = { part: makePart(partId), scenes: makeScenes() }
               return { saved: same, edited: same, identical: true }
             }
@@ -313,6 +315,8 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
             editedBack = true
             return null
           case 'commit_part':
+            committed.add(args.partId)
+            return null
           case 'commit_all_parts':
           case 'backup_project_files':
           case 'forget_write_history':
@@ -1488,10 +1492,17 @@ test.describe('Parts Editor - Diffs against the saved copy', () => {
     await expect(page.locator('.fx-type-field select').first()).toHaveAttribute('title', 'Saved: EQ')
   })
 
-  test('Save in the diffs window saves that Part, closes, and clears the marks', async ({ page }) => {
+  test('Save in the diffs window saves that Part, stays open with every row settled, and clears the marks', async ({ page }) => {
     await page.getByRole('button', { name: 'See diffs' }).click()
-    await page.getByRole('dialog').getByRole('button', { name: 'Save PART 1' }).click()
-    await expect(page.getByRole('dialog')).toHaveCount(0)
+    const dialog = page.getByRole('dialog')
+    const currents = dialog.locator('tbody td.part-changes-current')
+    await expect(currents).not.toHaveCount(0)
+    const before = await currents.allTextContents()
+    await dialog.getByRole('button', { name: 'Save all current values to Part PART 1' }).click()
+    // Every row stays listed, the value it had in Current now on both sides
+    await expect(dialog.locator('tbody tr.part-changes-settled')).toHaveCount(before.length)
+    expect(await dialog.locator('tbody td.part-changes-saved').allTextContents()).toEqual(before)
+    expect(await currents.allTextContents()).toEqual(before)
     const calls = await getInvokeCalls(page, 'commit_part')
     expect(calls.map(c => c.args.partId)).toEqual([0])
     await expect(page.locator('.param-changed')).toHaveCount(0)
@@ -1500,7 +1511,7 @@ test.describe('Parts Editor - Diffs against the saved copy', () => {
 
   test('Reload in the diffs window puts the saved values back and closes', async ({ page }) => {
     await page.getByRole('button', { name: 'See diffs' }).click()
-    await page.getByRole('dialog').getByRole('button', { name: 'Reload PART 1' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: 'Reload all values from Part PART 1' }).click()
     await expect(page.getByRole('dialog')).toHaveCount(0)
     const calls = await getInvokeCalls(page, 'reload_part')
     expect(calls.map(c => c.args.partId)).toEqual([0])
@@ -1622,7 +1633,7 @@ test.describe('Parts Editor - Diffs with other starting states', () => {
     const dialog = page.getByRole('dialog')
     await expect(dialog.getByText(/No saved copy yet/)).toBeVisible()
     await expect(dialog.getByText(/No saved copy yet/)).toHaveCSS('text-align', 'center')
-    await expect(dialog.getByRole('button', { name: 'Reload PART 1' })).toBeDisabled()
+    await expect(dialog.getByRole('button', { name: 'Reload all values from Part PART 1' })).toBeDisabled()
   })
 
   test('edits turned back by hand: still marked modified, and nothing differs', async ({ page }) => {
@@ -5028,7 +5039,7 @@ test.describe('Parts Editor - Nothing overflows sideways', () => {
   })
 })
 
-test.describe('Parts Editor - Reload saved value and pin', () => {
+test.describe('Parts Editor - Reload value from Part and pin', () => {
   const ATK = '/part/amps/0/atk'
   const atkField = (page: Page) => page.locator(`[data-lock-path="${ATK}"]`)
 
@@ -5042,10 +5053,10 @@ test.describe('Parts Editor - Reload saved value and pin', () => {
     await enterEditMode(page)
   })
 
-  test('right-click on a Parts field offers Reload saved value and Pin value', async ({ page }) => {
+  test('right-click on a Parts field offers Reload value from Part and Pin value', async ({ page }) => {
     await atkField(page).click({ button: 'right' })
     const menu = page.getByRole('menu')
-    await expect(menu.getByRole('menuitem')).toHaveText([/Reload saved value \(99\)$/, 'Pin value - Exclude it from Part reload'])
+    await expect(menu.getByRole('menuitem')).toHaveText([/Reload value from Part \(99\)$/, 'Pin value - Exclude it from Part reload'])
     await expect(menu.getByRole('menuitem', { name: 'Pin value - Exclude it from Part reload' })).toBeEnabled()
     await page.keyboard.press('Escape')
     await expect(menu).toHaveCount(0)
@@ -5073,12 +5084,12 @@ test.describe('Parts Editor - Reload saved value and pin', () => {
     await page.getByRole('button', { name: 'See diffs' }).click()
     const dialog = page.getByRole('dialog', { name: 'Edited params against saved' })
     // T1's FX1 changed type, so its rows act as one
-    await dialog.getByRole('button', { name: 'Reload saved T1 FX1' }).click()
+    await dialog.getByRole('button', { name: 'Reload T1 FX1 from Part' }).click()
 
     const calls = await getInvokeCalls(page, 'revert_part_values')
     expect(calls).toHaveLength(1)
     expect(calls[0].args).toMatchObject({
-      path: '/test/project', bankId: 'A', partId: 0, label: 'Reload saved T1 FX1',
+      path: '/test/project', bankId: 'A', partId: 0, label: 'Reload T1 FX1 from Part',
     })
     expect(calls[0].args.paths).toEqual(expect.arrayContaining([
       '/part/fxs/0/fx1_type', '/part/fxs/0/fx1_param1',
@@ -5130,7 +5141,7 @@ test.describe('Parts Editor - Reload saved value and pin', () => {
     // reloaded the row has no buttons left to find it by
     const row = dialog.locator('tr', { has: page.locator('td.part-changes-track', { hasText: 'T2' }) })
     await expect(row).toHaveCount(1)
-    await row.getByRole('button', { name: 'Reload saved T2 AMP ATK' }).click()
+    await row.getByRole('button', { name: 'Reload T2 AMP ATK from Part' }).click()
     await expect(row).toHaveClass(/part-changes-settled/)
     await expect(row.locator('td.part-changes-saved')).toHaveText('99')
     await expect(row.locator('td.part-changes-current')).toHaveText('99')
@@ -5178,7 +5189,7 @@ test.describe('Parts Editor - Reload saved value and pin', () => {
   })
 })
 
-test.describe('Scenes - Reload saved value and pin', () => {
+test.describe('Scenes - Reload value from Part and pin', () => {
   test.beforeEach(async ({ page }) => {
     await setupTauriMocks(page, { partsEditedBitmask: 1, partsSavedState: [1, 0, 0, 0] })
     await page.goto('/#/project?path=%2Fmock%2FTESTPROJECT&name=TESTPROJECT')
@@ -5192,7 +5203,7 @@ test.describe('Scenes - Reload saved value and pin', () => {
     const cell = page.locator('.scene-value-wrap.param-changed')
     await cell.click({ button: 'right' })
     const menu = page.getByRole('menu')
-    await expect(menu.getByRole('menuitem')).toHaveText([/Reload saved value \(\d+\)$/, 'Pin value - Exclude it from Part reload'])
+    await expect(menu.getByRole('menuitem')).toHaveText([/Reload value from Part \(\d+\)$/, 'Pin value - Exclude it from Part reload'])
     await menu.getByRole('menuitem', { name: 'Pin value - Exclude it from Part reload' }).click()
 
     const calls = await getInvokeCalls(page, 'set_part_locks')

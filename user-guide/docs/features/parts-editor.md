@@ -169,21 +169,24 @@ See diffs, the icon after Save All (or the <kbd>D</kbd> key), lists every value 
 
 - Each row gives the page and parameter, then the saved value and the current one.
 - Rows come one track at a time: its own values first, then its scene locks.
-- Reload and Save at the bottom act on that Part, then close the window. While values are pinned, Reload leaves the window open: the reloaded rows show the saved value on both sides and the pinned ones remain. <kbd>D</kbd> or <kbd>Esc</kbd> closes the window.
+- Reload all values from Part and Save all current values to Part at the bottom act on that Part:
+  - Save all current values to Part leaves the window open, each row then showing its Current value on both sides, as after Reload value from Part.
+  - Reload all values from Part closes the window, except while values are pinned: the reloaded rows then show the saved value on both sides and the pinned ones remain.
+- <kbd>D</kbd> or <kbd>Esc</kbd> closes the window.
 - A Part the device has never saved has no saved copy to compare with.
 
 Right-clicking a Part tab in Edit mode offers: Reload, Save and See diffs for that Part.
 
 Each row of the window has two small buttons:
 
-- Reload saved value (the circling arrow) puts the saved value back, written at once like any edit. The row stays listed, with the same value on both sides, until the window closes. It is disabled while the value is pinned.
+- Reload value from Part (the circling arrow) puts the saved value back, written at once like any edit. The row stays listed, with the same value on both sides, until the window closes. It is disabled while the value is pinned.
 - Pin value excludes the value from Part reload (see below). No value is pinned until you pin it, and only a value that differs from the saved copy can be. A pinned row's pin is lit; clicking it again unpins it.
 
-When a track's machine, or its FX1 or FX2 effect, is of another type than in the saved copy, the window shows the change as one group: the type row first, then every parameter of that machine or effect, each side named by its own type (for example GAIN on one side, FREQ on the other). Reload saved value and the pin on the type row act on the whole group, so a track never ends up with an effect holding the other effect's values. Changing between Static and Flex is not a group.
+When a track's machine, or its FX1 or FX2 effect, is of another type than in the saved copy, the window shows the change as one group: the type row first, then every parameter of that machine or effect, each side named by its own type (for example GAIN on one side, FREQ on the other). Reload value from Part and the pin on the type row act on the whole group, so a track never ends up with an effect holding the other effect's values. Changing between Static and Flex is not a group.
 
 While anything is pinned, a small cross above the pins unpins every value of the Part on screen. It is the only place that does it for all of them at once.
 
-Right-clicking a row offers Go to param, then the row's Reload saved value and Pin value. Go to param closes the window and shows the value where it is edited: it selects the track, the page and the LFO tab in the Parts editor, or opens the Scenes tab on the scene, then points the field out with a brief orange pulse.
+Right-clicking a row offers Go to param, then the row's Reload value from Part and Pin value. Go to param closes the window and shows the value where it is edited: it selects the track, the page and the LFO tab in the Parts editor, or opens the Scenes tab on the scene, then points the field out with a brief orange pulse.
 
 In Edit mode, a value of the Part on screen that differs from its saved copy reads in orange, or carries an asterisk at the top right of certain fields. Hovering over it shows the saved value. Parameter changes in Scenes are marked the same way.
 
@@ -193,7 +196,7 @@ Pinning a value only changes what the app's Reload does with it: the value can s
 
 - Reload puts the saved Part back, then restores the pinned values. The Part stays marked as modified, since those values still differ from the saved copy.
 - Every Reload button says how many it leaves alone, for example "Reload puts the Saved values back, except 2 pinned values".
-- A value is unpinned by itself once it equals the saved one: after Save, after Reload saved value, or after turning the value back by hand. The same goes if the machine or effect type of its track is changed by hand afterwards, unless the type itself is pinned.
+- A value is unpinned by itself once it equals the saved one: after Save, after Reload value from Part, or after turning the value back by hand. The same goes if the machine or effect type of its track is changed by hand afterwards, unless the type itself is pinned.
 - Pins stay until you unpin them, including after a restart. They are listed in the file `om_parts-pinned-values.json` in the project folder, so they follow the project when it is copied. The file is removed once nothing is pinned.
 - Pinning and unpinning are not Undo steps.
 - The device's own Reload Part ignores them: it puts the whole saved Part back.
@@ -202,7 +205,7 @@ Pinning a value only changes what the app's Reload does with it: the value can s
 
 In Edit mode, right-clicking a field of the Parts editor offers:
 
-- Reload saved value, with the saved value in brackets. It is disabled on a pinned value.
+- Reload value from Part, with the saved value in brackets. It is disabled on a pinned value.
 - Pin value - Exclude it from Part reload, or Unpin value - Include it in Part reload on a pinned field.
 
 Both are disabled on a value that matches the saved copy and on a Part without a saved copy. A pinned field shows a small pin at its top right. The steps of the LFO DESIGN drawing have no such menu, and neither does View mode.

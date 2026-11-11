@@ -57,7 +57,7 @@ describe('moveNotice', () => {
   })
   it('warns on a swap', () => {
     expect(moveNotice(report({ moves: [[3, 10], [10, 3]], swapped: [3, 10] }), 'F'))
-      .toEqual({ message: 'F003 and F010 swapped', kind: 'warning' })
+      .toEqual({ message: 'F003 and F010 swapped', kind: 'info' })
   })
   it('warns on a push and gives the pushed range', () => {
     const pushed: [number, number][] = [[10, 11], [11, 12], [12, 13], [13, 14]]
