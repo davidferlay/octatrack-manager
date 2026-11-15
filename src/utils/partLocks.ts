@@ -61,7 +61,7 @@ export function paramLocation(path: string): ParamLocation | null {
         : PAGES[section];
     const lfo = field.match(/^(?:lfo([123])_|spd([123])$|dep([123])$)/);
     const lfoTab = !section.endsWith('lfos') ? undefined
-      : field.startsWith('custom_lfo_design') ? 'DESIGN'
+      : field.startsWith('custom_lfo_') ? 'DESIGN'
         : lfo ? (`LFO${lfo[1] ?? lfo[2] ?? lfo[3]}` as ParamLocation['lfoTab']) : undefined;
     return { tab: 'parts', track, page, ...(lfoTab ? { lfoTab } : {}) };
   }

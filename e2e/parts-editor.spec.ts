@@ -34,6 +34,10 @@ interface MockOptions {
   preloadScenes?: boolean | 'fail'
   /** The saved copy matches the edited one byte for byte: edits turned back by hand. */
   copiesIdentical?: boolean
+  /** Every track's LFO design, as raw bytes. All 0 by default. */
+  lfoDesign?: number[]
+  /** The LFO params come without custom_lfo_interpolation, as from an older backend. */
+  lfoModesMissing?: boolean
 }
 
 async function setupTauriMocks(page: Page, options?: MockOptions) {
@@ -46,8 +50,10 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
     sceneMutes: options?.sceneMutes ?? ([false, false] as [boolean, boolean]),
     preloadScenes: options?.preloadScenes ?? false,
     copiesIdentical: options?.copiesIdentical ?? false,
+    lfoDesign: options?.lfoDesign ?? Array(16).fill(0),
+    lfoModesMissing: options?.lfoModesMissing ?? false,
   }
-  await page.addInitScript((opts: { partsEditedBitmask: number; partsSavedState: number[]; fx1Type: number; loadedFlexSlots: number; t1FlexSlot: number | null; sceneMutes: [boolean, boolean]; preloadScenes: boolean | 'fail'; copiesIdentical: boolean }) => {
+  await page.addInitScript((opts: { partsEditedBitmask: number; partsSavedState: number[]; fx1Type: number; loadedFlexSlots: number; t1FlexSlot: number | null; sceneMutes: [boolean, boolean]; preloadScenes: boolean | 'fail'; copiesIdentical: boolean; lfoDesign: number[]; lfoModesMissing: boolean }) => {
     const makeMachine = (trackId: number) => ({
       track_id: trackId,
       machine_type: 'Flex',
@@ -74,7 +80,8 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
       lfo1_wave: 0, lfo2_wave: 0, lfo3_wave: 0,
       lfo1_mult: 0, lfo2_mult: 0, lfo3_mult: 0,
       lfo1_trig: 0, lfo2_trig: 0, lfo3_trig: 0,
-      custom_lfo_design: Array(16).fill(0),
+      custom_lfo_design: [...opts.lfoDesign],
+      ...(opts.lfoModesMissing ? {} : { custom_lfo_interpolation: Array(16).fill(0) }),
     })
     const makeRecorder = (trackId: number) => ({
       track_id: trackId,
@@ -5218,5 +5225,262 @@ test.describe('Scenes - Reload value from Part and pin', () => {
     await expect(page.locator('[data-lock-path]')).toHaveCount(0)
     await page.locator('.scene-value-wrap').first().click({ button: 'right' })
     await expect(page.getByRole('menu')).toHaveCount(0)
+  })
+})
+
+test.describe('Parts Editor - LFO design window', () => {
+  const dialog = (page: Page) => page.getByRole('dialog', { name: /^LFO design - Part 1: .*, T1$/ })
+  const designPreview = (page: Page) => page
+    .locator('.parts-all-section')
+    .filter({ has: page.locator('.params-label', { hasText: 'LFO 3 / DESIGN' }) })
+    .locator('button.lfo-envelope-preview')
+    .first()
+  const lastSave = async (page: Page) => {
+    const calls = await getInvokeCalls(page, 'save_parts')
+    return calls[calls.length - 1].args.partsData[0]
+  }
+
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page)
+    await openPartsTab(page)
+  })
+
+  test('opens from the All page and from the LFO page\'s DESIGN tab', async ({ page }) => {
+    await designPreview(page).click()
+    await expect(dialog(page)).toBeVisible()
+    await page.keyboard.press('Escape')
+    await expect(dialog(page)).toHaveCount(0)
+
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'LFO' }).click()
+    await page.locator('.parts-lfo-sidebar .parts-tab', { hasText: 'DESIGN' }).click()
+    await page.locator('button.lfo-envelope-preview').first().click()
+    await expect(dialog(page)).toBeVisible()
+  })
+
+  test('is read-only in View mode', async ({ page }) => {
+    await designPreview(page).click()
+    await expect(dialog(page).getByLabel('Step 1 value')).toHaveAttribute('readonly', '')
+    await expect(dialog(page).getByRole('button', { name: 'Undo' })).toHaveCount(0)
+    await expect(dialog(page).getByRole('button', { name: 'Copy' })).toBeEnabled()
+  })
+
+  test('saves a typed value', async ({ page }) => {
+    await enterEditMode(page)
+    await designPreview(page).click()
+    const input = dialog(page).getByLabel('Step 9 value')
+    await input.fill('-39')
+    await input.press('Enter')
+    await expect.poll(async () => (await getInvokeCalls(page, 'save_parts')).length).toBeGreaterThan(0)
+    expect((await lastSave(page)).lfos[0].custom_lfo_design[8]).toBe(217)
+  })
+
+  test('saves a step mode', async ({ page }) => {
+    await enterEditMode(page)
+    await designPreview(page).click()
+    await dialog(page).getByLabel('Step 1 mode').click()
+    await expect.poll(async () => (await getInvokeCalls(page, 'save_parts')).length).toBeGreaterThan(0)
+    expect((await lastSave(page)).lfos[0].custom_lfo_interpolation[0]).toBe(1)
+  })
+
+  test('draws past the edge', async ({ page }) => {
+    await enterEditMode(page)
+    await designPreview(page).click()
+    const canvas = dialog(page).locator('.lfo-design-canvas')
+    // A trial click waits for the dialog's entrance animation to stop moving
+    await canvas.click({ trial: true })
+    const box = (await canvas.boundingBox())!
+    await page.mouse.move(box.x + 2, box.y + 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + 2, box.y - 50)
+    await page.mouse.move(box.x + box.width + 100, box.y + box.height + 100)
+    await page.mouse.up()
+    await expect(dialog(page)).toBeVisible()
+    await expect.poll(async () => (await getInvokeCalls(page, 'save_parts')).length).toBeGreaterThan(0)
+    const design = (await lastSave(page)).lfos[0].custom_lfo_design
+    expect(design[0]).toBe(127)
+    expect(design[15]).toBe(128)
+  })
+
+  test('edits a MIDI track\'s design', async ({ page }) => {
+    await enterEditMode(page)
+    await selectTrack(page, '8')
+    await page.locator('.parts-page-tabs .parts-tab', { hasText: 'LFO' }).click()
+    await page.locator('.parts-lfo-sidebar .parts-tab', { hasText: 'DESIGN' }).click()
+    await page.locator('button.lfo-envelope-preview').first().click()
+    const win = page.getByRole('dialog', { name: /^LFO design - Part 1: .*, M1$/ })
+    const input = win.getByLabel('Step 2 value')
+    await input.fill('50')
+    await input.press('Enter')
+    await expect.poll(async () => (await getInvokeCalls(page, 'save_parts')).length).toBeGreaterThan(0)
+    expect((await lastSave(page)).midi_lfos[0].custom_lfo_design[1]).toBe(50)
+  })
+
+  test('keeps page shortcuts out', async ({ page }) => {
+    const activePart = await page.locator('.parts-part-tab.active').textContent()
+    await designPreview(page).click()
+    await expect(dialog(page)).toBeVisible()
+    await page.keyboard.press('ArrowRight')
+    await page.keyboard.press('e')
+    await page.keyboard.press('d')
+    await expect(dialog(page)).toBeVisible()
+    await expect(page.locator('.parts-part-tab.active')).toHaveText(activePart!)
+    await expect(page.locator('.parts-edit-controls.visible')).toHaveCount(0)
+    await expect(page.getByRole('dialog', { name: /diffs/i })).toHaveCount(0)
+    await expect(page.locator('.modal-overlay')).toHaveCount(1)
+  })
+
+  test('undoes from the window', async ({ page }) => {
+    await enterEditMode(page)
+    await designPreview(page).click()
+    const input = dialog(page).getByLabel('Step 9 value')
+    await input.fill('-39')
+    await input.press('Enter')
+    const undo = dialog(page).getByRole('button', { name: 'Undo' })
+    await expect(undo).toBeEnabled()
+    const before = (await getInvokeCalls(page, 'load_parts_data')).length
+    // The mock answers within the same tick, so the panel never shows its loading state;
+    // the real backend takes longer. Slow the re-read down so the loading state renders.
+    await page.evaluate(() => {
+      const internals = (window as any).__TAURI_INTERNALS__
+      const original = internals.invoke
+      internals.invoke = async (cmd: string, args: any, options: any) => {
+        if (cmd === 'load_parts_data') await new Promise(resolve => setTimeout(resolve, 300))
+        return original(cmd, args, options)
+      }
+    })
+    // Tag the dialog node: a remount during the re-read would drop the tag
+    await dialog(page).evaluate(node => node.setAttribute('data-mounted', 'yes'))
+    await undo.click()
+    await expect.poll(async () => (await getInvokeCalls(page, 'undo_write')).length).toBe(1)
+    await expect.poll(async () => (await getInvokeCalls(page, 'load_parts_data')).length).toBeGreaterThan(before)
+    await expect(dialog(page)).toBeVisible()
+    await expect(dialog(page)).toHaveAttribute('data-mounted', 'yes')
+  })
+
+  test('keeps the focus inside the window', async ({ page }) => {
+    await enterEditMode(page)
+    await designPreview(page).click()
+    await expect(dialog(page).locator('.lfo-design-canvas')).toBeFocused()
+    // The leak this guards: Tab went on from the preview behind the backdrop, onto the
+    // FX1 picker, and the arrows changed the hidden Part's effect
+    await page.keyboard.press('Tab')
+    for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowUp')
+    await page.waitForTimeout(900) // past the save debounce
+    expect(await getInvokeCalls(page, 'save_parts')).toHaveLength(0)
+    const inside = () => page.evaluate(() => !!document.activeElement?.closest('[role="dialog"]'))
+    for (const key of ['Tab', 'Shift+Tab']) {
+      for (let i = 0; i < 50; i++) {
+        await page.keyboard.press(key)
+        expect(await inside(), `${key} #${i + 1}`).toBe(true)
+      }
+    }
+  })
+
+  test('stays open when a drag from a field ends on the backdrop', async ({ page }) => {
+    await enterEditMode(page)
+    await designPreview(page).click()
+    const input = dialog(page).getByLabel('Step 9 value')
+    // A trial click waits for the dialog's entrance animation to stop moving
+    await input.click({ trial: true })
+    await input.fill('-39')
+    const box = (await input.boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    // The dialog is 90% of the window, centred: the top-left corner is backdrop
+    await page.mouse.move(5, 5)
+    await page.mouse.up()
+    await expect(dialog(page)).toBeVisible()
+    await expect(input).toHaveValue('-39')
+  })
+
+  test('saves a stroke cut short by Escape', async ({ page }) => {
+    await enterEditMode(page)
+    await designPreview(page).click()
+    const canvas = dialog(page).locator('.lfo-design-canvas')
+    // A trial click waits for the dialog's entrance animation to stop moving
+    await canvas.click({ trial: true })
+    const box = (await canvas.boundingBox())!
+    await page.mouse.move(box.x + 2, box.y + 2)
+    await page.mouse.down()
+    // The middle of step 2, below the drawing
+    await page.mouse.move(box.x + (box.width * 1.5) / 16, box.y + box.height + 50)
+    await page.keyboard.press('Escape')
+    await expect(dialog(page)).toHaveCount(0)
+    await page.mouse.up()
+    await expect.poll(async () => (await getInvokeCalls(page, 'save_parts')).length).toBe(1)
+    const design = (await lastSave(page)).lfos[0].custom_lfo_design
+    // Step 1 was pressed near the top, step 2 crossed at the bottom
+    expect(design[0]).toBeGreaterThan(100)
+    expect(design[0]).toBeLessThanOrEqual(127)
+    expect(design[1]).toBe(128)
+  })
+
+  test('closes on Escape right after a typed value', async ({ page }) => {
+    await enterEditMode(page)
+    await designPreview(page).click()
+    const input = dialog(page).getByLabel('Step 3 value')
+    await input.fill('5')
+    await input.press('Enter')
+    await expect(dialog(page).locator('.lfo-design-canvas')).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(dialog(page)).toHaveCount(0)
+    expect((await lastSave(page)).lfos[0].custom_lfo_design[2]).toBe(5)
+  })
+
+  test('writes a nudge still waiting out its delay before Undo, and keeps Redo', async ({ page }) => {
+    await enterEditMode(page)
+    await designPreview(page).click()
+    const input = dialog(page).getByLabel('Step 9 value')
+    await input.fill('-39')
+    await input.press('Enter')
+    const undo = dialog(page).getByRole('button', { name: 'Undo' })
+    await expect(undo).toBeEnabled()
+    // Enter left the focus on the drawing, with step 9 selected: Up nudges it to -38,
+    // a save that waits 500 ms. Undo comes before that.
+    await page.keyboard.press('ArrowUp')
+    await undo.click()
+    await expect.poll(async () => (await getInvokeCalls(page, 'undo_write')).length).toBe(1)
+    await page.waitForTimeout(900) // past the save debounce
+    const order = await page.evaluate(() => (window as any).__invokeCalls
+      .map((c: { cmd: string }) => c.cmd)
+      .filter((c: string) => c === 'save_parts' || c === 'undo_write'))
+    expect(order).toEqual(['save_parts', 'save_parts', 'undo_write'])
+    const saves = await getInvokeCalls(page, 'save_parts')
+    expect(saves[1].args.partsData[0].lfos[0].custom_lfo_design[8]).toBe(218)
+    await expect(dialog(page).getByRole('button', { name: 'Redo' })).toBeEnabled()
+  })
+})
+
+test.describe('Parts Editor - LFO design preview', () => {
+  const designPreview = (page: Page) => page
+    .locator('.parts-all-section')
+    .filter({ has: page.locator('.params-label', { hasText: 'LFO 3 / DESIGN' }) })
+    .locator('button.lfo-envelope-preview')
+    .first()
+
+  test('lines the grid up with the 16 steps and keeps the wave inside the frame', async ({ page }) => {
+    // 127 and -128 side by side: the wave touches both ends of the range
+    await setupTauriMocks(page, { lfoDesign: [127, 128, 127, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] })
+    await openPartsTab(page)
+    const svg = designPreview(page).locator('svg')
+    await expect(svg).toBeVisible()
+    const xs = await svg.locator('.lfo-envelope-grid').evaluateAll(lines => lines.map(l => Number(l.getAttribute('x1'))))
+    expect(xs).toEqual(Array.from({ length: 17 }, (_, i) => (i * 100) / 16))
+    const frame = (await svg.boundingBox())!
+    const wave = (await svg.locator('.lfo-envelope-line').boundingBox())!
+    // The stroke is 3 px wide and the frame has a 1 px border: the wave's centre line must
+    // sit at least 1 + 1.5 px inside, or the stroke is cut at 127 and -128
+    expect(wave.y - frame.y).toBeGreaterThanOrEqual(2.5)
+    expect(frame.y + frame.height - (wave.y + wave.height)).toBeGreaterThanOrEqual(2.5)
+  })
+
+  test('draws a design that comes without step modes', async ({ page }) => {
+    await setupTauriMocks(page, { lfoModesMissing: true })
+    await openPartsTab(page)
+    await expect(designPreview(page)).toBeVisible()
+    await designPreview(page).click()
+    const win = page.getByRole('dialog', { name: /^LFO design - Part 1: .*, T1$/ })
+    await expect(win).toBeVisible()
+    await expect(win.getByLabel('Step 1 mode')).toHaveText('step')
   })
 })

@@ -37,7 +37,7 @@ the device first, save the project there, then open the same bank in the app.
 | PE14 | All | No empty LFO pane | Look over the LFO panes | None of them shows an empty SETUP pane, because the device gives an LFO no setup page |
 | PE15 | All | Recorder reachable from All | Look at the REC pane | Both recorder setup pages are shown, the same ones the REC tab shows |
 | PE16 | All | Editing from All saves | In Edit mode change a value in any All pane, save, reopen on the device | The change is there, against that Part and track |
-| PE17 | All | Designer editable from All | In Edit mode change the designer waveform in the LFO 3 / DESIGN pane, save, reopen | The drawn shape is the one the device shows |
+| PE17 | All | Designer window from All | In Edit mode click the small preview in the LFO 3 / DESIGN pane, change a step in the window that opens, close it, save, reopen on the device | The window opens over the editor, the preview behind shows the new shape, and the device shows the same values and step modes |
 | PE18 | All | MIDI All page | Switch to a MIDI track and open All | The LFOs are paired the same way, with the same pane names |
 
 ## View and Edit modes
@@ -197,6 +197,51 @@ Up is more, down is less, throughout.
 | PE124 | LFO | MIDI targets read like the audio ones | Compare a MIDI track's PMTR list with an audio track's | Both name the page then the parameter in the device's abbreviations - NOTE VEL and ARP TRAN beside SRC PTCH and AMP ATK, never a long prose name |
 | PE125 | LFO | MIDI target names match their pages | Pick a MIDI target, then open the page it names | The parameter is there under that exact name |
 | PE126 | LFO | MIDI target stores the right parameter | Point a MIDI LFO at CTRL2 CC10, save, open on the device | The device shows that same target |
+| PE300 | LFO design | Opens from the LFO page | On an audio track open the LFO page, DESIGN tab, click the preview | The LFO design window opens, titled with the Part, name and track; Esc and the close button shut it |
+| PE301 | LFO design | Opens from All | On an audio track open All and click the preview in the LFO 3 / DESIGN pane | The same window opens, showing the same shape |
+| PE302 | LFO design | Opens on a MIDI track | Do PE300 and PE301 on a MIDI track | The window opens and edits the MIDI track's own shape |
+| PE303 | LFO design | View mode is read-only | In View mode open the window, try to drag, type in a value and click a tag | Nothing changes. All smooth, All stepped, Invert, Random, Clear, Paste and Import are greyed out; Copy and Export are not |
+| PE304 | LFO design | Arrows move the selection in View mode | In View mode focus the drawing and press Left and Right | The selected step moves; Up and Down change nothing |
+| PE305 | LFO design | Typing a value | In Edit mode click a step's value, type -39, press Enter | The step reads -39, the drawing follows and the Part shows unsaved changes |
+| PE306 | LFO design | Typing is clamped | Type 300 in a step, then -500 in another | They read 127 and -128 |
+| PE307 | LFO design | Bad text is dropped | Type abc in a step and press Enter; type 55 and press Esc | The step keeps its old value both times |
+| PE308 | LFO design | Flip a step's mode | Click the tag under a step | It reads smooth where it read step, or the reverse, and the drawing shows a slope or a hold for that step |
+| PE309 | LFO design | Smooth steps are straight slopes | Set one step smooth, give it and its neighbour different values | The drawing slopes straight from this step to the next. Smooth on step 16 slopes into step 1 |
+| PE310 | LFO design | All smooth | Click All smooth | Every tag reads smooth; the values are unchanged |
+| PE311 | LFO design | All stepped | Click All stepped | Every tag reads step; the values are unchanged |
+| PE312 | LFO design | Invert | Set a step to 127, one to 0 and one to 5, mix smooth and step tags, click Invert | They read -128, -1 and -6; the tags are as they were |
+| PE313 | LFO design | Random | Click Random twice | Each click gives 16 new values and a mix of smooth and step tags |
+| PE314 | LFO design | Clear | Click Clear on a shape with values and smooth tags | Every value reads 0 and every tag reads step |
+| PE315 | LFO design | Draw past the edge | Press on the drawing, drag below its bottom edge and on along it | The shape keeps following the pointer's steps and sticks to -128 while the pointer is below; drawing does not stop at the edge |
+| PE316 | LFO design | Draw fast across steps | Drag quickly across the drawing | Every step the pointer crossed is set, with no gaps |
+| PE317 | LFO design | Shift draws finely | Press on a step, hold Shift and drag a short way up | The value moves by about a quarter of what it moves without Shift |
+| PE318 | LFO design | Up and Down | Focus the drawing, select a step with Right, press Up, then Down twice | The value goes +1, then -1, then -1; the new value is saved on the Part |
+| PE319 | LFO design | Shift with Up and Down | Press Shift + Up, then Shift + Down | The value changes by 8 each time |
+| PE320 | LFO design | Keys at the limits | Select step 1 and press Left; select step 16 and press Right; take a step to 127 and press Up | The selection stays at the end; the value stays at 127 |
+| PE321 | LFO design | Copy and Paste across tracks | Copy a shape on T1, close the window, open T2's window in Edit mode, click Paste | T2 gets the same 16 values and modes; a message reads LFO design pasted |
+| PE322 | LFO design | Paste refuses other text | Copy some other text, open the window, click Paste | The shape is unchanged and a message reads Not an LFO design |
+| PE323 | LFO design | Paste refuses a newer design | Paste a design whose version is 2 | The shape is unchanged and a message says it was made by a newer version of Octatrack Manager |
+| PE324 | LFO design | Export | Click Export, pick a place and save | A .json file is written, named after the Part and track; a message reads LFO design exported |
+| PE325 | LFO design | Import | In Edit mode click Import and choose the exported file on another track | The track gets the same values and modes; a message reads LFO design imported |
+| PE326 | LFO design | Import refuses a bad file | Import a file that is not an LFO design | The shape is unchanged and a message reads Not an LFO design |
+| PE327 | LFO design | Undo in the window | Make three changes, then use the window's Undo, then Redo | Each press takes back or redoes one action; the Undo and Redo controls are shown in Edit mode only |
+| PE328 | LFO design | One action is one Undo step | Draw one stroke across several steps, then Undo | The whole stroke is taken back at once |
+| PE329 | LFO design | Edited steps are marked | Change a value and a step's mode, leave the others | The two are shown in orange, with the saved one in the tooltip; the rest are not. Reload from Part clears the marks |
+| PE330 | LFO design | Diffs list a mode | Flip step 3's mode, open See diffs | A row reads LFO DESIGN, STEP 3 MODE, with the saved and current values as smooth or stepped |
+| PE331 | LFO design | Hardware: export, import, save | Export a shape that mixes smooth and stepped steps from one track, import it into another track, save the Part, open it on the device | The device shows the same 16 values and the same smooth and stepped steps on that track |
+| PE332 | LFO design | The focus starts on the drawing | In Edit mode click the preview to open the window, then press Up | The selected step goes up by 1; nothing behind the window changes |
+| PE333 | LFO design | Tab stays in the window | In Edit mode open the window, press Tab many times, then Shift+Tab many times, pressing Up and Down along the way | The focus goes round the window's controls and never reaches the editor behind it; no effect, knob or other value of the Part changes |
+| PE334 | LFO design | Esc after a typed value | Type a value in a step, press Enter, then press Esc | Enter applies the value; Esc then closes the window |
+| PE335 | LFO design | Esc twice in a field | Type a value in a step without Enter, press Esc, then Esc again | The first Esc puts the old value back and nothing is saved; the second closes the window |
+| PE336 | LFO design | A drag ending outside does not close | Type in a step's value without Enter, then drag from the field and release outside the window | The window stays open and the field still holds what was typed |
+| PE337 | LFO design | Only the left button draws | In Edit mode right-click, then middle-click on the drawing | Nothing changes and nothing is saved |
+| PE338 | LFO design | The mode is in the title | Open the window in View mode, close it, switch to Edit mode and open it again | The title area reads View, then Edit |
+| PE339 | LFO design | The selected step shows in the strip | Focus the drawing and press Right a few times, then click a step's value | Each cell shows its step number; the selected step is highlighted on the drawing and in its cell, and clicking a value selects its step |
+| PE340 | LFO design | Toolbar groups | Look at the toolbar in Edit mode | Separators split it into All smooth, All stepped, then Invert, Random, Clear, then Copy, Paste, then Export, Import, then Undo, Redo |
+| PE341 | LFO design | A change of nothing is not saved | On a shape whose steps are all smooth click All smooth; on a step at 127 press Up | Nothing is written and no Undo step is added |
+| PE342 | LFO design | Undo right after an arrow key | Press Up on a step, then the window's Undo at once | The Up is taken back, and Redo brings it back |
+| PE343 | LFO design | Closing mid-stroke | Start drawing and press Esc before releasing the button | The window closes and what was drawn is saved, as one Undo step |
+| PE344 | LFO design | The preview lines up | Give step 1 the value 127 and step 2 -128, close the window and look at the small preview | The grid lines fall on the edges of the 16 steps and the wave is not cut at the top or the bottom |
 
 ## Changing a track's effects
 

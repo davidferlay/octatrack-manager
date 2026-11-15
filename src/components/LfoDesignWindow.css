@@ -1,0 +1,159 @@
+.modal-content.lfo-design-modal {
+  width: 90vw;
+  max-width: 90vw;
+  height: 90vh;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.lfo-design-modal .modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lfo-design-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+/* The header's View / Edit toggle colours: blue for View, amber for Edit */
+.lfo-design-badge {
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #fff;
+}
+
+.lfo-design-badge.view {
+  background: #3a7bc8;
+}
+
+.lfo-design-badge.edit {
+  background: #f59e0b;
+}
+
+.lfo-design-close {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 1.1rem;
+}
+
+.lfo-design-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+}
+
+.lfo-design-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* The separators between the groups */
+.lfo-design-group + .lfo-design-group {
+  padding-left: 0.5rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.lfo-design-tool:disabled,
+.lfo-design-mode:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.lfo-design-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.lfo-design-canvas {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 4px;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.lfo-design-wave {
+  stroke: #60a5fa;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+/* 16 equal columns under the canvas */
+.lfo-design-strip {
+  display: grid;
+  grid-template-columns: repeat(16, 1fr);
+  gap: 4px;
+}
+
+.lfo-design-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+/* The selected step, as on the drawing */
+.lfo-design-cell.selected {
+  background: rgba(96, 165, 250, 0.12);
+}
+
+.lfo-design-step {
+  text-align: center;
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.lfo-design-cell.selected .lfo-design-step {
+  color: #60a5fa;
+  opacity: 1;
+}
+
+.lfo-design-value,
+.lfo-design-mode {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+/* .param-changed only colours .param-value, so the strip's own fields take the same colour */
+.lfo-design-value.param-changed,
+.lfo-design-mode.param-changed {
+  color: #f59e0b;
+}
+
+.lfo-design-grid {
+  stroke: rgba(255, 255, 255, 0.08);
+  vector-effect: non-scaling-stroke;
+}
+
+.lfo-design-centre {
+  stroke: rgba(255, 255, 255, 0.25);
+  vector-effect: non-scaling-stroke;
+}
+
+.lfo-design-selected {
+  fill: rgba(96, 165, 250, 0.12);
+  pointer-events: none;
+}

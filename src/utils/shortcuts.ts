@@ -41,6 +41,14 @@ const PARTS = group('Parts', [
   ['D', 'Edit mode: show what differs from the saved copy'],
 ]);
 
+const LFO_DESIGN = group('LFO design window', [
+  ['Drag', 'Edit mode: draw the shape, past the edges too'],
+  ['Shift + drag', 'Edit mode: draw finely'],
+  ['Left / Right', 'Select the previous / next step'],
+  ['Up / Down', 'Edit mode: change the selected step by 1'],
+  ['Shift + Up / Down', 'Edit mode: change it by 8'],
+]);
+
 const SCENES = group('Scenes', [
   ['D', 'Edit mode: show what differs from the saved copy'],
   ['Shift + click', 'Matrix: select a range of scenes'],
@@ -88,7 +96,7 @@ const AUDIO_POOL = group('Audio Pool', [
 ]);
 
 const TABS: Record<string, ShortcutGroup[]> = {
-  parts: [PARTS],
+  parts: [PARTS, LFO_DESIGN],
   scenes: [SCENES],
   'flex-slots': [SLOTS, PREVIEW],
   'static-slots': [SLOTS, PREVIEW],

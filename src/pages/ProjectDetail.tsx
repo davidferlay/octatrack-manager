@@ -1741,6 +1741,7 @@ export function ProjectDetail() {
                             flex_slots: metadata.sample_slots.flex_slots,
                           } : undefined}
                           onWriteStatusChange={handleWriteStatusChange}
+                          writeHistory={writeHistory}
                           onGoToParam={(partIndex, paths) => goToParam(bank.id, partIndex, paths)}
                         />
                       );

@@ -396,6 +396,11 @@ pub struct PartTrackLfo {
     pub lfo3_trig: u8, // LFO 3 Trigger Mode
     // CUSTOM LFO Design (16-step waveform)
     pub custom_lfo_design: Vec<u8>, // 16 values (0-255) representing custom waveform shape
+    // Per design step, 1 = interpolated (smooth), 0 = stepped. The device keeps a 2-byte
+    // mask: u16 = byte0 << 8 | byte1, step n (1-16) is smooth when bit n-1 is set.
+    // Empty when absent from a payload, which leaves the device's modes untouched.
+    #[serde(default)]
+    pub custom_lfo_interpolation: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -3032,6 +3037,22 @@ pub fn read_parts_data(project_path: &str, bank_id: &str) -> Result<PartsDataRes
     })
 }
 
+/// The 2-byte step-mode mask as 16 entries, step 1 first: 1 = smooth, 0 = stepped.
+pub(crate) fn decode_lfo_interpolation(mask: &[u8; 2]) -> Vec<u8> {
+    let bits = u16::from_be_bytes(*mask);
+    (0..16).map(|i| ((bits >> i) & 1) as u8).collect()
+}
+
+/// Inverse of `decode_lfo_interpolation`; any non-zero step counts as smooth.
+pub(crate) fn encode_lfo_interpolation(steps: &[u8]) -> [u8; 2] {
+    let bits = steps
+        .iter()
+        .take(16)
+        .enumerate()
+        .fold(0u16, |acc, (i, &v)| acc | (((v != 0) as u16) << i));
+    bits.to_be_bytes()
+}
+
 /// One Part, in the shape the editors read it.
 pub(crate) fn part_data(part: &ot_tools_io::parts::Part, part_id: u8) -> PartData {
     let mut machines = Vec::new();
@@ -3238,6 +3259,9 @@ pub(crate) fn part_data(part: &ot_tools_io::parts::Part, part_id: u8) -> PartDat
             lfo3_trig: lfo_setup_2.lfo3_trig,
             // CUSTOM LFO Design
             custom_lfo_design,
+            custom_lfo_interpolation: decode_lfo_interpolation(
+                &part.audio_tracks_custom_lfos_interpolation_masks[track_id as usize].0,
+            ),
         });
 
         // Get FX types and parameters
@@ -3388,6 +3412,9 @@ pub(crate) fn part_data(part: &ot_tools_io::parts::Part, part_id: u8) -> PartDat
             lfo3_trig: midi_lfo_setup_2.lfo3_trig,
             // CUSTOM LFO Design
             custom_lfo_design: midi_custom_lfo_design,
+            custom_lfo_interpolation: decode_lfo_interpolation(
+                &part.midi_tracks_custom_lfos_interpolation_masks[track_id as usize].0,
+            ),
         });
 
         // Get MIDI CTRL1 parameters
@@ -3568,6 +3595,12 @@ fn clamp_part_data(part: &mut PartData, machine_types: &[u8; 8]) {
             _ => {}
         }
     }
+    // Step modes are one bit each
+    for lfo in part.lfos.iter_mut().chain(part.midi_lfos.iter_mut()) {
+        for v in lfo.custom_lfo_interpolation.iter_mut() {
+            *v = (*v).min(1);
+        }
+    }
     for amp in part.amps.iter_mut() {
         amp.amp_setup_amp = amp.amp_setup_amp.min(3);
         amp.amp_setup_sync = amp.amp_setup_sync.min(1);
@@ -3745,6 +3778,10 @@ pub(crate) fn write_part_data(part: &mut ot_tools_io::parts::Part, data: &PartDa
                 for (i, &val) in lfo.custom_lfo_design.iter().enumerate() {
                     part.audio_tracks_custom_lfo_designs[track_id].0[i] = val;
                 }
+            }
+            if lfo.custom_lfo_interpolation.len() == 16 {
+                part.audio_tracks_custom_lfos_interpolation_masks[track_id].0 =
+                    encode_lfo_interpolation(&lfo.custom_lfo_interpolation);
             }
         }
 
@@ -3995,6 +4032,10 @@ pub(crate) fn write_part_data(part: &mut ot_tools_io::parts::Part, data: &PartDa
                 for (i, &val) in midi_lfo.custom_lfo_design.iter().enumerate() {
                     part.midi_tracks_custom_lfos[track_id].0[i] = val;
                 }
+            }
+            if midi_lfo.custom_lfo_interpolation.len() == 16 {
+                part.midi_tracks_custom_lfos_interpolation_masks[track_id].0 =
+                    encode_lfo_interpolation(&midi_lfo.custom_lfo_interpolation);
             }
         }
 
@@ -19353,7 +19394,12 @@ pub(crate) mod tests {
                     .join("tests/fixtures/real_device/bank01.work"),
             )
             .expect("read the real device's bank");
-            vec![generated, real]
+            let lfo_modes = BankFile::from_data_file(
+                &std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("tests/fixtures/lfo_modes/bank01.work"),
+            )
+            .expect("read the LFO step-mode bank");
+            vec![generated, real, lfo_modes]
         }
 
         /// A writer that cannot put back what the reader gave it would change a Part
@@ -19407,6 +19453,147 @@ pub(crate) mod tests {
                 _ if a != b => out.push(format!("{} ({} -> {})", at, a, b)),
                 _ => {}
             }
+        }
+
+        fn lfo_modes_dir() -> String {
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("tests/fixtures/lfo_modes")
+                .to_string_lossy()
+                .into_owned()
+        }
+
+        /// Raw bytes first, so the decoding is held to the device and not to our own reader.
+        #[test]
+        fn lfo_interpolation_reads_like_the_device() {
+            let raw = std::fs::read(format!("{}/bank01.work", lfo_modes_dir())).unwrap();
+            assert_eq!(raw[591457..591459], [0xff, 0xff]);
+            assert_eq!(raw[591459..591461], [0x00, 0xff]);
+            assert_eq!(raw[591461..591463], [0x02, 0x01]);
+            assert_eq!(raw[591605..591607], [0x02, 0x01]);
+
+            let part = &read_parts_data(&lfo_modes_dir(), "A").unwrap().parts[0];
+            let steps =
+                |set: &[usize]| (0..16).map(|i| set.contains(&i) as u8).collect::<Vec<u8>>();
+            assert_eq!(part.lfos[0].custom_lfo_interpolation, vec![1u8; 16]);
+            assert_eq!(
+                part.lfos[1].custom_lfo_interpolation,
+                steps(&[0, 1, 2, 3, 4, 5, 6, 7])
+            );
+            assert_eq!(part.lfos[2].custom_lfo_interpolation, steps(&[0, 9]));
+            assert_eq!(part.midi_lfos[2].custom_lfo_interpolation, steps(&[0, 9]));
+            assert_eq!(part.midi_lfos[0].custom_lfo_interpolation, vec![0u8; 16]);
+            assert_eq!(
+                part.lfos[0].custom_lfo_design,
+                vec![127, 0, 127, 0, 127, 0, 127, 0, 128, 0, 128, 0, 128, 0, 128, 0]
+            );
+        }
+
+        #[test]
+        fn lfo_interpolation_encode_is_the_inverse_of_decode() {
+            for mask in [
+                [0x00, 0x00],
+                [0xff, 0xff],
+                [0x00, 0xff],
+                [0x02, 0x01],
+                [0x80, 0x00],
+                [0xd3, 0xed],
+            ] {
+                assert_eq!(
+                    encode_lfo_interpolation(&decode_lfo_interpolation(&mask)),
+                    mask
+                );
+            }
+            let mut last = vec![0u8; 16];
+            last[15] = 1;
+            assert_eq!(encode_lfo_interpolation(&last), [0x80, 0x00]);
+        }
+
+        #[test]
+        fn write_part_data_writes_step_modes_to_their_bits() {
+            let bank = BankFile::from_data_file(
+                &std::path::Path::new(&lfo_modes_dir()).join("bank01.work"),
+            )
+            .unwrap();
+            let mut part = bank.parts.unsaved.0[0];
+            let mut data = part_data(&part, 0);
+            data.lfos[4].custom_lfo_interpolation = (0..16).map(|i| (i == 15) as u8).collect();
+            data.midi_lfos[7].custom_lfo_interpolation = (0..16).map(|i| (i == 0) as u8).collect();
+            write_part_data(&mut part, &data);
+            assert_eq!(
+                part.audio_tracks_custom_lfos_interpolation_masks[4].0,
+                [0x80, 0x00]
+            );
+            assert_eq!(
+                part.midi_tracks_custom_lfos_interpolation_masks[7].0,
+                [0x00, 0x01]
+            );
+        }
+
+        /// Through the real save path and onto the file: the modes land on the bytes the
+        /// device test files pinned (Part 1 working copy: audio T1 mask at 591457, two
+        /// bytes per track, MIDI T3 at 591605), and nothing else moves but the checksum.
+        #[test]
+        fn save_parts_data_writes_step_modes_at_their_file_offsets() {
+            let dir = tempfile::tempdir().unwrap();
+            let bank = dir.path().join("bank01.work");
+            std::fs::copy(format!("{}/bank01.work", lfo_modes_dir()), &bank).unwrap();
+            let before = std::fs::read(&bank).unwrap();
+            let path = dir.path().to_string_lossy().into_owned();
+
+            let mut part = read_parts_data(&path, "A").unwrap().parts.remove(0);
+            let only = |set: &[usize]| (0..16).map(|i| set.contains(&i) as u8).collect();
+            part.lfos[0].custom_lfo_interpolation = only(&[0, 1, 2, 3, 4, 5, 6, 7]);
+            part.lfos[4].custom_lfo_interpolation = only(&[15]);
+            part.midi_lfos[7].custom_lfo_interpolation = only(&[0]);
+            save_parts_data(&path, "A", vec![part]).unwrap();
+
+            let after = std::fs::read(&bank).unwrap();
+            assert_eq!(after.len(), before.len());
+            // As read from the device: T1 all smooth, T5 randomized
+            assert_eq!(before[591457..591459], [0xff, 0xff]);
+            assert_eq!(before[591465..591467], [0xd3, 0xed]);
+            assert_eq!(after[591457..591459], [0x00, 0xff], "audio T1");
+            assert_eq!(after[591465..591467], [0x80, 0x00], "audio T5");
+            assert_eq!(after[591615..591617], [0x00, 0x01], "MIDI T8");
+            // T2 and MIDI T3, not edited, keep their bits
+            assert_eq!(after[591459..591461], [0x00, 0xff]);
+            assert_eq!(after[591605..591607], [0x02, 0x01]);
+
+            // Part 1's edited flag: the device saved the Part last, and an app edit sets it
+            assert_eq!(
+                (before[636082], after[636082]),
+                (0, 1),
+                "Part 1 edited flag"
+            );
+
+            let masks = [591457, 591458, 591465, 591466, 591615, 591616];
+            let flag_and_checksum = [636082, 636111, 636112];
+            let elsewhere: Vec<usize> = (0..before.len())
+                .filter(|&i| before[i] != after[i])
+                .filter(|i| !masks.contains(i) && !flag_and_checksum.contains(i))
+                .collect();
+            assert!(elsewhere.is_empty(), "other bytes changed: {:?}", elsewhere);
+        }
+
+        /// A payload without the field (serde default: empty) must not clear the device's modes.
+        #[test]
+        fn write_part_data_without_step_modes_keeps_the_mask() {
+            let bank = BankFile::from_data_file(
+                &std::path::Path::new(&lfo_modes_dir()).join("bank01.work"),
+            )
+            .unwrap();
+            let mut part = bank.parts.unsaved.0[0];
+            let mut json = serde_json::to_value(part_data(&part, 0)).unwrap();
+            for section in ["lfos", "midi_lfos"] {
+                for lfo in json[section].as_array_mut().unwrap() {
+                    lfo.as_object_mut()
+                        .unwrap()
+                        .remove("custom_lfo_interpolation");
+                }
+            }
+            let data: PartData = serde_json::from_value(json).unwrap();
+            write_part_data(&mut part, &data);
+            assert_eq!(part, bank.parts.unsaved.0[0]);
         }
 
         /// A field the reader shows and the writer drops is an edit that is lost, and a

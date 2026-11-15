@@ -166,6 +166,14 @@ function nameOn(part: PartData, section: Section, trackId: number, field: string
     return { page: 'LFO DESIGN', param: `STEP ${Number(field.split('.')[1]) + 1}`, read: reading(null) };
   }
 
+  if (field.startsWith('custom_lfo_interpolation.')) {
+    const n = Number(field.split('.')[1]) + 1;
+    return {
+      page: 'LFO DESIGN', param: `STEP ${n} MODE`,
+      read: v => (v === null ? '-' : v ? 'smooth' : 'stepped'),
+    };
+  }
+
   // A MIDI track's and the recorder's fields are named per page, as in the editor
   const midi = section.startsWith('midi_');
   const specKey = midi || section === 'recorders' ? `${section}.${field}` : field;

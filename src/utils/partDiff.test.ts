@@ -74,6 +74,15 @@ describe('partChanges', () => {
     ])
   })
 
+  it('lists a changed step mode as its own row', () => {
+    const saved = copy()
+    const current = copy()
+    current.part.lfos[0].custom_lfo_interpolation[8] = 1
+    expect(partChanges(saved, current)).toMatchObject([
+      { track: 'T1', page: 'LFO DESIGN', param: 'STEP 9 MODE', saved: 'stepped', current: 'smooth' },
+    ])
+  })
+
   it('lists a scene lock, with "-" for a position the scene leaves alone', () => {
     const saved = copy()
     const current = copy()

@@ -27,7 +27,7 @@ describe('the shortcuts listed for each page', () => {
 
   it('a project lists what the open tab offers, then the whole project page', () => {
     expect(titles(shortcutsFor('project', 'flex-slots'))).toEqual(['Sample slots', 'Sample preview', 'Project', 'Everywhere'])
-    expect(titles(shortcutsFor('project', 'parts'))).toEqual(['Parts', 'Project', 'Everywhere'])
+    expect(titles(shortcutsFor('project', 'parts'))).toEqual(['Parts', 'LFO design window', 'Project', 'Everywhere'])
     expect(titles(shortcutsFor('project', 'tools'))).toEqual(['Tools', 'Project', 'Everywhere'])
     // A tab with nothing of its own shows the project and global lists only
     expect(titles(shortcutsFor('project', 'overview'))).toEqual(['Project', 'Everywhere'])
@@ -43,6 +43,11 @@ describe('the shortcuts listed for each page', () => {
       expect.stringMatching(/^Delete \| /),
       expect.stringMatching(/^Shift \+ click \| /),
     ]))
+  })
+
+  it('lists the LFO design window keys on the Parts tab', () => {
+    const lfo = shortcutsFor('project', 'parts').find(g => g.title === 'LFO design window')
+    expect(lfo?.rows.map(r => r.keys)).toEqual(['Drag', 'Shift + drag', 'Left / Right', 'Up / Down', 'Shift + Up / Down'])
   })
 
   it('the Audio Pool page has its own list', () => {

@@ -854,6 +854,38 @@ fn delete_file(path: String) -> Result<usize, String> {
     delete_files(vec![path])
 }
 
+/// Largest text file `read_text_file` will load (LFO shape exports are a few KB).
+const MAX_TEXT_FILE_BYTES: u64 = 65536;
+
+/// Write a text file chosen through the save dialog.
+#[tauri::command]
+fn write_text_file(path: String, contents: String) -> Result<(), String> {
+    std::fs::write(&path, contents).map_err(|e| e.to_string())
+}
+
+/// Read a text file chosen through the open dialog. Refuses anything over
+/// `MAX_TEXT_FILE_BYTES`: a regular file by its size before reading, and anything whose
+/// size says nothing (a FIFO, a file still growing) by reading at most one byte more.
+#[tauri::command]
+fn read_text_file(path: String) -> Result<String, String> {
+    use std::io::Read;
+    let too_large = || "File too large".to_string();
+    let len = std::fs::metadata(&path).map_err(|e| e.to_string())?.len();
+    if len > MAX_TEXT_FILE_BYTES {
+        return Err(too_large());
+    }
+    let mut bytes = Vec::new();
+    std::fs::File::open(&path)
+        .map_err(|e| e.to_string())?
+        .take(MAX_TEXT_FILE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|e| e.to_string())?;
+    if bytes.len() as u64 > MAX_TEXT_FILE_BYTES {
+        return Err(too_large());
+    }
+    String::from_utf8(bytes).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 fn open_in_file_manager(path: String) -> Result<(), String> {
     open::that(&path).map_err(|e| format!("Failed to open file manager: {}", e))
@@ -2126,6 +2158,8 @@ pub fn run() {
             get_home_directory,
             rename_file,
             delete_file,
+            write_text_file,
+            read_text_file,
             open_in_file_manager,
             reveal_in_file_manager,
             read_audio_file,
@@ -2201,6 +2235,53 @@ pub fn run() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn text_file_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("shape.json").to_string_lossy().into_owned();
+        write_text_file(path.clone(), "{\"a\":1}".into()).unwrap();
+        assert_eq!(read_text_file(path).unwrap(), "{\"a\":1}");
+    }
+
+    #[test]
+    fn read_text_file_refuses_a_large_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("big.json");
+        std::fs::write(&path, vec![b'x'; 65537]).unwrap();
+        assert_eq!(
+            read_text_file(path.to_string_lossy().into_owned()).unwrap_err(),
+            "File too large"
+        );
+    }
+
+    /// A FIFO reports a length of 0, so only a cap on the read itself holds it to the
+    /// limit (a file still growing after the size check is the same case).
+    #[cfg(unix)]
+    #[test]
+    fn read_text_file_caps_a_fifo_while_reading() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("pipe.json");
+        let made = std::process::Command::new("mkfifo")
+            .arg(&path)
+            .status()
+            .unwrap();
+        assert!(made.success());
+        assert_eq!(std::fs::metadata(&path).unwrap().len(), 0);
+        let writer_path = path.clone();
+        let writer = std::thread::spawn(move || {
+            use std::io::Write;
+            let mut pipe = std::fs::OpenOptions::new()
+                .write(true)
+                .open(&writer_path)
+                .unwrap();
+            // Three times the cap; the write fails once the reader has given up
+            let _ = pipe.write_all(&vec![b'x'; 3 * MAX_TEXT_FILE_BYTES as usize]);
+        });
+        let read = read_text_file(path.to_string_lossy().into_owned());
+        writer.join().unwrap();
+        assert_eq!(read.map(|s| s.len()), Err("File too large".to_string()));
+    }
 
     mod part_lock_commands {
         use super::*;

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { PartData, PartsDataResponse } from '../context/ProjectsContext';
+import { PartData, PartsDataResponse, PartTrackLfo } from '../context/ProjectsContext';
 import { TrackBadge } from './TrackBadge';
 import { ALL_MIDI_TRACKS } from './TrackSelector';
 import { WriteStatus, writeStatus } from '../types/writeStatus';
@@ -21,6 +21,9 @@ import { formatFxType, getFxMainLabels, getFxSetupLabels, FX_TYPES, fxTypesForSl
 import { fxDefaults } from '../utils/fxDefaults';
 import { fieldPath } from '../utils/partLocks';
 import { SlotPickerModal } from './SlotPickerModal';
+import LfoDesignWindow, { LfoSave } from './LfoDesignWindow';
+import { LfoShape, waveformPoints } from '../utils/lfoDesign';
+import type { WriteHistory } from './WriteHistoryControls';
 import './PartsPanel.css';
 
 interface PartsPanelProps {
@@ -67,6 +70,8 @@ interface PartsPanelProps {
   onPoolChanged?: () => void;
   /** The project's Sample Slots, so a Static/Flex track can be pointed at another one. */
   sampleSlots?: { static_slots: SlotChoice[]; flex_slots: SlotChoice[] };
+  /** The project's undo stack, so the LFO design window can offer Undo and Redo. */
+  writeHistory?: WriteHistory;
 }
 
 /** The little a slot selector needs to know about a Sample Slot. */
@@ -100,6 +105,7 @@ export default function PartsPanel({
   sampleSlots,
   reloadKey,
   onGoToParam,
+  writeHistory,
 }: PartsPanelProps) {
   const [partsData, setPartsData] = useState<PartData[]>([]);
   // Open Sample Slot picker: which track of which Part it is assigning, and its pool
@@ -147,8 +153,11 @@ export default function PartsPanel({
   // Reached through a ref by the project page, which asks for a re-read after an undo
   const loadPartsDataRef = useRef<(() => void) | null>(null);
 
-  // Ref for tracking LFO drawing state
-  const lfoDrawingRef = useRef<{ isDrawing: boolean; partId: number; section: 'lfos' | 'midi_lfos'; trackId: number } | null>(null);
+  // The LFO design window: which Part, section and track it edits. Its shape is read
+  // from partsData on every render, so a reload (Undo, Redo) shows the restored one.
+  const [lfoWindow, setLfoWindow] = useState<{
+    partId: number; section: 'lfos' | 'midi_lfos'; trackId: number;
+  } | null>(null);
 
   // Ref for debouncing save operations (prevents rapid saves during keyboard input)
   const saveDebounceRef = useRef<{ timer: ReturnType<typeof setTimeout> | null; partId: number | null; what: string }>({ timer: null, partId: null, what: '' });
@@ -464,60 +473,26 @@ export default function PartsPanel({
     queuePartSave(partId, `${slot} type -> ${formatFxType(nextType)}`);
   }, [queuePartSave]);
 
-  // Update a single point in the LFO design array (local state only, no save)
-  const updateLfoDesignLocal = useCallback((
-    partId: number,
-    section: 'lfos' | 'midi_lfos',
-    trackId: number,
-    stepIndex: number,
-    value: number
-  ) => {
-    setPartsData(prev => {
-      const partIndex = prev.findIndex(p => p.part_id === partId);
-      if (partIndex === -1) return prev;
-
-      const updatedPart = JSON.parse(JSON.stringify(prev[partIndex])) as PartData;
-      const sectionArray = updatedPart[section] as unknown[];
-      const track = sectionArray[trackId] as Record<string, unknown> | undefined;
-      if (!track || !track.custom_lfo_design) return prev;
-
-      const lfoDesign = track.custom_lfo_design as number[];
-      lfoDesign[stepIndex] = value;
-
-      const newData = [...prev];
-      newData[partIndex] = updatedPart;
-      return newData;
+  // The LFO design window changed the shape: keep it in the Part and save as asked.
+  // partsDataRef is assigned at once so a save in the same tick reads the new shape.
+  const changeLfoDesign = (next: LfoShape, save: LfoSave) => {
+    if (!lfoWindow) return;
+    const { partId, section, trackId } = lfoWindow;
+    const data = partsDataRef.current.map(part => part.part_id !== partId ? part : {
+      ...part,
+      [section]: part[section].map((lfo, i) => i !== trackId ? lfo : {
+        ...lfo, custom_lfo_design: next.values, custom_lfo_interpolation: next.interpolation,
+      }),
     });
-
-    // Track which part was modified (shows * indicator)
-    markModified(partId);
-  }, []);
-
-  // Save LFO design to backend (called on mouse release)
-  const saveLfoDesign = useCallback((partId: number) => {
-    const partIndex = partsData.findIndex(p => p.part_id === partId);
-    if (partIndex === -1) {
-      console.error('[PartsPanel] Part not found:', partId);
+    partsDataRef.current = data;
+    setPartsData(data);
+    if (save === 'none') {
+      markModified(partId);
       return;
     }
-
-    const partToSave = partsData[partIndex];
-    onWriteStatusChange?.(writeStatus.writing());
-    invoke('save_parts', {
-      path: projectPath,
-      bankId: bankId,
-      partsData: [partToSave]
-    }).then(() => {
-      const partName = partNames[partId] || `Part ${partId + 1}`;
-      onWriteStatusChange?.(writeStatus.success(`Part ${partName} saved as *`));
-      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
-      refreshLocks();
-    }).catch(err => {
-      console.error('Failed to save LFO design:', err);
-      onWriteStatusChange?.(writeStatus.error('Save failed'));
-      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 3000);
-    });
-  }, [projectPath, bankId, partsData, onWriteStatusChange, refreshLocks]);
+    queuePartSave(partId, 'LFO design');
+    if (save === 'now') void flushPartSave();
+  };
 
   // Parameter value component - editable in edit mode, read-only in view mode
   // Update a param locally without saving to backend (for knob dragging)
@@ -1301,11 +1276,12 @@ export default function PartsPanel({
   // (the diffs window still reverts and locks them). Add it here: one step is
   // `custom_lfo_design.<n>` under 'lfos' or 'midi_lfos'.
   const renderLfoEnvelope = (
-    customLfoDesign: number[],
-    partId?: number,
-    section?: 'lfos' | 'midi_lfos',
-    trackId?: number
+    lfo: PartTrackLfo,
+    partId: number,
+    section: 'lfos' | 'midi_lfos',
+    trackId: number
   ) => {
+    const customLfoDesign = lfo.custom_lfo_design;
     // Validate custom LFO design data
     if (!customLfoDesign || customLfoDesign.length !== 16) {
       return (
@@ -1317,179 +1293,53 @@ export default function PartsPanel({
       );
     }
 
-    const envelopeData = customLfoDesign;
-    const stepCount = 16;
-    const canDraw = isEditMode && partId !== undefined && section !== undefined && trackId !== undefined;
-
-    // Convert data points to coordinates
-    // Octatrack stores LFO values using a special encoding:
-    // - 0-127 (unsigned) → 0 to +127 (signed, above center line)
-    // - 128-255 (unsigned) → -128 to -1 (signed, below center line)
-    const centerY = 30;  // Center of viewBox (0-60)
-    const rangeY = 29;   // Use almost full height with 1px padding top/bottom
-
-    const points = envelopeData.map((value, index) => {
-      const signedValue = value <= 127 ? value : value - 256;  // Convert to signed: -128 to +127
-      return {
-        x: (index / (stepCount - 1)) * 100,
-        y: centerY - ((signedValue / 128) * rangeY)  // Map to y-coord: -128→y=59, 0→y=30, +127→y=1
-      };
-    });
-
-    // Create smooth curve path using cardinal spline with softer interpolation
-    const createSmoothPath = (points: { x: number; y: number }[]) => {
-      if (points.length < 2) return '';
-
-      const tension = 0.25; // Reduced tension for softer knee, closer match to actual values
-      let path = `M ${points[0].x} ${points[0].y}`;
-
-      for (let i = 0; i < points.length - 1; i++) {
-        const p0 = points[i === 0 ? 0 : i - 1];
-        const p1 = points[i];
-        const p2 = points[i + 1];
-        const p3 = points[i + 2] || p2;
-
-        const cp1x = p1.x + (p2.x - p0.x) / 6 * tension;
-        const cp1y = p1.y + (p2.y - p0.y) / 6 * tension;
-        const cp2x = p2.x - (p3.x - p1.x) / 6 * tension;
-        const cp2y = p2.y - (p3.y - p1.y) / 6 * tension;
-
-        path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
-      }
-
-      return path;
+    // A backend without step modes sends no custom_lfo_interpolation: show every step stepped
+    const shape: LfoShape = {
+      values: customLfoDesign, interpolation: lfo.custom_lfo_interpolation ?? Array(16).fill(0),
     };
-
-    // Convert mouse position to step index and value
-    const handleMouseDraw = (e: React.MouseEvent<SVGSVGElement>) => {
-      if (!canDraw) return;
-
-      const svg = e.currentTarget;
-      const rect = svg.getBoundingClientRect();
-
-      // Get mouse position relative to SVG
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-
-      // Convert to viewBox coordinates (0-100 for x, 0-60 for y)
-      const viewBoxX = (mouseX / rect.width) * 100;
-      const viewBoxY = (mouseY / rect.height) * 60;
-
-      // Calculate step index (0-15)
-      const stepIndex = Math.round((viewBoxX / 100) * (stepCount - 1));
-      const clampedStepIndex = Math.max(0, Math.min(15, stepIndex));
-
-      // Convert viewBox Y to signed value (-128 to +127)
-      // y=1 → +127, y=30 → 0, y=59 → -128
-      const signedValue = Math.round(((centerY - viewBoxY) / rangeY) * 128);
-      const clampedSignedValue = Math.max(-128, Math.min(127, signedValue));
-
-      // Convert signed to unsigned (Octatrack format)
-      // 0-127 stays as is, -128 to -1 becomes 128-255
-      const unsignedValue = clampedSignedValue >= 0 ? clampedSignedValue : clampedSignedValue + 256;
-
-      // Update local state only (no save during drawing)
-      updateLfoDesignLocal(partId!, section!, trackId!, clampedStepIndex, unsignedValue);
-    };
-
-    const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
-      if (!canDraw) return;
-      e.preventDefault(); // Prevent text selection while dragging
-      lfoDrawingRef.current = { isDrawing: true, partId: partId!, section: section!, trackId: trackId! };
-      handleMouseDraw(e);
-    };
-
-    const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
-      if (!lfoDrawingRef.current?.isDrawing) return;
-      handleMouseDraw(e);
-    };
-
-    const handleMouseUp = () => {
-      if (lfoDrawingRef.current) {
-        // Save on mouse release
-        saveLfoDesign(lfoDrawingRef.current.partId);
-        lfoDrawingRef.current = null;
-      }
-    };
-
-    const handleMouseLeave = () => {
-      if (lfoDrawingRef.current) {
-        // Save when mouse leaves while drawing
-        saveLfoDesign(lfoDrawingRef.current.partId);
-        lfoDrawingRef.current = null;
-      }
-    };
+    const label = `${section === 'lfos' ? 'T' : 'M'}${trackId + 1}`;
 
     return (
       <div className="lfo-envelope-container">
         <div className="lfo-envelope-wrapper">
-          <svg
-            className={`lfo-envelope-svg ${canDraw ? 'lfo-envelope-editable' : ''}`}
-            viewBox="0 0 100 60"
-            preserveAspectRatio="none"
-            onMouseDown={canDraw ? handleMouseDown : undefined}
-            onMouseMove={canDraw ? handleMouseMove : undefined}
-            onMouseUp={canDraw ? handleMouseUp : undefined}
-            onMouseLeave={canDraw ? handleMouseLeave : undefined}
+          <button
+            type="button"
+            className="lfo-envelope-preview"
+            aria-label={`Open the LFO design of ${label}`}
+            onClick={() => setLfoWindow({ partId, section, trackId })}
           >
-            <defs>
-              <linearGradient id="lfoGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" style={{ stopColor: '#4ac8ff', stopOpacity: 1 }} />
-                <stop offset="50%" style={{ stopColor: '#7b68ee', stopOpacity: 1 }} />
-                <stop offset="100%" style={{ stopColor: '#ff6b9d', stopOpacity: 1 }} />
-              </linearGradient>
-            </defs>
+            <svg className="lfo-envelope-svg" viewBox="0 0 100 60" preserveAspectRatio="none">
+              <defs>
+                <linearGradient id="lfoGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" style={{ stopColor: '#4ac8ff', stopOpacity: 1 }} />
+                  <stop offset="50%" style={{ stopColor: '#7b68ee', stopOpacity: 1 }} />
+                  <stop offset="100%" style={{ stopColor: '#ff6b9d', stopOpacity: 1 }} />
+                </linearGradient>
+              </defs>
 
-            {/* Draw vertical grid lines for each step */}
-            {Array.from({ length: stepCount }).map((_, index) => (
-              <line
-                key={`grid-${index}`}
-                className="lfo-envelope-grid"
-                x1={(index / (stepCount - 1)) * 100}
-                y1="5"
-                x2={(index / (stepCount - 1)) * 100}
-                y2="50"
-              />
-            ))}
-
-            {/* Draw center line when in edit mode */}
-            {canDraw && (
-              <line
-                className="lfo-envelope-center"
-                x1="0"
-                y1={centerY}
-                x2="100"
-                y2={centerY}
-              />
-            )}
-
-            {/* Draw the smooth waveform */}
-            <path
-              className="lfo-envelope-line"
-              d={createSmoothPath(points)}
-            />
-          </svg>
-
-          {/* Render points as HTML elements to avoid SVG distortion */}
-          {canDraw && (
-            <div className="lfo-envelope-points-overlay">
-              {points.map((point, index) => (
-                <div
-                  key={`point-${index}`}
-                  className="lfo-envelope-point"
-                  style={{
-                    left: `${point.x}%`,
-                    top: `${(point.y / 60) * 100}%`,
-                  }}
+              {/* The 17 edges of the 16 step columns, where waveformPoints puts the steps */}
+              {Array.from({ length: 17 }).map((_, index) => (
+                <line
+                  key={`grid-${index}`}
+                  className="lfo-envelope-grid"
+                  x1={(index / 16) * 100}
+                  y1="5"
+                  x2={(index / 16) * 100}
+                  y2="55"
                 />
               ))}
-            </div>
-          )}
+
+              {/* Drawn 5 units in from the top and bottom, so the stroke at 127 and -128 is not cut */}
+              <g transform="translate(0 5)">
+                <polyline className="lfo-envelope-line" points={waveformPoints(shape, 100, 50)} />
+              </g>
+            </svg>
+          </button>
         </div>
 
         {/* Step indicators */}
         <div className="lfo-envelope-steps">
-          {envelopeData.map((value, index) => {
+          {customLfoDesign.map((value, index) => {
             // Convert unsigned byte to signed value for display
             const signedValue = value <= 127 ? value : value - 256;
             return (
@@ -1501,6 +1351,45 @@ export default function PartsPanel({
           })}
         </div>
       </div>
+    );
+  };
+
+  /** The LFO design window, rendered in every return so a re-read never closes it. */
+  const renderLfoWindow = () => {
+    if (!lfoWindow) return null;
+    const { partId, section, trackId } = lfoWindow;
+    const entry = partsData.find(p => p.part_id === partId)?.[section][trackId];
+    if (!entry) return null;
+    const savedEntry = savedPart?.part_id === partId ? savedPart[section][trackId] : undefined;
+    const label = `${section === 'lfos' ? 'T' : 'M'}${trackId + 1}`;
+    const partName = partNames[partId] || `Part ${partId + 1}`;
+    const report = (message: string, kind: 'success' | 'error') => {
+      onWriteStatusChange?.(kind === 'success' ? writeStatus.success(message) : writeStatus.error(message));
+      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
+    };
+    // A nudge waits out the save delay. Undo or Redo before it lands would take back the
+    // write before it, and the late save would then write the re-read Part as a new step
+    // and drop Redo. So the pending save goes first.
+    const history: WriteHistory | undefined = writeHistory && {
+      ...writeHistory,
+      undo: () => { void flushPartSave().then(writeHistory.undo); },
+      redo: () => { void flushPartSave().then(writeHistory.redo); },
+    };
+    const noModes = () => Array(16).fill(0);
+    return (
+      <LfoDesignWindow
+        title={`LFO design - Part ${partId + 1}: ${partName}, ${label}`}
+        fileName={`lfo-design-part${partId + 1}-${label}`}
+        shape={{ values: entry.custom_lfo_design, interpolation: entry.custom_lfo_interpolation ?? noModes() }}
+        saved={savedEntry && {
+          values: savedEntry.custom_lfo_design, interpolation: savedEntry.custom_lfo_interpolation ?? noModes(),
+        }}
+        editable={isEditMode}
+        history={history}
+        onChange={changeLfoDesign}
+        onStatus={report}
+        onClose={() => setLfoWindow(null)}
+      />
     );
   };
 
@@ -1568,7 +1457,7 @@ export default function PartsPanel({
               </div>
             </div>
           ) : (
-            renderLfoEnvelope(lfo.custom_lfo_design, activePart.part_id, 'lfos', lfo.track_id)
+            renderLfoEnvelope(lfo, activePart.part_id, 'lfos', lfo.track_id)
           )}
         </div>
       );
@@ -2073,7 +1962,7 @@ export default function PartsPanel({
               </div>
             </div>
           ) : (
-            renderLfoEnvelope(lfo.custom_lfo_design, activePart.part_id, 'midi_lfos', lfo.track_id)
+            renderLfoEnvelope(lfo, activePart.part_id, 'midi_lfos', lfo.track_id)
           )}
         </div>
       );
@@ -2460,7 +2349,7 @@ export default function PartsPanel({
                     </div>
                     <div className="params-subsection">
                       <div className="params-column-label">DESIGN</div>
-                      {renderLfoEnvelope(lfo.custom_lfo_design, activePart.part_id, 'lfos', trackIdx)}
+                      {renderLfoEnvelope(lfo, activePart.part_id, 'lfos', trackIdx)}
                     </div>
                   </div>
                 </div>
@@ -2675,7 +2564,7 @@ export default function PartsPanel({
                     </div>
                     <div className="params-subsection">
                       <div className="params-column-label">DESIGN</div>
-                      {renderLfoEnvelope(midi_lfo.custom_lfo_design, activePart.part_id, 'midi_lfos', trackIdx)}
+                      {renderLfoEnvelope(midi_lfo, activePart.part_id, 'midi_lfos', trackIdx)}
                     </div>
                   </div>
                 </div>
@@ -2743,21 +2632,31 @@ export default function PartsPanel({
     );
   };
 
+  // Every return puts the LFO design window at the same spot (second child of a
+  // fragment): a portal is remounted when its parent moves, and every Undo and Redo
+  // swaps the loading return for the main one while the window must stay as it is.
+  const withLfoWindow = (body: React.ReactNode) => (
+    <>
+      {body}
+      {renderLfoWindow()}
+    </>
+  );
+
   if (loading) {
-    return <div className="parts-panel-loading">Loading Parts data...</div>;
+    return withLfoWindow(<div className="parts-panel-loading">Loading Parts data...</div>);
   }
 
   if (error) {
-    return <div className="parts-panel-error">Error loading Parts: {error}</div>;
+    return withLfoWindow(<div className="parts-panel-error">Error loading Parts: {error}</div>);
   }
 
   if (partsData.length === 0) {
-    return <div className="parts-panel-empty">No Parts data available</div>;
+    return withLfoWindow(<div className="parts-panel-empty">No Parts data available</div>);
   }
 
   const activePart = partsData[activePartIndex];
 
-  return (
+  return withLfoWindow(
     <div
       className={`bank-card ${modifiedPartIds.size > 0 ? 'edit-mode' : ''}`}
       data-bank-id={bankId}

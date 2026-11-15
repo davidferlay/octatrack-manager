@@ -9,6 +9,7 @@ const lfo = (track_id: number) => ({
   lfo1_pmtr: 0, lfo2_pmtr: 0, lfo3_pmtr: 0, lfo1_wave: 0, lfo2_wave: 0, lfo3_wave: 0,
   lfo1_mult: 0, lfo2_mult: 0, lfo3_mult: 0, lfo1_trig: 0, lfo2_trig: 0, lfo3_trig: 0,
   custom_lfo_design: Array(16).fill(0),
+  custom_lfo_interpolation: Array(16).fill(0),
 })
 const six = (prefix: string, value: number) =>
   Object.fromEntries([1, 2, 3, 4, 5, 6].map(n => [`${prefix}${n}`, value]))
