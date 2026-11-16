@@ -114,3 +114,16 @@ export const parseShareText = (text: string): LfoShape => {
     interpolation: (interpolated as boolean[]).map(m => (m ? 1 : 0)),
   }
 }
+
+/** A safe file-name piece: letters, digits, _ and - stay, every other run becomes one -. */
+const fileSafe = (text: string) => text.replace(/[^\p{L}\p{N}_-]+/gu, '-').replace(/^-+|-+$/g, '');
+
+/**
+ * The export file name, without extension: `<Set>_<project>_lfo-design-part<n>-<track>`.
+ * The Set and the project are the last two folders of the project's path; either is left
+ * out when there is none.
+ */
+export function shareFileName(projectPath: string, part: number, track: string): string {
+  const folders = projectPath.split(/[\\/]/).filter(Boolean).slice(-2).map(fileSafe).filter(Boolean);
+  return [...folders, `lfo-design-part${part}-${track}`].join('_');
+}

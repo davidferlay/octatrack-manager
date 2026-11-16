@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   invertShape, clearShape, setAllModes, randomShape, toSigned, toRaw,
-  waveformPoints, pointToStep, toShareText, parseShareText, sameShape,
+  waveformPoints, pointToStep, toShareText, parseShareText, sameShape, shareFileName,
 } from './lfoDesign'
 
 const T1 = [127, 0, 127, 0, 127, 0, 127, 0, 128, 0, 128, 0, 128, 0, 128, 0]
@@ -83,5 +83,17 @@ describe('lfoDesign', () => {
     mode[0] = 0
     expect(sameShape(shape(T1, modes), shape(T1, mode))).toBe(false)
     expect(sameShape(shape(T1, modes), shape(T1.slice(0, 15), modes))).toBe(false)
+  })
+})
+
+describe('shareFileName', () => {
+  it('names the file after the Set, the project, the Part and the track', () => {
+    expect(shareFileName('/home/me/Sets/LIVE SET/P-260702', 1, 'T3')).toBe('LIVE-SET_P-260702_lfo-design-part1-T3')
+    expect(shareFileName('C:\\OT\\Set é\\proj (2)\\', 4, 'M1')).toBe('Set-é_proj-2_lfo-design-part4-M1')
+  })
+  it('drops what is unsafe in a file name and keeps going without a Set', () => {
+    expect(shareFileName('/a:b*c?/x<y>|z', 2, 'T1')).toBe('a-b-c_x-y-z_lfo-design-part2-T1')
+    expect(shareFileName('/proj', 1, 'T1')).toBe('proj_lfo-design-part1-T1')
+    expect(shareFileName('', 1, 'T1')).toBe('lfo-design-part1-T1')
   })
 })

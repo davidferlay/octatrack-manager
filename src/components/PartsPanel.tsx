@@ -22,7 +22,7 @@ import { fxDefaults } from '../utils/fxDefaults';
 import { fieldPath } from '../utils/partLocks';
 import { SlotPickerModal } from './SlotPickerModal';
 import LfoDesignWindow, { LfoSave } from './LfoDesignWindow';
-import { LfoShape, waveformPoints } from '../utils/lfoDesign';
+import { LfoShape, waveformPoints, shareFileName } from '../utils/lfoDesign';
 import type { WriteHistory } from './WriteHistoryControls';
 import './PartsPanel.css';
 
@@ -1411,7 +1411,7 @@ export default function PartsPanel({
     return (
       <LfoDesignWindow
         title={`LFO design - Part ${partId + 1}: ${partName} - ${label}`}
-        fileName={`lfo-design-part${partId + 1}-${label}`}
+        fileName={shareFileName(projectPath, partId + 1, label)}
         shape={{ values: entry.custom_lfo_design, interpolation: entry.custom_lfo_interpolation ?? noModes() }}
         saved={savedEntry && {
           values: savedEntry.custom_lfo_design, interpolation: savedEntry.custom_lfo_interpolation ?? noModes(),

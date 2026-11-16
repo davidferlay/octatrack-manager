@@ -221,7 +221,7 @@ Up is more, down is less, throughout.
 | PE321 | LFO design | Copy and Paste across tracks | Copy a shape on T1, close the window, open T2's window in Edit mode, click Paste | T2 gets the same 16 values and modes; a message reads LFO design pasted |
 | PE322 | LFO design | Paste refuses other text | Copy some other text, open the window, click Paste | The shape is unchanged and a message reads Not an LFO design |
 | PE323 | LFO design | Paste refuses a newer design | Paste a design whose version is 2 | The shape is unchanged and a message says it was made by a newer version of Octatrack Manager |
-| PE324 | LFO design | Export | Click Export, pick a place and save | A .json file is written, named after the Part and track; a message reads LFO design exported |
+| PE324 | LFO design | Export | Click Export, pick a place and save | A .json file is written, its name proposed as Set_project_lfo-design-partN-track (for example LIVE-SET_P-260702_lfo-design-part1-T3), with anything unsafe in a file name replaced; a message reads LFO design exported |
 | PE325 | LFO design | Import | In Edit mode click Import and choose the exported file on another track | The track gets the same values and modes; a message reads LFO design imported |
 | PE326 | LFO design | Import refuses a bad file | Import a file that is not an LFO design | The shape is unchanged and a message reads Not an LFO design |
 | PE327 | LFO design | Undo in the window | Make three changes, then use the window's Undo, then Redo | Each press takes back or redoes one action; the Undo and Redo controls are shown in Edit mode only |

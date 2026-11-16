@@ -338,7 +338,7 @@ export default function LfoDesignWindow({
   const tool = (label: string, run: () => void, alwaysOn = false) => (
     <button
       key={label}
-      className="lfo-design-tool"
+      className={`lfo-design-tool ${alwaysOn ? 'reads' : 'writes'}`}
       disabled={!alwaysOn && !editable}
       onClick={run}
     >
