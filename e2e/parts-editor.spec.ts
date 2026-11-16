@@ -38,6 +38,12 @@ interface MockOptions {
   lfoDesign?: number[]
   /** The LFO params come without custom_lfo_interpolation, as from an older backend. */
   lfoModesMissing?: boolean
+  /** T1's LFO step modes in the saved copy read_part_copies reports. As the edited copy by default. */
+  savedLfoModes?: number[]
+  /** What the save and open dialogs answer: a path, or null for Cancel. */
+  dialogPath?: string | null
+  /** What read_text_file reads. */
+  importText?: string
 }
 
 async function setupTauriMocks(page: Page, options?: MockOptions) {
@@ -52,8 +58,11 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
     copiesIdentical: options?.copiesIdentical ?? false,
     lfoDesign: options?.lfoDesign ?? Array(16).fill(0),
     lfoModesMissing: options?.lfoModesMissing ?? false,
+    savedLfoModes: options?.savedLfoModes ?? null,
+    dialogPath: options?.dialogPath ?? null,
+    importText: options?.importText ?? '',
   }
-  await page.addInitScript((opts: { partsEditedBitmask: number; partsSavedState: number[]; fx1Type: number; loadedFlexSlots: number; t1FlexSlot: number | null; sceneMutes: [boolean, boolean]; preloadScenes: boolean | 'fail'; copiesIdentical: boolean; lfoDesign: number[]; lfoModesMissing: boolean }) => {
+  await page.addInitScript((opts: { partsEditedBitmask: number; partsSavedState: number[]; fx1Type: number; loadedFlexSlots: number; t1FlexSlot: number | null; sceneMutes: [boolean, boolean]; preloadScenes: boolean | 'fail'; copiesIdentical: boolean; lfoDesign: number[]; lfoModesMissing: boolean; savedLfoModes: number[] | null; dialogPath: string | null; importText: string }) => {
     const makeMachine = (trackId: number) => ({
       track_id: trackId,
       machine_type: 'Flex',
@@ -285,6 +294,9 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
               flex_slot_id: saved.machines[0].flex_slot_id + 1,
             }
             saved.fxs[0] = { ...saved.fxs[0], fx1_type: 12 }
+            if (opts.savedLfoModes) {
+              saved.lfos[0] = { ...saved.lfos[0], custom_lfo_interpolation: [...opts.savedLfoModes] }
+            }
             const savedScenes = makeScenes()
             ;(savedScenes.scenes[0].tracks[0].amp as (number | null)[])[3] = 90
             ;(savedScenes.scenes[0].tracks[0].lfo as (number | null)[])[0] = 10
@@ -363,6 +375,15 @@ async function setupTauriMocks(page: Page, options?: MockOptions) {
             return []
           case 'plugin:app|version':
             return '1.0.0'
+
+          // The LFO design window's Export and Import
+          case 'plugin:dialog|save':
+          case 'plugin:dialog|open':
+            return opts.dialogPath
+          case 'write_text_file':
+            return null
+          case 'read_text_file':
+            return opts.importText
 
           default:
             console.warn('Unhandled mock invoke:', cmd)
@@ -5363,6 +5384,66 @@ test.describe('Parts Editor - LFO design window', () => {
     await expect(dialog(page)).toBeVisible()
   })
 
+  test('L opens the window of the selected track', async ({ page }) => {
+    await selectTrack(page, '2')
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('l')
+    await expect(page.getByRole('dialog', { name: /^LFO design - Part 1: .* - T3$/ })).toBeVisible()
+  })
+
+  test('L opens M1 while all MIDI tracks are shown, and a MIDI track\'s own otherwise', async ({ page }) => {
+    await selectTrack(page, '-2')
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('l')
+    await expect(page.getByRole('dialog', { name: /^LFO design - Part 1: .* - M1$/ })).toBeVisible()
+    await page.keyboard.press('l')
+    await selectTrack(page, '10')
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('l')
+    await expect(page.getByRole('dialog', { name: /^LFO design - Part 1: .* - M3$/ })).toBeVisible()
+  })
+
+  test('L does nothing with All Banks on screen', async ({ page }) => {
+    await page.locator('#parts-bank-select').selectOption('-1')
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('l')
+    await expect(page.locator('.lfo-design-modal')).toHaveCount(0)
+  })
+
+  test('L does nothing while another window is open', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('?')
+    await expect(page.locator('.modal-overlay')).toHaveCount(1)
+    await page.keyboard.press('l')
+    await expect(page.locator('.lfo-design-modal')).toHaveCount(0)
+  })
+
+  test('steps a value by dragging it up', async ({ page }) => {
+    await enterEditMode(page)
+    await designPreview(page).click()
+    const box = (await dialog(page).getByLabel('Step 3 value').boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 - 12, { steps: 4 })
+    await page.mouse.up()
+    await expect(dialog(page).getByLabel('Step 3 value')).toHaveValue('3')
+    await expect.poll(async () => (await getInvokeCalls(page, 'save_parts')).length).toBeGreaterThan(0)
+    expect((await lastSave(page)).lfos[0].custom_lfo_design[2]).toBe(3)
+  })
+
+  test('selects a column with a click in View mode, and a step from its number in Edit mode', async ({ page }) => {
+    await designPreview(page).click()
+    const canvas = dialog(page).locator('svg.lfo-design-canvas')
+    const box = (await canvas.boundingBox())!
+    await page.mouse.click(box.x + (box.width * 12.5) / 16, box.y + box.height / 4)
+    await expect(dialog(page).getByRole('button', { name: 'Select step 13' })).toHaveAttribute('aria-pressed', 'true')
+    await page.keyboard.press('e')
+    await dialog(page).getByRole('button', { name: 'Select step 6' }).click()
+    await expect(dialog(page).getByRole('button', { name: 'Select step 6' })).toHaveAttribute('aria-pressed', 'true')
+    await page.waitForTimeout(700)
+    expect(await getInvokeCalls(page, 'save_parts')).toHaveLength(0)
+  })
+
   test('answers Copy in a floating badge', async ({ page }) => {
     await designPreview(page).click()
     await dialog(page).getByRole('button', { name: 'Copy' }).click()
@@ -5512,7 +5593,7 @@ test.describe('Parts Editor - LFO design preview', () => {
     // 127 and -128 side by side: the wave touches both ends of the range
     await setupTauriMocks(page, { lfoDesign: [127, 128, 127, 128, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] })
     await openPartsTab(page)
-    const svg = designPreview(page).locator('svg')
+    const svg = designPreview(page).locator('svg.lfo-envelope-svg')
     await expect(svg).toBeVisible()
     const xs = await svg.locator('.lfo-envelope-grid').evaluateAll(lines => lines.map(l => Number(l.getAttribute('x1'))))
     expect(xs).toEqual(Array.from({ length: 17 }, (_, i) => (i * 100) / 16))
@@ -5532,5 +5613,197 @@ test.describe('Parts Editor - LFO design preview', () => {
     const win = page.getByRole('dialog', { name: /^LFO design - Part 1: .* - T1$/ })
     await expect(win).toBeVisible()
     await expect(win.getByLabel('Step 1 mode')).toHaveText('step')
+  })
+})
+
+test.describe('Parts Editor - LFO design Export and Import', () => {
+  const dialog = (page: Page) => page.getByRole('dialog', { name: /^LFO design - Part 1: .* - T1$/ })
+  const share = (values: number[], interpolated: boolean[]) =>
+    JSON.stringify({ type: 'octatrack-lfo-design', version: 1, values, interpolated })
+
+  test('exports the shape to the chosen file, named after the Set and the project', async ({ page }) => {
+    await setupTauriMocks(page, { dialogPath: '/tmp/out.json', lfoDesign: [127, 128, ...Array(14).fill(0)] })
+    await openPartsTab(page)
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('l')
+    // Export works in View mode
+    await dialog(page).getByRole('button', { name: 'Export' }).click()
+    await expect(page.locator('.toast-notification', { hasText: 'LFO design exported' })).toBeVisible()
+    const [ask] = await getInvokeCalls(page, 'plugin:dialog|save')
+    expect(ask.args.options.defaultPath).toBe('test_project_lfo-design-part1-T1.json')
+    const [write] = await getInvokeCalls(page, 'write_text_file')
+    expect(write.args.path).toBe('/tmp/out.json')
+    expect(JSON.parse(write.args.contents)).toEqual({
+      type: 'octatrack-lfo-design', version: 1,
+      values: [127, -128, ...Array(14).fill(0)], interpolated: Array(16).fill(false),
+    })
+  })
+
+  test('writes nothing when the export is cancelled', async ({ page }) => {
+    await setupTauriMocks(page, { dialogPath: null })
+    await openPartsTab(page)
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('l')
+    await dialog(page).getByRole('button', { name: 'Export' }).click()
+    await expect.poll(async () => (await getInvokeCalls(page, 'plugin:dialog|save')).length).toBe(1)
+    expect(await getInvokeCalls(page, 'write_text_file')).toHaveLength(0)
+    await expect(page.locator('.toast-notification')).toHaveCount(0)
+  })
+
+  test('imports a shape from a file in Edit mode', async ({ page }) => {
+    const values = [-1, 5, -128, 127, ...Array(12).fill(0)]
+    const interpolated = [true, false, true, ...Array(13).fill(false)]
+    await setupTauriMocks(page, { dialogPath: '/tmp/in.json', importText: share(values, interpolated) })
+    await openPartsTab(page)
+    await enterEditMode(page)
+    await page.keyboard.press('l')
+    await dialog(page).getByRole('button', { name: 'Import' }).click()
+    await expect(page.locator('.toast-notification', { hasText: 'LFO design imported' })).toBeVisible()
+    await expect(dialog(page).getByLabel('Step 1 value')).toHaveValue('-1')
+    await expect.poll(async () => (await getInvokeCalls(page, 'save_parts')).length).toBeGreaterThan(0)
+    const calls = await getInvokeCalls(page, 'save_parts')
+    const lfo = calls[calls.length - 1].args.partsData[0].lfos[0]
+    expect(lfo.custom_lfo_design.slice(0, 4)).toEqual([255, 5, 128, 127])
+    expect(lfo.custom_lfo_interpolation.slice(0, 3)).toEqual([1, 0, 1])
+    const [read] = await getInvokeCalls(page, 'read_text_file')
+    expect(read.args.path).toBe('/tmp/in.json')
+  })
+
+  test('refuses a file that is not an LFO design and keeps the shape', async ({ page }) => {
+    await setupTauriMocks(page, { dialogPath: '/tmp/in.json', importText: '{"hello":"world"}' })
+    await openPartsTab(page)
+    await enterEditMode(page)
+    await page.keyboard.press('l')
+    await dialog(page).getByRole('button', { name: 'Import' }).click()
+    const badge = page.locator('.toast-notification', { hasText: 'Not an LFO design' })
+    await expect(badge).toBeVisible()
+    await expect(badge).toHaveClass(/warning/)
+    await page.waitForTimeout(700)
+    expect(await getInvokeCalls(page, 'save_parts')).toHaveLength(0)
+  })
+
+  test('offers no Import or Paste in View mode', async ({ page }) => {
+    await setupTauriMocks(page)
+    await openPartsTab(page)
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('l')
+    await expect(dialog(page).getByRole('button', { name: 'Import' })).toBeDisabled()
+    await expect(dialog(page).getByRole('button', { name: 'Paste' })).toBeDisabled()
+    await expect(dialog(page).getByRole('button', { name: 'Copy' })).toBeEnabled()
+    await expect(dialog(page).getByRole('button', { name: 'Export' })).toBeEnabled()
+  })
+})
+
+test.describe('Parts Editor - LFO step modes against the saved copy', () => {
+  // T1's saved copy has step 1 smooth; the Part on screen has every step stepped
+  test.beforeEach(async ({ page }) => {
+    await setupTauriMocks(page, {
+      partsEditedBitmask: 1, partsSavedState: [1, 0, 0, 0], savedLfoModes: [1, ...Array(15).fill(0)],
+    })
+    await openPartsTab(page)
+    await selectTrack(page, '0')
+    await enterEditMode(page)
+  })
+
+  test('the diffs window lists the changed step mode', async ({ page }) => {
+    await page.keyboard.press('d')
+    const diffs = page.getByRole('dialog', { name: 'Edited params against saved' })
+    const row = diffs.getByRole('row').filter({ hasText: 'STEP 1 MODE' })
+    await expect(row).toHaveCount(1)
+    await expect(row).toContainText('LFO DESIGN')
+    await expect(row.locator('td.part-changes-current')).toHaveText('stepped')
+    await expect(row).toContainText('smooth')
+  })
+
+  test('the window marks the step mode and names the saved one', async ({ page }) => {
+    await page.keyboard.press('l')
+    const tag = page.getByRole('dialog', { name: /^LFO design - Part 1: .* - T1$/ }).getByLabel('Step 1 mode')
+    await expect(tag).toHaveClass(/param-changed/)
+    await expect(tag).toHaveAttribute('title', 'Saved: smooth')
+    await expect(page.getByRole('dialog', { name: /- T1$/ }).getByLabel('Step 2 mode')).not.toHaveClass(/param-changed/)
+  })
+
+  test('the diffs window reloads one step mode from the Part', async ({ page }) => {
+    await page.keyboard.press('d')
+    const diffs = page.getByRole('dialog', { name: 'Edited params against saved' })
+    await diffs.getByRole('button', { name: 'Reload T1 LFO DESIGN STEP 1 MODE from Part' }).click()
+    const calls = await getInvokeCalls(page, 'revert_part_values')
+    expect(calls).toHaveLength(1)
+    expect(calls[0].args).toMatchObject({ partId: 0, paths: ['/part/lfos/0/custom_lfo_interpolation/0'] })
+  })
+})
+
+// Mocked per test: each starts from its own LFO design on every track
+test.describe('Parts Editor - LFO design tools on a given shape', () => {
+  const dialog = (page: Page) => page.getByRole('dialog', { name: /^LFO design - Part 1: .* - T1$/ })
+  const designPreview = (page: Page) => page
+    .locator('.parts-all-section')
+    .filter({ has: page.locator('.params-label', { hasText: 'LFO 3 / DESIGN' }) })
+    .locator('button.lfo-envelope-preview')
+    .first()
+  const lastSave = async (page: Page) => {
+    const calls = await getInvokeCalls(page, 'save_parts')
+    return calls[calls.length - 1].args.partsData[0]
+  }
+  const withDesign = async (page: Page, design: number[]) => {
+    await setupTauriMocks(page, { lfoDesign: design })
+    await openPartsTab(page)
+  }
+
+  test('each tool saves the shape it makes', async ({ page }) => {
+    await withDesign(page, [127, 0, 128, 255, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+    await enterEditMode(page)
+    await designPreview(page).click()
+    const tool = (name: string) => dialog(page).getByRole('button', { name, exact: true })
+    const saves = async () => (await getInvokeCalls(page, 'save_parts')).length
+
+    await tool('All smooth').click()
+    await expect.poll(saves).toBe(1)
+    expect((await lastSave(page)).lfos[0].custom_lfo_interpolation).toEqual(Array(16).fill(1))
+
+    await tool('Invert').click()
+    await expect.poll(saves).toBe(2)
+    expect((await lastSave(page)).lfos[0].custom_lfo_design.slice(0, 5)).toEqual([128, 255, 127, 0, 191])
+    expect((await lastSave(page)).lfos[0].custom_lfo_interpolation).toEqual(Array(16).fill(1))
+
+    await tool('All stepped').click()
+    await expect.poll(saves).toBe(3)
+    expect((await lastSave(page)).lfos[0].custom_lfo_interpolation).toEqual(Array(16).fill(0))
+
+    await tool('Random').click()
+    await expect.poll(saves).toBe(4)
+    const random = (await lastSave(page)).lfos[0]
+    expect(random.custom_lfo_design).toHaveLength(16)
+    expect(random.custom_lfo_design.every((v: number) => Number.isInteger(v) && v >= 0 && v <= 255)).toBe(true)
+    expect(random.custom_lfo_interpolation.every((m: number) => m === 0 || m === 1)).toBe(true)
+
+    await tool('Clear').click()
+    await expect.poll(saves).toBe(5)
+    expect((await lastSave(page)).lfos[0].custom_lfo_design).toEqual(Array(16).fill(0))
+    expect((await lastSave(page)).lfos[0].custom_lfo_interpolation).toEqual(Array(16).fill(0))
+
+    // Cleared again: nothing changes, nothing is written
+    await tool('Clear').click()
+    await page.waitForTimeout(700)
+    expect(await saves()).toBe(5)
+  })
+
+
+  test('pastes a shape copied from another track', async ({ page }) => {
+    await withDesign(page, [10, 20, 30, 40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+    await enterEditMode(page)
+    await designPreview(page).click()
+    await dialog(page).getByRole('button', { name: 'Invert', exact: true }).click()
+    await dialog(page).getByRole('button', { name: 'Step 2 mode' }).click()
+    await dialog(page).getByRole('button', { name: 'Copy' }).click()
+    await page.keyboard.press('Escape')
+    await selectTrack(page, '4')
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('l')
+    const t5 = page.getByRole('dialog', { name: /^LFO design - Part 1: .* - T5$/ })
+    await t5.getByRole('button', { name: 'Paste' }).click()
+    await expect(page.locator('.toast-notification', { hasText: 'LFO design pasted' })).toBeVisible()
+    await expect.poll(async () => (await lastSave(page)).lfos[4].custom_lfo_design.slice(0, 4)).toEqual([245, 235, 225, 215])
+    expect((await lastSave(page)).lfos[4].custom_lfo_interpolation.slice(0, 2)).toEqual([0, 1])
   })
 })

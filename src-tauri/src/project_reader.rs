@@ -15300,6 +15300,8 @@ pub(crate) mod tests {
             // CT-FLD-05: Verify custom LFO designs are copied
             let source = TestProject::with_modified_bank(0, |bank| {
                 bank.parts.unsaved.0[0].audio_tracks_custom_lfo_designs[0].0[0] = 33;
+                bank.parts.unsaved.0[0].audio_tracks_custom_lfos_interpolation_masks[0].0 =
+                    [0x02, 0x01];
             });
             let dest = TestProject::new();
 
@@ -15323,6 +15325,11 @@ pub(crate) mod tests {
             assert_eq!(
                 dest_bank.parts.unsaved.0[0].audio_tracks_custom_lfo_designs[5].0[0], 33,
                 "Custom LFO designs should be copied"
+            );
+            assert_eq!(
+                dest_bank.parts.unsaved.0[0].audio_tracks_custom_lfos_interpolation_masks[5].0,
+                [0x02, 0x01],
+                "The step modes go with the design"
             );
         }
 
@@ -15362,6 +15369,8 @@ pub(crate) mod tests {
             // CT-FLD-07: Verify MIDI track custom LFO fields are copied
             let source = TestProject::with_modified_bank(0, |bank| {
                 bank.parts.unsaved.0[0].midi_tracks_custom_lfos[0].0[0] = 66;
+                bank.parts.unsaved.0[0].midi_tracks_custom_lfos_interpolation_masks[0].0 =
+                    [0x80, 0x01];
             });
             let dest = TestProject::new();
 
@@ -15385,6 +15394,11 @@ pub(crate) mod tests {
             assert_eq!(
                 dest_bank.parts.unsaved.0[0].midi_tracks_custom_lfos[1].0[0], 66,
                 "MIDI custom LFO should be copied"
+            );
+            assert_eq!(
+                dest_bank.parts.unsaved.0[0].midi_tracks_custom_lfos_interpolation_masks[1].0,
+                [0x80, 0x01],
+                "The step modes go with the design"
             );
         }
 
@@ -19485,6 +19499,65 @@ pub(crate) mod tests {
             assert_eq!(
                 part.lfos[0].custom_lfo_design,
                 vec![127, 0, 127, 0, 127, 0, 127, 0, 128, 0, 128, 0, 128, 0, 128, 0]
+            );
+        }
+
+        /// Every track's step modes, audio and MIDI, as its two raw bytes say: the u16 is
+        /// byte0 << 8 | byte1 and step n is bit n-1. Besides the hand-set tracks, the
+        /// fixture holds the device's RANDOMIZE on T5-T8, so both bytes carry mixed bits.
+        #[test]
+        fn lfo_interpolation_reads_every_track_from_its_raw_bytes() {
+            let raw = std::fs::read(format!("{}/bank01.work", lfo_modes_dir())).unwrap();
+            assert_eq!(raw[591465..591467], [0xd3, 0xed]);
+            let expected = |at: usize| -> Vec<u8> {
+                let word = u16::from_be_bytes([raw[at], raw[at + 1]]);
+                (0..16).map(|i| ((word >> i) & 1) as u8).collect()
+            };
+            let part = &read_parts_data(&lfo_modes_dir(), "A").unwrap().parts[0];
+            for t in 0..8 {
+                assert_eq!(
+                    part.lfos[t].custom_lfo_interpolation,
+                    expected(591457 + 2 * t),
+                    "audio T{}",
+                    t + 1
+                );
+                assert_eq!(
+                    part.midi_lfos[t].custom_lfo_interpolation,
+                    expected(591601 + 2 * t),
+                    "MIDI M{}",
+                    t + 1
+                );
+            }
+        }
+
+        /// The saved copy the diffs window compares against carries the step modes too.
+        #[test]
+        fn lfo_interpolation_reads_in_the_saved_copy() {
+            let copies = read_part_copies(&lfo_modes_dir(), "A", 0).unwrap();
+            let saved = copies.saved.expect("Part 1 was saved on the device");
+            let steps =
+                |set: &[usize]| (0..16).map(|i| set.contains(&i) as u8).collect::<Vec<u8>>();
+            assert_eq!(saved.part.lfos[0].custom_lfo_interpolation, vec![1u8; 16]);
+            assert_eq!(saved.part.lfos[2].custom_lfo_interpolation, steps(&[0, 9]));
+            assert_eq!(
+                saved.part.midi_lfos[2].custom_lfo_interpolation,
+                steps(&[0, 9])
+            );
+        }
+
+        /// The device's INVERT, as the fixture holds it: T4 is T1 inverted, bitwise.
+        #[test]
+        fn lfo_design_t4_is_t1_inverted_on_the_device() {
+            let part = &read_parts_data(&lfo_modes_dir(), "A").unwrap().parts[0];
+            let inverted: Vec<u8> = part.lfos[0]
+                .custom_lfo_design
+                .iter()
+                .map(|v| v ^ 0xff)
+                .collect();
+            assert_eq!(part.lfos[3].custom_lfo_design, inverted);
+            assert_eq!(
+                part.lfos[3].custom_lfo_interpolation,
+                part.lfos[0].custom_lfo_interpolation
             );
         }
 

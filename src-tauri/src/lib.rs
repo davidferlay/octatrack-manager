@@ -2255,6 +2255,47 @@ mod tests {
         );
     }
 
+    /// The cap is inclusive: a file of exactly the limit is read.
+    #[test]
+    fn read_text_file_reads_a_file_at_the_cap() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("edge.json");
+        std::fs::write(&path, vec![b'x'; MAX_TEXT_FILE_BYTES as usize]).unwrap();
+        assert_eq!(
+            read_text_file(path.to_string_lossy().into_owned()).map(|t| t.len()),
+            Ok(MAX_TEXT_FILE_BYTES as usize)
+        );
+    }
+
+    /// A missing file and bytes that are not text are errors, never a panic or an empty
+    /// shape; the window turns them into "Import failed".
+    #[test]
+    fn read_text_file_refuses_a_missing_file_and_non_text() {
+        let dir = tempfile::tempdir().unwrap();
+        let missing = dir.path().join("gone.json");
+        assert!(read_text_file(missing.to_string_lossy().into_owned()).is_err());
+        let binary = dir.path().join("bin.json");
+        std::fs::write(&binary, [0xff, 0xfe, 0x00, 0xc3]).unwrap();
+        assert!(read_text_file(binary.to_string_lossy().into_owned()).is_err());
+    }
+
+    /// Export over an existing file replaces it, as the save dialog has asked to.
+    #[test]
+    fn write_text_file_replaces_an_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("shape.json");
+        std::fs::write(&path, "older and longer content").unwrap();
+        write_text_file(path.to_string_lossy().into_owned(), "new".into()).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "new");
+    }
+
+    #[test]
+    fn write_text_file_reports_a_folder_that_does_not_exist() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("no/such/folder/shape.json");
+        assert!(write_text_file(path.to_string_lossy().into_owned(), "x".into()).is_err());
+    }
+
     /// A FIFO reports a length of 0, so only a cap on the read itself holds it to the
     /// limit (a file still growing after the size check is the same case).
     #[cfg(unix)]

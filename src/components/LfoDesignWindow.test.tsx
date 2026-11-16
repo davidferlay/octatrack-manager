@@ -671,3 +671,138 @@ describe('LfoDesignWindow values by wheel and drag, and Edit mode changes', () =
     expect(input(1)).not.toHaveClass('editable')
   })
 })
+
+describe('LfoDesignWindow more cases', () => {
+  const canvasEl = () => document.querySelector('svg.lfo-design-canvas') as SVGSVGElement
+  const selectedStep = () =>
+    Array.from(document.querySelectorAll('.lfo-design-cell')).findIndex(c => c.classList.contains('selected')) + 1
+
+  it('keeps the selection between step 1 and step 16', () => {
+    setup()
+    fireEvent.keyDown(canvasEl(), { key: 'ArrowLeft' })
+    expect(selectedStep()).toBe(1)
+    for (let i = 0; i < 20; i++) fireEvent.keyDown(canvasEl(), { key: 'ArrowRight' })
+    expect(selectedStep()).toBe(16)
+  })
+
+  it('moves the selection in View mode, and Up / Down change nothing there', () => {
+    const { onChange } = setup({ editable: false })
+    fireEvent.keyDown(canvasEl(), { key: 'ArrowRight' })
+    fireEvent.keyDown(canvasEl(), { key: 'ArrowUp' })
+    fireEvent.keyDown(canvasEl(), { key: 'ArrowDown', shiftKey: true })
+    expect(selectedStep()).toBe(2)
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('marks the selected step number as pressed', () => {
+    setup()
+    fireEvent.click(screen.getByRole('button', { name: 'Select step 4' }))
+    expect(screen.getByRole('button', { name: 'Select step 4' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Select step 1' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('applies a typed value when the field loses the focus', async () => {
+    const { onChange, user } = setup()
+    await user.clear(input(5))
+    await user.type(input(5), '-77')
+    fireEvent.blur(input(5))
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect(toSigned(onChange.mock.calls[0][0].values[4])).toBe(-77)
+    expect(onChange.mock.calls[0][1]).toBe('now')
+  })
+
+  it('does not write a typed value equal to the current one', async () => {
+    const { onChange, user } = setup()
+    await user.clear(input(3))
+    await user.type(input(3), '64{Enter}')
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('shows a new shape in an idle field, as after an Undo', () => {
+    const props = {
+      title: 'LFO design - Part 1: ONE - T3', fileName: 'f', editable: true, onChange: vi.fn(), onClose: vi.fn(),
+    }
+    const { rerender } = render(<LfoDesignWindow {...props} shape={shape} />)
+    expect(input(1).value).toBe('127')
+    const next = { ...shape, values: [toRaw(-5), ...shape.values.slice(1)] }
+    rerender(<LfoDesignWindow {...props} shape={next} />)
+    expect(input(1).value).toBe('-5')
+  })
+
+  it('runs Redo from its own button', async () => {
+    const history: WriteHistory = {
+      state: { can_undo: false, can_redo: true, undo_label: null, redo_label: 'LFO' },
+      busy: false, refresh: vi.fn(), undo: vi.fn(), redo: vi.fn(),
+    }
+    const { user } = setup({ history })
+    expect(screen.getByRole('button', { name: 'Undo' })).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Redo' }))
+    expect(history.redo).toHaveBeenCalledTimes(1)
+  })
+
+  it('hides Undo and Redo in View mode', () => {
+    const history: WriteHistory = {
+      state: { can_undo: true, can_redo: true, undo_label: 'a', redo_label: 'b' },
+      busy: false, refresh: vi.fn(), undo: vi.fn(), redo: vi.fn(),
+    }
+    setup({ history, editable: false })
+    expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Redo' })).toBeNull()
+  })
+
+  it('tells the tools that read from the ones that write, for their hover colour', () => {
+    setup()
+    for (const name of ['Copy', 'Export']) {
+      expect(screen.getByRole('button', { name })).toHaveClass('reads')
+    }
+    for (const name of ['All smooth', 'All stepped', 'Invert', 'Random', 'Clear', 'Paste', 'Import']) {
+      expect(screen.getByRole('button', { name })).toHaveClass('writes')
+    }
+  })
+
+  it('gives All smooth and All stepped the colour of the tag each sets', () => {
+    setup()
+    expect(screen.getByRole('button', { name: 'All smooth' })).toHaveClass('smooth')
+    expect(screen.getByRole('button', { name: 'All stepped' })).toHaveClass('step')
+    expect(screen.getByRole('button', { name: 'Invert' })).not.toHaveClass('smooth')
+  })
+
+  it('colours each tag by its mode', () => {
+    setup()
+    expect(tag(1)).toHaveClass('smooth')
+    expect(tag(2)).toHaveClass('step')
+  })
+
+  it('steps a value down with the wheel and stops at -128', () => {
+    const { onChange } = setup({ shape: { ...shape, values: [toRaw(-128), ...shape.values.slice(1)] } })
+    fireEvent.wheel(input(2), { deltaY: 100 })
+    expect(toSigned(onChange.mock.calls[0][0].values[1])).toBe(-1)
+    onChange.mockClear()
+    fireEvent.wheel(input(1), { deltaY: 100 })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('steps a value down by dragging down', () => {
+    const { onChange } = setup()
+    fireEvent.pointerDown(input(3), { button: 0, clientY: 100, pointerId: 1 })
+    fireEvent.pointerMove(window, { clientY: 112, pointerId: 1 })
+    fireEvent.pointerUp(window, { clientY: 112, pointerId: 1 })
+    expect(onChange).toHaveBeenCalledTimes(3)
+    expect(toSigned(onChange.mock.calls[2][0].values[2])).toBe(61)
+  })
+
+  it('clears the badge once its fade is over', () => {
+    vi.useFakeTimers()
+    try {
+      setup()
+      Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true })
+      fireEvent.click(screen.getByRole('button', { name: 'Copy' }))
+      act(() => { vi.advanceTimersByTime(0) })
+      expect(screen.getByRole('status')).toHaveTextContent('LFO design copied')
+      act(() => { vi.advanceTimersByTime(1600) })
+      expect(screen.queryByRole('status')).toBeNull()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})

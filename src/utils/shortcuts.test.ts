@@ -45,6 +45,17 @@ describe('the shortcuts listed for each page', () => {
     ]))
   })
 
+  it('lists L for the LFO design window among the Parts keys', () => {
+    const parts = shortcutsFor('project', 'parts').find(g => g.title === 'Parts')
+    expect(parts?.rows.map(r => r.keys)).toEqual(['D', 'L'])
+  })
+
+  it('keeps the LFO design keys off the other tabs', () => {
+    for (const tab of ['scenes', 'flex-slots', 'static-slots', 'tools']) {
+      expect(shortcutsFor('project', tab).map(g => g.title)).not.toContain('LFO design window')
+    }
+  })
+
   it('lists the LFO design window keys on the Parts tab', () => {
     const lfo = shortcutsFor('project', 'parts').find(g => g.title === 'LFO design window')
     expect(lfo?.rows.map(r => r.keys)).toEqual(['Drag', 'Shift + drag', 'Left / Right', 'Up / Down', 'Shift + Up / Down', 'Wheel / drag on a value', 'E'])

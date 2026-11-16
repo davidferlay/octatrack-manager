@@ -79,6 +79,23 @@
   border-color: #4ac8ff;
 }
 
+/* All smooth and All stepped wear the border of the tag they set, brighter on hover */
+.lfo-design-tool.smooth {
+  border-color: rgba(74, 200, 255, 0.5);
+}
+
+.lfo-design-tool.step {
+  border-color: rgba(255, 107, 157, 0.5);
+}
+
+.lfo-design-tool.smooth:hover:not(:disabled) {
+  border-color: #4ac8ff;
+}
+
+.lfo-design-tool.step:hover:not(:disabled) {
+  border-color: #ff6b9d;
+}
+
 .lfo-design-tool:disabled,
 .lfo-design-mode:disabled {
   opacity: 0.4;

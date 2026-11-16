@@ -54,6 +54,7 @@ describe('where a value is edited', () => {
     expect(paramLocation('/part/lfos/0/lfo2_wave')).toEqual({ tab: 'parts', track: 0, page: 2, lfoTab: 'LFO2' })
     expect(paramLocation('/part/lfos/0/dep3')).toEqual({ tab: 'parts', track: 0, page: 2, lfoTab: 'LFO3' })
     expect(paramLocation('/part/lfos/0/custom_lfo_design/4')).toEqual({ tab: 'parts', track: 0, page: 2, lfoTab: 'DESIGN' })
+    expect(paramLocation('/part/lfos/4/custom_lfo_interpolation/0')).toEqual({ tab: 'parts', track: 4, page: 2, lfoTab: 'DESIGN' })
     expect(paramLocation('/part/midi_lfos/2/custom_lfo_interpolation/9'))
       .toEqual({ tab: 'parts', track: 10, page: 2, lfoTab: 'DESIGN' })
   })

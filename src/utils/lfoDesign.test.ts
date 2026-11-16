@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   invertShape, clearShape, setAllModes, randomShape, toSigned, toRaw,
-  waveformPoints, pointToStep, toShareText, parseShareText, sameShape, shareFileName,
+  waveformPoints, pointToStep, toShareText, parseShareText, sameShape, shareFileName, yOf,
 } from './lfoDesign'
 
 const T1 = [127, 0, 127, 0, 127, 0, 127, 0, 128, 0, 128, 0, 128, 0, 128, 0]
@@ -66,8 +66,40 @@ describe('lfoDesign', () => {
     ['1 for a mode', JSON.stringify({ type: 'octatrack-lfo-design', version: 1, values: Array(16).fill(0), interpolated: [1, ...Array(15).fill(false)] })],
     ['missing modes', JSON.stringify({ type: 'octatrack-lfo-design', version: 1, values: Array(16).fill(0) })],
     ['oversized', 'x'.repeat(10001)],
+    ['JSON null', 'null'],
+    ['a JSON array', '[]'],
+    ['a JSON number', '42'],
+    ['a JSON string', '"octatrack-lfo-design"'],
+    ['"true" for a mode', JSON.stringify({ type: 'octatrack-lfo-design', version: 1, values: Array(16).fill(0), interpolated: ['true', ...Array(15).fill(false)] })],
+    ['0 for a mode', JSON.stringify({ type: 'octatrack-lfo-design', version: 1, values: Array(16).fill(0), interpolated: [0, ...Array(15).fill(false)] })],
+    ['17 modes', JSON.stringify({ type: 'octatrack-lfo-design', version: 1, values: Array(16).fill(0), interpolated: Array(17).fill(false) })],
+    ['a value as text', JSON.stringify({ type: 'octatrack-lfo-design', version: 1, values: ['5', ...Array(15).fill(0)], interpolated: Array(16).fill(false) })],
+    ['a value below -128', JSON.stringify({ type: 'octatrack-lfo-design', version: 1, values: [-129, ...Array(15).fill(0)], interpolated: Array(16).fill(false) })],
+    ['values not a list', JSON.stringify({ type: 'octatrack-lfo-design', version: 1, values: 'x', interpolated: Array(16).fill(false) })],
+    ['no version', JSON.stringify({ type: 'octatrack-lfo-design', values: Array(16).fill(0), interpolated: Array(16).fill(false) })],
+    ['version 0', JSON.stringify({ type: 'octatrack-lfo-design', version: 0, values: Array(16).fill(0), interpolated: Array(16).fill(false) })],
+    ['an empty text', ''],
   ])('refuses %s', (_, text) => {
     expect(() => parseShareText(text)).toThrow('Not an LFO design')
+  })
+  it('reads a text of exactly 10000 characters, spaces around the JSON included', () => {
+    const s = shape(T1, [1, ...Array(15).fill(0)])
+    const text = ` ${toShareText(s)}`.padEnd(10000, ' ')
+    expect(text).toHaveLength(10000)
+    expect(parseShareText(text)).toEqual(s)
+  })
+  it('reads the range ends and every mode', () => {
+    const values = [-128, 127, ...Array(14).fill(0)]
+    const parsed = parseShareText(JSON.stringify({
+      type: 'octatrack-lfo-design', version: 1, values, interpolated: [true, false, ...Array(14).fill(true)],
+    }))
+    expect(parsed.values.slice(0, 2)).toEqual([128, 127])
+    expect(parsed.interpolation).toEqual([1, 0, ...Array(14).fill(1)])
+  })
+  it('ignores keys it does not know', () => {
+    const s = shape(T1)
+    const text = JSON.stringify({ ...JSON.parse(toShareText(s)), name: 'my shape', author: 'x' })
+    expect(parseShareText(text)).toEqual(s)
   })
   it('refuses a newer version', () => {
     expect(() => parseShareText(JSON.stringify({ type: 'octatrack-lfo-design', version: 2, values: Array(16).fill(0), interpolated: Array(16).fill(false) })))
@@ -95,5 +127,53 @@ describe('shareFileName', () => {
     expect(shareFileName('/a:b*c?/x<y>|z', 2, 'T1')).toBe('a-b-c_x-y-z_lfo-design-part2-T1')
     expect(shareFileName('/proj', 1, 'T1')).toBe('proj_lfo-design-part1-T1')
     expect(shareFileName('', 1, 'T1')).toBe('lfo-design-part1-T1')
+  })
+})
+
+describe('lfoDesign helpers', () => {
+  it('never changes the shape it is given', () => {
+    const values = [...T1]
+    const interpolation = [1, 0, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 1]
+    const s = { values: [...values], interpolation: [...interpolation] }
+    invertShape(s)
+    setAllModes(s, 1)
+    setAllModes(s, 0)
+    toShareText(s)
+    waveformPoints(s, 160, 255)
+    expect(s).toEqual({ values, interpolation })
+  })
+  it('rounds a value to the nearest step before clamping it', () => {
+    expect([1.4, 1.5, -1.5, 126.6, -127.6, 127.4].map(toRaw)).toEqual([1, 2, 255, 127, 128, 127])
+  })
+  it('puts 127 at the top, -128 at the bottom and 0 just below the middle', () => {
+    expect(yOf(127, 255)).toBe(0)
+    expect(yOf(-128, 255)).toBe(255)
+    expect(yOf(0, 255)).toBe(127)
+    expect(yOf(127, 100)).toBe(0)
+    expect(yOf(-128, 100)).toBe(100)
+  })
+  it('draws one point per smooth step and two per stepped step, after the start', () => {
+    const v = Array(16).fill(0)
+    expect(waveformPoints(shape(v, Array(16).fill(1)), 160, 255).split(' ')).toHaveLength(1 + 16)
+    expect(waveformPoints(shape(v, Array(16).fill(0)), 160, 255).split(' ')).toHaveLength(1 + 32)
+    const mixed = Array(16).fill(0).map((_, i) => i % 2)
+    expect(waveformPoints(shape(v, mixed), 160, 255).split(' ')).toHaveLength(1 + 8 + 16)
+  })
+  it('maps every column to its step and the full height to the full range', () => {
+    for (let step = 0; step < 16; step++) {
+      expect(pointToStep(step * 10 + 5, 0, 160, 255).step).toBe(step)
+    }
+    // The last pixel of the last column is still step 16, and its right edge too
+    expect(pointToStep(159.9, 0, 160, 255).step).toBe(15)
+    expect(pointToStep(160, 0, 160, 255).step).toBe(15)
+    expect(pointToStep(0, 255, 160, 255).signed).toBe(-128)
+    expect(pointToStep(0, 0, 160, 255).signed).toBe(127)
+  })
+  it('makes share text that holds signed values and true/false modes', () => {
+    const s = shape([0, 255, 128, 127, ...Array(12).fill(1)], [1, 0, ...Array(14).fill(0)])
+    const json = JSON.parse(toShareText(s))
+    expect(json.values.slice(0, 4)).toEqual([0, -1, -128, 127])
+    expect(json.interpolated.slice(0, 2)).toEqual([true, false])
+    expect(Object.keys(json)).toEqual(['type', 'version', 'values', 'interpolated'])
   })
 })

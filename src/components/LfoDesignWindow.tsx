@@ -335,10 +335,10 @@ export default function LfoDesignWindow({
     applyText(text, 'LFO design imported', 'fa-file-import');
   };
 
-  const tool = (label: string, run: () => void, alwaysOn = false) => (
+  const tool = (label: string, run: () => void, alwaysOn = false, mode?: 'smooth' | 'step') => (
     <button
       key={label}
-      className={`lfo-design-tool ${alwaysOn ? 'reads' : 'writes'}`}
+      className={`lfo-design-tool ${alwaysOn ? 'reads' : 'writes'}${mode ? ` ${mode}` : ''}`}
       disabled={!alwaysOn && !editable}
       onClick={run}
     >
@@ -368,8 +368,8 @@ export default function LfoDesignWindow({
         </div>
         <div className="lfo-design-toolbar">
           <div className="lfo-design-group" role="group" aria-label="Step modes">
-            {tool('All smooth', () => apply(setAllModes(shape, 1)))}
-            {tool('All stepped', () => apply(setAllModes(shape, 0)))}
+            {tool('All smooth', () => apply(setAllModes(shape, 1)), false, 'smooth')}
+            {tool('All stepped', () => apply(setAllModes(shape, 0)), false, 'step')}
           </div>
           <div className="lfo-design-group" role="group" aria-label="Shape">
             {tool('Invert', () => apply(invertShape(shape)))}

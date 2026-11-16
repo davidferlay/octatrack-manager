@@ -83,6 +83,41 @@ describe('partChanges', () => {
     ])
   })
 
+  it('names a step mode row by its own value key, to reload or pin it alone', () => {
+    const saved = copy()
+    const current = copy()
+    current.part.lfos[0].custom_lfo_interpolation[8] = 1
+    const [row] = partChanges(saved, current)
+    expect(row.paths).toEqual(['/part/lfos/0/custom_lfo_interpolation/8'])
+    expect(row.revert).toEqual(row.paths)
+    expect(row.lock).toEqual(row.paths)
+    expect(actionName(row)).toBe('T1 LFO DESIGN STEP 9 MODE')
+  })
+
+  it('lists a MIDI track\'s step mode, smooth back to stepped', () => {
+    const saved = copy()
+    const current = copy()
+    saved.part.midi_lfos[2].custom_lfo_interpolation[9] = 1
+    expect(partChanges(saved, current)).toMatchObject([
+      { track: 'M3', page: 'LFO DESIGN', param: 'STEP 10 MODE', saved: 'smooth', current: 'stepped' },
+    ])
+  })
+
+  it('lists a step value and its mode as two rows, value first', () => {
+    const saved = copy()
+    const current = copy()
+    current.part.lfos[1].custom_lfo_design[0] = 129
+    current.part.lfos[1].custom_lfo_interpolation[0] = 1
+    expect(partChanges(saved, current).map(r => r.param)).toEqual(['STEP 1', 'STEP 1 MODE'])
+  })
+
+  it('lists nothing when only step modes that match were touched', () => {
+    const saved = copy()
+    const current = copy()
+    current.part.lfos[0].custom_lfo_interpolation = [...current.part.lfos[0].custom_lfo_interpolation]
+    expect(partChanges(saved, current)).toEqual([])
+  })
+
   it('lists a scene lock, with "-" for a position the scene leaves alone', () => {
     const saved = copy()
     const current = copy()

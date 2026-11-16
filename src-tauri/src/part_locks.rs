@@ -422,6 +422,87 @@ mod tests {
         assert_eq!(b.parts_edited_bitmask & 1, 1);
     }
 
+    /// The two bytes holding T1's step modes, saved and edited.
+    fn t1_modes(project: &TestProject) -> ([u8; 2], [u8; 2]) {
+        let b = bank(project);
+        (
+            b.parts.saved.0[0].audio_tracks_custom_lfos_interpolation_masks[0].0,
+            b.parts.unsaved.0[0].audio_tracks_custom_lfos_interpolation_masks[0].0,
+        )
+    }
+
+    /// One step's mode goes back as saved; the other edited mode stays.
+    #[test]
+    fn revert_puts_back_one_step_mode() {
+        let project = saved_project();
+        let saved = t1_modes(&project).0;
+        edit_part(&project, |p| {
+            let modes = &mut p.lfos[0].custom_lfo_interpolation;
+            modes[3] = 1 - modes[3];
+            modes[9] = 1 - modes[9];
+        });
+        let edited = t1_modes(&project).1;
+        assert_ne!(edited, saved);
+
+        let part = revert_part_values(
+            &project.path,
+            "A",
+            0,
+            &s(&["/part/lfos/0/custom_lfo_interpolation/3"]),
+        )
+        .unwrap();
+
+        let after = t1_modes(&project).1;
+        let bit = |m: [u8; 2], step: usize| (u16::from_be_bytes(m) >> step) & 1;
+        assert_eq!(bit(after, 3), bit(saved, 3));
+        assert_eq!(bit(after, 9), bit(edited, 9));
+        assert_eq!(
+            part.lfos[0].custom_lfo_interpolation[3] as u16,
+            bit(saved, 3)
+        );
+    }
+
+    /// A pinned step mode stays through Reload; the design value next to it does not.
+    #[test]
+    fn reload_keeps_a_pinned_step_mode() {
+        let project = saved_project();
+        let saved = t1_modes(&project).0;
+        edit_part(&project, |p| {
+            let lfo = &mut p.lfos[0];
+            lfo.custom_lfo_interpolation[3] = 1 - lfo.custom_lfo_interpolation[3];
+            lfo.custom_lfo_design[3] = bump(lfo.custom_lfo_design[3]);
+        });
+        let edited = t1_modes(&project).1;
+        const MODE: &str = "/part/lfos/0/custom_lfo_interpolation/3";
+
+        let kept = set(&project.path, "A", 0, &s(&[MODE]), &[]).unwrap();
+        assert_eq!(kept[0], s(&[MODE]));
+        reload_part_data(&project.path, "A", 0, &kept[0]).unwrap();
+
+        let b = bank(&project);
+        assert_eq!(t1_modes(&project).1, edited);
+        assert_ne!(edited, saved);
+        assert_eq!(
+            b.parts.unsaved.0[0].audio_tracks_custom_lfo_designs[0],
+            b.parts.saved.0[0].audio_tracks_custom_lfo_designs[0]
+        );
+    }
+
+    /// Only a mode that differs from the saved copy can be pinned.
+    #[test]
+    fn a_pin_on_an_unchanged_step_mode_is_refused() {
+        let project = saved_project();
+        let kept = set(
+            &project.path,
+            "A",
+            0,
+            &s(&["/part/lfos/0/custom_lfo_interpolation/3"]),
+            &[],
+        )
+        .unwrap();
+        assert!(kept[0].is_empty());
+    }
+
     #[test]
     fn revert_of_a_scene_lock_restores_and_removes() {
         let project = saved_project();
@@ -799,6 +880,9 @@ mod tests {
             "/part/amps/0/atk",
             "/part/machines/7/machine_params/ptch",
             "/part/midi_ctrl2s/3/cc10",
+            "/part/lfos/0/custom_lfo_design/15",
+            "/part/lfos/2/custom_lfo_interpolation/9",
+            "/part/midi_lfos/7/custom_lfo_interpolation/0",
             "/scenes/scenes/15/tracks/7/fx2/5",
             "/scenes/scenes/0/tracks/0/xlv",
             "/scenes/scene_a",

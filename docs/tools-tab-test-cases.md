@@ -80,7 +80,7 @@
 | SM33 OK | Copy Tracks | Machine types copied | Copy T1 Part params → T3 | Destination machine type matches source |
 | SM34 OK | Copy Tracks | FX settings copied | Copy track with FX1/FX2 configured | FX parameters match source |
 | SM35 OK | Copy Tracks | Volumes and amp copied | Copy track with custom volume/amp | Volume and amp settings match source |
-| SM36 OK | Copy Tracks | Custom LFO copied | Copy track with custom LFO design | Custom LFO waveform and interpolation masks match source |
+| SM36 OK | Copy Tracks | Custom LFO copied | Copy a track whose LFO design mixes smooth and stepped steps, then open the destination track's LFO design window | The 16 values and each step's smooth or stepped setting match the source |
 | SM37 | Copy Tracks | Recorder setup copied | Copy track with recorder configuration | Recorder source and settings match source |
 | SM37b OK | Copy Tracks | Multi-select dest Parts | Copy T1 → T3, select dest Parts 1 and 3 | T3 params copied to both Part 1 and Part 3 in destination |
 | **Copy Sample Slots** | | | | |
