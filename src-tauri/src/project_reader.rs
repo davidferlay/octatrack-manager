@@ -3691,11 +3691,13 @@ pub(crate) fn write_part_data(part: &mut ot_tools_io::parts::Part, data: &PartDa
     // per-track writes further down read this byte to know which machine's layout
     // they are working with. A name the mapping does not recognise leaves the
     // bank's own byte untouched.
-    for track_id in 0..8 {
-        if let Some(machine) = data.machines.get(track_id) {
-            if let Some(byte) = machine_type_byte(&machine.machine_type) {
-                part.audio_track_machine_types[track_id] = byte;
-            }
+    for (type_byte, machine) in part
+        .audio_track_machine_types
+        .iter_mut()
+        .zip(&data.machines)
+    {
+        if let Some(byte) = machine_type_byte(&machine.machine_type) {
+            *type_byte = byte;
         }
     }
 
@@ -4197,8 +4199,7 @@ pub fn save_parts_data(
         "[DEBUG VERIFY] checksum after re-read: {}",
         verify_bank.checksum
     );
-    for i in 0..4 {
-        let saved = &verify_bank.parts.saved.0[i];
+    for (i, saved) in verify_bank.parts.saved.0.iter().enumerate() {
         println!(
             "[DEBUG VERIFY] Part {} saved ATK[0]: {}",
             i, saved.audio_track_params_values[0].amp.atk
@@ -7162,8 +7163,7 @@ fn collect_referenced_slots(
     let mut flex_slots = std::collections::HashSet::new();
 
     // Scan Parts (unsaved state — the active state)
-    for part_idx in 0..4 {
-        let part = &bank.parts.unsaved.0[part_idx];
+    for part in bank.parts.unsaved.0.iter() {
         for track_idx in 0..8 {
             let machine_type = part.audio_track_machine_types[track_idx];
             let slot = &part.audio_track_machine_slots[track_idx];
@@ -7466,10 +7466,8 @@ pub(crate) fn remap_bank_slot_references(
 ) {
     // Remap Parts (both unsaved and saved states)
     for parts_state in [&mut bank.parts.unsaved, &mut bank.parts.saved] {
-        for part_idx in 0..4 {
-            let part = &mut parts_state.0[part_idx];
-            for track_idx in 0..8 {
-                let slot = &mut part.audio_track_machine_slots[track_idx];
+        for part in parts_state.0.iter_mut() {
+            for slot in part.audio_track_machine_slots.iter_mut() {
                 if let Some(&new_id) = static_remap.get(&slot.static_slot_id) {
                     slot.static_slot_id = new_id;
                 }
@@ -12920,13 +12918,8 @@ pub(crate) mod tests {
             let dest_bank_path = Path::new(&dest.path).join("bank01.work");
             let dest_bank = BankFile::from_data_file(&dest_bank_path).unwrap();
 
-            for i in 0..4 {
-                assert_eq!(
-                    dest_bank.part_names[i][0],
-                    b'A' + i as u8,
-                    "Part name {} should be copied",
-                    i
-                );
+            for (i, name) in dest_bank.part_names.iter().enumerate() {
+                assert_eq!(name[0], b'A' + i as u8, "Part name {} should be copied", i);
             }
             assert_eq!(dest_bank.parts_saved_state[0], 1);
             assert_eq!(dest_bank.parts_saved_state[1], 0);
@@ -17705,10 +17698,15 @@ pub(crate) mod tests {
 
             let mut src_markers = MarkersFile::default();
             src_markers.static_slots[0].slice_count = 16;
-            for i in 0..16 {
-                src_markers.static_slots[0].slices[i].trim_start = (i as u32) * 2000;
-                src_markers.static_slots[0].slices[i].trim_end = (i as u32) * 2000 + 1000;
-                src_markers.static_slots[0].slices[i].loop_start = (i as u32) * 2000 + 500;
+            for (i, slice) in src_markers.static_slots[0]
+                .slices
+                .iter_mut()
+                .enumerate()
+                .take(16)
+            {
+                slice.trim_start = (i as u32) * 2000;
+                slice.trim_end = (i as u32) * 2000 + 1000;
+                slice.loop_start = (i as u32) * 2000 + 500;
             }
             let src_markers_path = Path::new(&source.path).join("markers.work");
             src_markers.to_data_file(&src_markers_path).unwrap();
@@ -17819,9 +17817,14 @@ pub(crate) mod tests {
             src_markers.static_slots[0].trim_end = 80000;
             src_markers.static_slots[0].loop_point = 15000;
             src_markers.static_slots[0].slice_count = 8;
-            for i in 0..8 {
-                src_markers.static_slots[0].slices[i].trim_start = (i as u32) * 10000;
-                src_markers.static_slots[0].slices[i].trim_end = (i as u32) * 10000 + 5000;
+            for (i, slice) in src_markers.static_slots[0]
+                .slices
+                .iter_mut()
+                .enumerate()
+                .take(8)
+            {
+                slice.trim_start = (i as u32) * 10000;
+                slice.trim_end = (i as u32) * 10000 + 5000;
             }
             let src_markers_path = Path::new(&source.path).join("markers.work");
             src_markers.to_data_file(&src_markers_path).unwrap();
@@ -23168,10 +23171,10 @@ pub(crate) mod tests {
                     m.flex_slots[0].trim_end = 90000;
                     m.flex_slots[0].loop_point = 7777;
                     m.flex_slots[0].slice_count = 16;
-                    for i in 0..16 {
-                        m.flex_slots[0].slices[i].trim_start = (i as u32) * 1000;
-                        m.flex_slots[0].slices[i].trim_end = (i as u32) * 1000 + 500;
-                        m.flex_slots[0].slices[i].loop_start = (i as u32) * 1000 + 250;
+                    for (i, slice) in m.flex_slots[0].slices.iter_mut().enumerate().take(16) {
+                        slice.trim_start = (i as u32) * 1000;
+                        slice.trim_end = (i as u32) * 1000 + 500;
+                        slice.loop_start = (i as u32) * 1000 + 250;
                     }
                 },
                 |m| {
@@ -24692,9 +24695,14 @@ pub(crate) mod tests {
             src_markers.flex_slots[0].trim_end = 80000;
             src_markers.flex_slots[0].loop_point = 20000;
             src_markers.flex_slots[0].slice_count = 4;
-            for i in 0..4 {
-                src_markers.flex_slots[0].slices[i].trim_start = (i as u32) * 20000;
-                src_markers.flex_slots[0].slices[i].trim_end = (i as u32) * 20000 + 10000;
+            for (i, slice) in src_markers.flex_slots[0]
+                .slices
+                .iter_mut()
+                .enumerate()
+                .take(4)
+            {
+                slice.trim_start = (i as u32) * 20000;
+                slice.trim_end = (i as u32) * 20000 + 10000;
             }
             src_markers.static_slots[0].trim_offset = 1000;
             src_markers.static_slots[0].trim_end = 60000;

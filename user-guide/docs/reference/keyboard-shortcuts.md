@@ -48,11 +48,33 @@ These shortcuts work across the entire application:
 |----------|---------|
 | <kbd>E</kbd> | Toggle between View and Edit mode. |
 | <kbd>D</kbd> | Parts and Scenes tabs, in Edit mode: open or close the diffs of the Part on screen against its saved copy, when it holds edits. Not available with All Banks shown. See [Seeing what Save and Reload overwrite](../features/parts-editor.md#4-seeing-what-save-and-reload-overwrite). |
+| <kbd>L</kbd> | Parts tab: open or close the LFO design window of the selected track, or of T1 (M1) while all tracks are shown. View and Edit mode. Not available with All Banks shown. See [Custom LFO Designer](../features/parts-editor.md#custom-lfo-designer). |
 | <kbd>←</kbd> / <kbd>→</kbd> | Move between bank buttons (A–P), parts (1–4), or patterns (1–16). |
 | <kbd>↑</kbd> / <kbd>↓</kbd> | Move between the bank, track, and pattern selector groups. |
 | <kbd>Enter</kbd> | Select the currently focused bank, part, or pattern. |
 | <kbd>Shift</kbd> + click | Scenes tab, Matrix view: select the range of scenes from the selected one to this one. See [Acting on several scenes](../features/scenes.md#acting-on-several-scenes). |
 | <kbd>Ctrl</kbd> + click | Scenes tab, Matrix view: add or remove one scene, keeping the rest. <kbd>Cmd</kbd> on macOS. |
+
+---
+
+## LFO design window
+
+Open from the LFO design preview on the Parts tab, or with <kbd>L</kbd>. Drawing and value changes need Edit mode. The drawing has the focus when the window opens, and the arrow keys act on it.
+
+| Shortcut | Action |
+|----------|---------|
+| Drag | Edit mode: draw the shape, past the edges too. |
+| <kbd>Shift</kbd> + drag | Edit mode: draw finely. |
+| <kbd>←</kbd> / <kbd>→</kbd> | Select the previous / next step. |
+| <kbd>↑</kbd> / <kbd>↓</kbd> | Edit mode: change the selected step by 1. |
+| <kbd>Shift</kbd> + <kbd>↑</kbd> / <kbd>↓</kbd> | Edit mode: change it by 8. |
+| Wheel / drag up or down on a step's value | Edit mode: change that step a step at a time. |
+| <kbd>E</kbd> | Switch between View and Edit mode; the window stays open. |
+| <kbd>Enter</kbd> | In a step's value field: apply the value and go back to the drawing. |
+| <kbd>Tab</kbd> / <kbd>Shift</kbd> + <kbd>Tab</kbd> | Move through the window's controls. The focus stays inside the window. |
+| <kbd>Escape</kbd> | Close the window. In a step's value field, the first press puts the old value back and goes back to the drawing; the next one closes the window. |
+
+See [Custom LFO Designer](../features/parts-editor.md#custom-lfo-designer).
 
 ---
 

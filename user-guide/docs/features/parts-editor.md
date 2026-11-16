@@ -121,13 +121,52 @@ The track header on the AMP and ALL pages carries TRK and CUE, the device's mixe
 
 ## Custom LFO Designer
 
-Octatrack Manager features an intuitive **LFO Designer** that allows you to draw custom LFO waveforms - **freely with your mouse**.
+Each audio and MIDI track has a custom LFO shape of 16 steps. Every step has a value, from -128 to 127, and a mode: smooth or stepped. A smooth step slopes toward the next step in a straight line, and step 16 slopes into step 1. A stepped step holds its value until the next one.
 
-1. Navigate to a track's LFO page.
-2. Select the **DESIGN** tab.
-3. Click and drag in the editor to draw your waveform.
-4. The changes are updated in real-time in the project.
+Open the designer from its small preview, either the LFO 3 / DESIGN pane of the All page or the DESIGN tab of the LFO page. Hovering the preview shows an enlarge icon in its top right corner; click the preview, or press <kbd>L</kbd>, and a large window opens over the editor. <kbd>L</kbd> opens the window of the selected track, or of T1 (M1 for MIDI) while all tracks are shown, and pressing it again closes the window. The preview itself is read-only. In Edit mode it has the same orange border as the other editable fields.
 
+### View and Edit mode
+
+In View mode the window shows the shape, the values and the modes, and you can move through the steps. Copy and Export also work. Everything that changes the shape needs Edit mode, and its buttons are greyed out in View mode. <kbd>E</kbd> switches between the two without closing the window, as it does everywhere else in the project.
+
+### Drawing
+
+In Edit mode, click and drag with the left mouse button on the large drawing to set the steps under the pointer. Hold <kbd>Shift</kbd> while dragging to draw finely: the pointer then moves the value by a quarter of the distance.
+
+With the drawing focused:
+
+- <kbd>←</kbd> / <kbd>→</kbd> select the previous or next step.
+- <kbd>↑</kbd> / <kbd>↓</kbd> change the selected step by 1, or by 8 with <kbd>Shift</kbd>. Edit mode only.
+
+### The strip
+
+Under the drawing, a strip of 16 cells lines up with the steps. Each cell shows its step number and has:
+
+- The step's value.
+- A tag reading smooth or step. Click it to flip the step's mode.
+
+### Tools
+
+| Button | What it does |
+|--------|--------------|
+| All smooth | Sets every step to smooth. The values stay. |
+| All stepped | Sets every step to stepped. The values stay. |
+| Invert | Turns every value v into -1 - v, as the Octatrack does: 127 becomes -128 and 0 becomes -1. The modes stay. |
+| Random | Draws new values for all 16 steps and a random mode for each. |
+| Clear | Sets every value to 0 and every step to stepped, as the Octatrack does. |
+| Copy | Copies the shape. Works in View mode. |
+| Paste | Replaces the shape with the copied one, values and modes, which can come from another track. |
+| Export | Saves the shape to a file. Works in View mode. |
+| Import | Replaces the shape with one read from a file. |
+
+### Undo and Redo
+
+Edits are written to the project as you make them, and each action is one Undo step. The Undo and Redo buttons of the project header are hidden behind the window, so the window carries its own, in Edit mode. See [Undo / Redo](./undo-redo.md).
+
+### Sharing a shape
+
+Copy and Export produce the same text (a simple JSON object) that can be shared across users and projects.
+It contains values of the 16 steps from -128 to 127 as well as step mode for each.
 
 ![LFO Designer edition](/img/screenshots/parts-editor-lfo-designer-edition.png)
 
@@ -208,7 +247,7 @@ In Edit mode, right-clicking a field of the Parts editor offers:
 - Reload value from Part, with the saved value in brackets. It is disabled on a pinned value.
 - Pin value - Exclude it from Part reload, or Unpin value - Include it in Part reload on a pinned field.
 
-Both are disabled on a value that matches the saved copy and on a Part without a saved copy. A pinned field shows a small pin at its top right. The steps of the LFO DESIGN drawing have no such menu, and neither does View mode.
+Both are disabled on a value that matches the saved copy and on a Part without a saved copy. A pinned field shows a small pin at its top right.
 
 ---
 
