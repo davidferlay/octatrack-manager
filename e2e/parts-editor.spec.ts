@@ -5229,7 +5229,7 @@ test.describe('Scenes - Reload value from Part and pin', () => {
 })
 
 test.describe('Parts Editor - LFO design window', () => {
-  const dialog = (page: Page) => page.getByRole('dialog', { name: /^LFO design - Part 1: .*, T1$/ })
+  const dialog = (page: Page) => page.getByRole('dialog', { name: /^LFO design - Part 1: .* - T1$/ })
   const designPreview = (page: Page) => page
     .locator('.parts-all-section')
     .filter({ has: page.locator('.params-label', { hasText: 'LFO 3 / DESIGN' }) })
@@ -5307,7 +5307,7 @@ test.describe('Parts Editor - LFO design window', () => {
     await page.locator('.parts-page-tabs .parts-tab', { hasText: 'LFO' }).click()
     await page.locator('.parts-lfo-sidebar .parts-tab', { hasText: 'DESIGN' }).click()
     await page.locator('button.lfo-envelope-preview').first().click()
-    const win = page.getByRole('dialog', { name: /^LFO design - Part 1: .*, M1$/ })
+    const win = page.getByRole('dialog', { name: /^LFO design - Part 1: .* - M1$/ })
     const input = win.getByLabel('Step 2 value')
     await input.fill('50')
     await input.press('Enter')
@@ -5315,18 +5315,68 @@ test.describe('Parts Editor - LFO design window', () => {
     expect((await lastSave(page)).midi_lfos[0].custom_lfo_design[1]).toBe(50)
   })
 
-  test('keeps page shortcuts out', async ({ page }) => {
+  test('keeps page shortcuts out, except E', async ({ page }) => {
     const activePart = await page.locator('.parts-part-tab.active').textContent()
     await designPreview(page).click()
     await expect(dialog(page)).toBeVisible()
     await page.keyboard.press('ArrowRight')
-    await page.keyboard.press('e')
     await page.keyboard.press('d')
     await expect(dialog(page)).toBeVisible()
     await expect(page.locator('.parts-part-tab.active')).toHaveText(activePart!)
-    await expect(page.locator('.parts-edit-controls.visible')).toHaveCount(0)
     await expect(page.getByRole('dialog', { name: /diffs/i })).toHaveCount(0)
     await expect(page.locator('.modal-overlay')).toHaveCount(1)
+    // E switches Edit mode in place: the window stays open and follows
+    const invert = dialog(page).getByRole('button', { name: 'Invert' })
+    const value = dialog(page).getByLabel('Step 1 value')
+    await expect(invert).toBeDisabled()
+    await expect(value).toHaveAttribute('readonly', '')
+    await page.keyboard.press('e')
+    await expect(invert).toBeEnabled()
+    await expect(value).not.toHaveAttribute('readonly', '')
+    await page.keyboard.press('e')
+    await expect(invert).toBeDisabled()
+    await expect(dialog(page)).toBeVisible()
+  })
+
+  test('shows the preview as editable in Edit mode, with an open icon on hover', async ({ page }) => {
+    await expect(designPreview(page)).not.toHaveClass(/editable/)
+    await enterEditMode(page)
+    await expect(designPreview(page)).toHaveClass(/editable/)
+    const icon = designPreview(page).locator('.lfo-envelope-expand')
+    await expect(icon).toHaveCSS('opacity', '0')
+    await designPreview(page).hover()
+    await expect(icon).toHaveCSS('opacity', '1')
+  })
+
+  test('L opens and closes the window of the track on screen', async ({ page }) => {
+    await page.locator('body').click({ position: { x: 5, y: 5 } })
+    await page.keyboard.press('l')
+    await expect(dialog(page)).toBeVisible()
+    await page.keyboard.press('l')
+    await expect(dialog(page)).toHaveCount(0)
+    await enterEditMode(page)
+    await page.keyboard.press('l')
+    await expect(dialog(page)).toBeVisible()
+    // Typing in a value is not a shortcut
+    await dialog(page).getByLabel('Step 1 value').focus()
+    await page.keyboard.press('l')
+    await expect(dialog(page)).toBeVisible()
+  })
+
+  test('answers Copy in a floating badge', async ({ page }) => {
+    await designPreview(page).click()
+    await dialog(page).getByRole('button', { name: 'Copy' }).click()
+    await expect(page.locator('.toast-notification', { hasText: 'LFO design copied' })).toBeVisible()
+  })
+
+  test('steps a value with the wheel', async ({ page }) => {
+    await enterEditMode(page)
+    await designPreview(page).click()
+    await dialog(page).getByLabel('Step 3 value').hover()
+    await page.mouse.wheel(0, -100)
+    await expect(dialog(page).getByLabel('Step 3 value')).toHaveValue('1')
+    await expect.poll(async () => (await getInvokeCalls(page, 'save_parts')).length).toBeGreaterThan(0)
+    expect((await lastSave(page)).lfos[0].custom_lfo_design[2]).toBe(1)
   })
 
   test('undoes from the window', async ({ page }) => {
@@ -5479,7 +5529,7 @@ test.describe('Parts Editor - LFO design preview', () => {
     await openPartsTab(page)
     await expect(designPreview(page)).toBeVisible()
     await designPreview(page).click()
-    const win = page.getByRole('dialog', { name: /^LFO design - Part 1: .*, T1$/ })
+    const win = page.getByRole('dialog', { name: /^LFO design - Part 1: .* - T1$/ })
     await expect(win).toBeVisible()
     await expect(win.getByLabel('Step 1 mode')).toHaveText('step')
   })

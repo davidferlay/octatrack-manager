@@ -235,13 +235,21 @@ Up is more, down is less, throughout.
 | PE335 | LFO design | Esc twice in a field | Type a value in a step without Enter, press Esc, then Esc again | The first Esc puts the old value back and nothing is saved; the second closes the window |
 | PE336 | LFO design | A drag ending outside does not close | Type in a step's value without Enter, then drag from the field and release outside the window | The window stays open and the field still holds what was typed |
 | PE337 | LFO design | Only the left button draws | In Edit mode right-click, then middle-click on the drawing | Nothing changes and nothing is saved |
-| PE338 | LFO design | The mode is in the title | Open the window in View mode, close it, switch to Edit mode and open it again | The title area reads View, then Edit |
+| PE338 | LFO design | Selecting a step with the mouse | In View mode click a column of the drawing; then in Edit mode click a step number above the strip | Each time that step is selected on the drawing and in the strip, and no value changes |
 | PE339 | LFO design | The selected step shows in the strip | Focus the drawing and press Right a few times, then click a step's value | Each cell shows its step number; the selected step is highlighted on the drawing and in its cell, and clicking a value selects its step |
 | PE340 | LFO design | Toolbar groups | Look at the toolbar in Edit mode | Separators split it into All smooth, All stepped, then Invert, Random, Clear, then Copy, Paste, then Export, Import, then Undo, Redo |
 | PE341 | LFO design | A change of nothing is not saved | On a shape whose steps are all smooth click All smooth; on a step at 127 press Up | Nothing is written and no Undo step is added |
 | PE342 | LFO design | Undo right after an arrow key | Press Up on a step, then the window's Undo at once | The Up is taken back, and Redo brings it back |
 | PE343 | LFO design | Closing mid-stroke | Start drawing and press Esc before releasing the button | The window closes and what was drawn is saved, as one Undo step |
 | PE344 | LFO design | The preview lines up | Give step 1 the value 127 and step 2 -128, close the window and look at the small preview | The grid lines fall on the edges of the 16 steps and the wave is not cut at the top or the bottom |
+| PE345 | LFO design | Same colours as the preview | Open the window on a shape, then click Clear | The line uses the preview's blue to pink gradient, and the flat line after Clear is still drawn |
+| PE346 | LFO design | Wheel and drag on a value | In Edit mode turn the wheel over a step's value, then drag another value up and down | Each changes a step at a time and is saved a moment after the last step; nothing happens in View mode |
+| PE347 | LFO design | E with the window open | Open the window in View mode and press E twice | The window stays open; the tools and values become editable, then read-only again |
+| PE348 | LFO design | Messages in a floating badge | Click Copy, then Paste a text that is not an LFO design | A green-bordered badge says LFO design copied, then an orange one says Not an LFO design; the project header shows neither |
+| PE349 | LFO design | Preview in Edit mode | Switch to Edit mode on the Parts tab | The LFO design preview has the orange border of the other editable fields |
+| PE350 | LFO design | Enlarge icon on hover | Hover the LFO design preview, in View and in Edit mode | An enlarge icon shows in its top right corner, and goes when the pointer leaves |
+| PE351 | LFO design | L opens and closes the window | On the Parts tab, in View and then in Edit mode, select T3 and press L, then L again; show all tracks and press L | L opens T3's window and closes it; with all tracks shown it opens T1's (M1's for MIDI tracks); L typed in a step's value does nothing |
+| PE352 | LFO design | Title | Open the window on Part 1 named ONE, track T2 | The title reads LFO design - Part 1: ONE - T2 |
 
 ## Changing a track's effects
 

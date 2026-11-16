@@ -138,13 +138,34 @@ describe('LfoDesignWindow', () => {
     expect(history.undo).toHaveBeenCalledTimes(1)
   })
 
-  it('shows Edit or View beside the title', () => {
-    const { unmount } = setup()
-    const badge = () => document.querySelector('.lfo-design-modal .modal-header .lfo-design-badge')
-    expect(badge()).toHaveTextContent(/^Edit$/)
-    unmount()
-    setup({ editable: false })
-    expect(badge()).toHaveTextContent(/^View$/)
+  it('selects a step from its number, in both modes, without changing it', () => {
+    for (const editable of [true, false]) {
+      const { onChange, unmount } = setup({ editable })
+      const cell = (n: number) => screen.getByRole('button', { name: `Select step ${n}` }).closest('.lfo-design-cell')
+      fireEvent.click(screen.getByRole('button', { name: 'Select step 7' }))
+      expect(cell(7)).toHaveClass('selected')
+      expect(cell(1)).not.toHaveClass('selected')
+      expect(document.activeElement).toBe(document.querySelector('svg.lfo-design-canvas'))
+      expect(onChange).not.toHaveBeenCalled()
+      unmount()
+    }
+  })
+
+  it('selects the clicked column in View mode and draws nothing', () => {
+    const { onChange } = setup({ editable: false })
+    const el = document.querySelector('svg.lfo-design-canvas') as SVGSVGElement
+    el.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 160, height: 255, right: 160, bottom: 255, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect
+    // x 125 is in the 13th of 16 columns of 10 px
+    fireEvent.pointerDown(el, { clientX: 125, clientY: 0, pointerId: 1 })
+    fireEvent.pointerUp(el, { pointerId: 1 })
+    expect(screen.getByRole('button', { name: 'Select step 13' }).closest('.lfo-design-cell')).toHaveClass('selected')
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('has no View / Edit badge', () => {
+    setup()
+    expect(document.querySelector('.lfo-design-badge')).toBeNull()
   })
 
   it('groups the toolbar as the spec lays it out', () => {
@@ -448,6 +469,12 @@ describe('LfoDesignWindow copy, paste, export, import', () => {
   const stubClipboard = (c: Partial<Clipboard> | undefined) =>
     Object.defineProperty(navigator, 'clipboard', { value: c, configurable: true })
   const flush = () => act(async () => { await Promise.resolve() })
+  // The floating badge, as copying a project shows; amber (warning) for a refusal or a failure
+  const expectBadge = (text: string, error = false) => {
+    const badge = screen.getByRole('status')
+    expect(badge).toHaveTextContent(text)
+    expect(badge.classList.contains('warning')).toBe(error)
+  }
 
   beforeEach(() => {
     vi.mocked(invoke).mockReset()
@@ -457,35 +484,32 @@ describe('LfoDesignWindow copy, paste, export, import', () => {
 
   it('copies the shape as share text', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
-    const onStatus = vi.fn()
-    setup({ onStatus })
+    setup()
     stubClipboard({ writeText })
     click('Copy')
     await flush()
     expect(writeText).toHaveBeenCalledWith(toShareText(shape))
-    expect(onStatus).toHaveBeenCalledWith('LFO design copied', 'success')
+    expectBadge('LFO design copied')
   })
 
   it('pastes from the clipboard', async () => {
-    const onStatus = vi.fn()
-    const { onChange } = setup({ onStatus })
+    const { onChange } = setup()
     stubClipboard({ readText: vi.fn().mockResolvedValue(toShareText(other)) })
     click('Paste')
     await flush()
     expect(onChange).toHaveBeenCalledWith(parseShareText(toShareText(other)), 'now')
-    expect(onStatus).toHaveBeenCalledWith('LFO design pasted', 'success')
+    expectBadge('LFO design pasted')
   })
 
   // Copied on one track's window, pasted on another's: pasting a shape onto itself writes nothing
   it('pastes from the app when the clipboard cannot be read', async () => {
-    const onStatus = vi.fn()
-    const first = setup({ shape: other, onStatus })
+    const first = setup({ shape: other })
     stubClipboard({ writeText: vi.fn().mockRejectedValue(new Error('no')), readText: vi.fn().mockRejectedValue(new Error('no')) })
     click('Copy')
     await flush()
-    expect(onStatus).toHaveBeenCalledWith('LFO design copied', 'success')
+    expectBadge('LFO design copied')
     first.unmount()
-    const { onChange } = setup({ onStatus })
+    const { onChange } = setup()
     click('Paste')
     await flush()
     expect(onChange).toHaveBeenCalledWith(other, 'now')
@@ -505,18 +529,16 @@ describe('LfoDesignWindow copy, paste, export, import', () => {
   })
 
   it('refuses a malformed paste', async () => {
-    const onStatus = vi.fn()
-    const { onChange } = setup({ onStatus })
+    const { onChange } = setup()
     stubClipboard({ readText: vi.fn().mockResolvedValue('hello') })
     click('Paste')
     await flush()
-    expect(onStatus).toHaveBeenCalledWith('Not an LFO design', 'error')
+    expectBadge('Not an LFO design', true)
     expect(onChange).not.toHaveBeenCalled()
   })
 
   it('exports to the chosen file', async () => {
-    const onStatus = vi.fn()
-    setup({ onStatus })
+    setup()
     vi.mocked(save).mockResolvedValue('/x/a.json')
     vi.mocked(invoke).mockResolvedValue(undefined)
     click('Export')
@@ -526,7 +548,7 @@ describe('LfoDesignWindow copy, paste, export, import', () => {
       filters: [{ name: 'LFO design', extensions: ['json'] }],
     })
     expect(invoke).toHaveBeenCalledWith('write_text_file', { path: '/x/a.json', contents: toShareText(shape) })
-    expect(onStatus).toHaveBeenCalledWith('LFO design exported', 'success')
+    expectBadge('LFO design exported')
   })
 
   it('does nothing when the export is cancelled', async () => {
@@ -538,18 +560,16 @@ describe('LfoDesignWindow copy, paste, export, import', () => {
   })
 
   it('reports a failed export without the OS text', async () => {
-    const onStatus = vi.fn()
-    setup({ onStatus })
+    setup()
     vi.mocked(save).mockResolvedValue('/x/a.json')
     vi.mocked(invoke).mockRejectedValue('Permission denied (os error 13)')
     click('Export')
     await flush()
-    expect(onStatus).toHaveBeenCalledWith('Export failed', 'error')
+    expectBadge('Export failed', true)
   })
 
   it('imports a file', async () => {
-    const onStatus = vi.fn()
-    const { onChange } = setup({ onStatus })
+    const { onChange } = setup()
     vi.mocked(open).mockResolvedValue('/x/a.json')
     vi.mocked(invoke).mockResolvedValue(toShareText(other))
     click('Import')
@@ -560,32 +580,94 @@ describe('LfoDesignWindow copy, paste, export, import', () => {
     })
     expect(invoke).toHaveBeenCalledWith('read_text_file', { path: '/x/a.json' })
     expect(onChange).toHaveBeenCalledWith(other, 'now')
-    expect(onStatus).toHaveBeenCalledWith('LFO design imported', 'success')
+    expectBadge('LFO design imported')
   })
 
   it('refuses a file that is not an LFO design', async () => {
-    const onStatus = vi.fn()
-    const { onChange } = setup({ onStatus })
+    const { onChange } = setup()
     vi.mocked(open).mockResolvedValue('/x/a.json')
     vi.mocked(invoke).mockResolvedValue('{"type":"x"}')
     click('Import')
     await flush()
-    expect(onStatus).toHaveBeenCalledWith('Not an LFO design', 'error')
+    expectBadge('Not an LFO design', true)
     expect(onChange).not.toHaveBeenCalled()
   })
 
   it('maps read errors to Import failed, keeping File too large', async () => {
-    const onStatus = vi.fn()
-    const { onChange } = setup({ onStatus })
+    const { onChange } = setup()
     vi.mocked(open).mockResolvedValue('/x/a.json')
     vi.mocked(invoke).mockRejectedValueOnce('No such file (os error 2)')
     click('Import')
     await flush()
-    expect(onStatus).toHaveBeenLastCalledWith('Import failed', 'error')
+    expectBadge('Import failed', true)
     vi.mocked(invoke).mockRejectedValueOnce('File too large')
     click('Import')
     await flush()
-    expect(onStatus).toHaveBeenLastCalledWith('File too large', 'error')
+    expectBadge('File too large', true)
     expect(onChange).not.toHaveBeenCalled()
+  })
+})
+
+describe('LfoDesignWindow values by wheel and drag, and Edit mode changes', () => {
+  it('steps a value with the wheel in Edit mode only', () => {
+    const { onChange, unmount } = setup()
+    fireEvent.wheel(input(3), { deltaY: -100 })
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect(toSigned(onChange.mock.calls[0][0].values[2])).toBe(65)
+    expect(onChange.mock.calls[0][1]).toBe('settle')
+    unmount()
+    const view = setup({ editable: false })
+    fireEvent.wheel(input(3), { deltaY: -100 })
+    expect(view.onChange).not.toHaveBeenCalled()
+  })
+
+  it('steps a value by dragging up, each step building on the last', () => {
+    const { onChange } = setup()
+    fireEvent.pointerDown(input(3), { button: 0, clientY: 100, pointerId: 1 })
+    // 8 px is two steps, taken before the panel can render the first back
+    fireEvent.pointerMove(window, { clientY: 92, pointerId: 1 })
+    fireEvent.pointerUp(window, { clientY: 92, pointerId: 1 })
+    expect(onChange).toHaveBeenCalledTimes(2)
+    expect(toSigned(onChange.mock.calls[1][0].values[2])).toBe(66)
+    expect(onChange.mock.calls[1][1]).toBe('settle')
+  })
+
+  it('saves a stroke once when Edit mode is left mid-drag, and draws no more', () => {
+    const onChange = vi.fn()
+    const props = {
+      title: 'LFO design - Part 1: ONE, T3', fileName: 'f', shape, onChange, onClose: vi.fn(),
+    }
+    const { rerender } = render(<LfoDesignWindow {...props} editable />)
+    const el = document.querySelector('svg.lfo-design-canvas') as SVGSVGElement
+    el.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 160, height: 255, right: 160, bottom: 255, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect
+    ;(el as unknown as { setPointerCapture: () => void }).setPointerCapture = vi.fn()
+    fireEvent.pointerDown(el, { clientX: 5, clientY: 255, pointerId: 1 })
+    rerender(<LfoDesignWindow {...props} editable={false} />)
+    const now = onChange.mock.calls.filter(c => c[1] === 'now')
+    expect(now).toHaveLength(1)
+    expect(toSigned(now[0][0].values[0])).toBe(-128)
+    const calls = onChange.mock.calls.length
+    fireEvent.pointerMove(el, { clientX: 20, clientY: 0, pointerId: 1 })
+    fireEvent.pointerUp(el, { pointerId: 1 })
+    expect(onChange).toHaveBeenCalledTimes(calls)
+  })
+
+  it('draws the wave in the preview colours, even when it is flat', () => {
+    setup({ shape: clearShape() })
+    const gradient = document.querySelector('#lfoDesignGradient')
+    expect(gradient?.getAttribute('gradientUnits')).toBe('userSpaceOnUse')
+    expect(Array.from(gradient!.querySelectorAll('stop')).map(s => s.getAttribute('stop-color')))
+      .toEqual(['#4ac8ff', '#7b68ee', '#ff6b9d'])
+  })
+
+  it('marks the drawing and the values editable in Edit mode only', () => {
+    const { unmount } = setup()
+    expect(document.querySelector('svg.lfo-design-canvas')).toHaveClass('editable')
+    expect(input(1)).toHaveClass('editable')
+    unmount()
+    setup({ editable: false })
+    expect(document.querySelector('svg.lfo-design-canvas')).not.toHaveClass('editable')
+    expect(input(1)).not.toHaveClass('editable')
   })
 })

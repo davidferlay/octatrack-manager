@@ -847,8 +847,11 @@ export function ProjectDetail() {
   // Load machine types for the selected bank's active part
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      // Don't handle shortcuts when a modal/dialog is open
-      if (document.querySelector('.modal-overlay')) return;
+      // Don't handle shortcuts when a modal/dialog is open. The LFO design window is the one
+      // exception, and only for E: it edits in place, so switching mode there is expected
+      const overlays = document.querySelectorAll('.modal-overlay');
+      const onlyLfoWindow = overlays.length === 1 && overlays[0].querySelector('.lfo-design-modal') !== null;
+      if (overlays.length > 0 && !(onlyLfoWindow && (e.key === 'e' || e.key === 'E'))) return;
 
       const target = e.target as HTMLElement;
       const tag = target?.tagName;

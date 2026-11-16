@@ -227,6 +227,36 @@ export default function PartsPanel({
   // Determine if selected track is MIDI (tracks 8-15 or ALL_MIDI_TRACKS) or Audio (tracks 0-7 or ALL_AUDIO_TRACKS)
   const isMidiTrack = selectedTrack !== undefined && (selectedTrack >= 8 || selectedTrack === ALL_MIDI_TRACKS);
 
+  // L opens or closes the LFO design window of the selected track: T1 (or M1) while every
+  // track is on screen. View and Edit mode alike, as the preview opens it in both.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.key !== 'l' && e.key !== 'L') || e.ctrlKey || e.metaKey || e.altKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target?.tagName ?? '')) return;
+      // ponytail: as D does, it waits for a single bank's Parts on screen; with All Banks
+      // every panel would open its own window. Route it through the selected bank if needed.
+      if (document.querySelectorAll('.parts-page-tabs').length !== 1) return;
+      if (lfoWindow) {
+        e.preventDefault();
+        setLfoWindow(null);
+        return;
+      }
+      // Another window is open, and the key is not for the page behind it
+      if (document.querySelector('.modal-overlay')) return;
+      const part = partsDataRef.current[activePartIndex];
+      if (!part) return;
+      e.preventDefault();
+      setLfoWindow({
+        partId: part.part_id,
+        section: isMidiTrack ? 'midi_lfos' : 'lfos',
+        trackId: selectedTrack !== undefined && selectedTrack >= 0 ? selectedTrack % 8 : 0,
+      });
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [lfoWindow, activePartIndex, isMidiTrack, selectedTrack]);
+
   // Derive the actual page type based on whether we're viewing Audio or MIDI tracks
   const activeAudioPage: AudioPageType = activePageIndex === -1 ? 'ALL' : (['SRC', 'AMP', 'LFO', 'FX1', 'FX2', 'REC'][activePageIndex] as AudioPageType);
   const activeMidiPage: MidiPageType = activePageIndex === -1 ? 'ALL' : (['NOTE', 'ARP', 'LFO', 'CTRL1', 'CTRL2'][activePageIndex] as MidiPageType);
@@ -1304,13 +1334,15 @@ export default function PartsPanel({
         <div className="lfo-envelope-wrapper">
           <button
             type="button"
-            className="lfo-envelope-preview"
+            className={`lfo-envelope-preview${isEditMode ? ' editable' : ''}`}
             aria-label={`Open the LFO design of ${label}`}
+            title="Open the LFO design window"
             onClick={() => setLfoWindow({ partId, section, trackId })}
           >
             <svg className="lfo-envelope-svg" viewBox="0 0 100 60" preserveAspectRatio="none">
               <defs>
-                <linearGradient id="lfoGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                {/* In user space: a flat shape has no height, and a bounding-box gradient would leave it undrawn */}
+                <linearGradient id="lfoGradient" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="100" y2="0">
                   <stop offset="0%" style={{ stopColor: '#4ac8ff', stopOpacity: 1 }} />
                   <stop offset="50%" style={{ stopColor: '#7b68ee', stopOpacity: 1 }} />
                   <stop offset="100%" style={{ stopColor: '#ff6b9d', stopOpacity: 1 }} />
@@ -1333,6 +1365,10 @@ export default function PartsPanel({
               <g transform="translate(0 5)">
                 <polyline className="lfo-envelope-line" points={waveformPoints(shape, 100, 50)} />
               </g>
+            </svg>
+            {/* Shown on hover: the click opens the shape full size */}
+            <svg className="lfo-envelope-expand" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" />
             </svg>
           </button>
         </div>
@@ -1363,10 +1399,6 @@ export default function PartsPanel({
     const savedEntry = savedPart?.part_id === partId ? savedPart[section][trackId] : undefined;
     const label = `${section === 'lfos' ? 'T' : 'M'}${trackId + 1}`;
     const partName = partNames[partId] || `Part ${partId + 1}`;
-    const report = (message: string, kind: 'success' | 'error') => {
-      onWriteStatusChange?.(kind === 'success' ? writeStatus.success(message) : writeStatus.error(message));
-      setTimeout(() => onWriteStatusChange?.(writeStatus.idle()), 2000);
-    };
     // A nudge waits out the save delay. Undo or Redo before it lands would take back the
     // write before it, and the late save would then write the re-read Part as a new step
     // and drop Redo. So the pending save goes first.
@@ -1378,7 +1410,7 @@ export default function PartsPanel({
     const noModes = () => Array(16).fill(0);
     return (
       <LfoDesignWindow
-        title={`LFO design - Part ${partId + 1}: ${partName}, ${label}`}
+        title={`LFO design - Part ${partId + 1}: ${partName} - ${label}`}
         fileName={`lfo-design-part${partId + 1}-${label}`}
         shape={{ values: entry.custom_lfo_design, interpolation: entry.custom_lfo_interpolation ?? noModes() }}
         saved={savedEntry && {
@@ -1387,7 +1419,6 @@ export default function PartsPanel({
         editable={isEditMode}
         history={history}
         onChange={changeLfoDesign}
-        onStatus={report}
         onClose={() => setLfoWindow(null)}
       />
     );

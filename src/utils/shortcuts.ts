@@ -39,6 +39,7 @@ const PROJECT = group('Project', [
 
 const PARTS = group('Parts', [
   ['D', 'Edit mode: show what differs from the saved copy'],
+  ['L', 'Open or close the LFO design window of the selected track'],
 ]);
 
 const LFO_DESIGN = group('LFO design window', [
@@ -47,6 +48,8 @@ const LFO_DESIGN = group('LFO design window', [
   ['Left / Right', 'Select the previous / next step'],
   ['Up / Down', 'Edit mode: change the selected step by 1'],
   ['Shift + Up / Down', 'Edit mode: change it by 8'],
+  ['Wheel / drag on a value', 'Edit mode: change that step'],
+  ['E', 'Switch View / Edit mode; the window stays open'],
 ]);
 
 const SCENES = group('Scenes', [

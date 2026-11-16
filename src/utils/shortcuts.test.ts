@@ -47,7 +47,7 @@ describe('the shortcuts listed for each page', () => {
 
   it('lists the LFO design window keys on the Parts tab', () => {
     const lfo = shortcutsFor('project', 'parts').find(g => g.title === 'LFO design window')
-    expect(lfo?.rows.map(r => r.keys)).toEqual(['Drag', 'Shift + drag', 'Left / Right', 'Up / Down', 'Shift + Up / Down'])
+    expect(lfo?.rows.map(r => r.keys)).toEqual(['Drag', 'Shift + drag', 'Left / Right', 'Up / Down', 'Shift + Up / Down', 'Wheel / drag on a value', 'E'])
   })
 
   it('the Audio Pool page has its own list', () => {
